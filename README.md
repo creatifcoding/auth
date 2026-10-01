@@ -101,21 +101,32 @@ export const auth = AuthAtom.make(AppClient);
 
 <!-- #endregion auth-client -->
 
-Use the generated `auth.session`, `auth.signIn`, and `auth.signOut` atoms in your
-application's Atom registry. Within an Effect using `AppClient`, call the named
-client directly:
+Use `auth.session`, `auth.signIn`, and `auth.signOut` with ordinary
+`@effect/atom-react` hooks. Compose your own queries through the same client:
 
-<!-- prettier-ignore -->
-```ts
-const client = yield* AppClient;
-const result = yield* client.auth.signIn({ email, password });
+<!-- #region auth-query -->
+
+```ts [apps/web/member-name.ts]
+import { Effect } from "effect";
+
+import { AppClient, auth } from "./auth-client";
+
+export const memberName = auth.runtime.atom(
+  Effect.gen(function* () {
+    const client = yield* AppClient;
+    const session = yield* client.auth.getSession();
+
+    return session?.claims.displayName ?? null;
+  }),
+);
 ```
 
-Both calls return Effects; the remote client handles HTTP and schema decoding.
-Use `auth.runtime` for client workflows that share the atoms' instance, or provide
-`AppClient.layer` at a standalone program boundary. The
-[getting-started guide](docs/src/content/docs/guide/getting-started.md) and
-[HTTP and client guide](docs/src/content/docs/guide/http-and-client.md) show the full composition.
+<!-- #endregion auth-query -->
+
+Fetch is configured by default. Pass `{ httpClient: ApplicationHttpClient }` to
+`AuthAtom.make` to use your Effect transport Layer. See the
+[client guide](docs/src/content/docs/guide/http-and-client.md#connect-client-state)
+for React, shared invalidation, and standalone Effect calls.
 
 Start with the [documentation](https://yielded.dev/auth/) and
 [consumer examples](examples/auth). The public library lives in

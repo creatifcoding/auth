@@ -1,8 +1,8 @@
 import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import { Client, Http, Password, Proofs } from "@yielded/auth";
-import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { ConfigProvider, Context, Effect, FileSystem, Layer } from "effect";
+import { FetchHttpClient, HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 
 import { AppAuth } from "../../shared/account/auth";
@@ -84,9 +84,15 @@ const program = Effect.gen(function* () {
     };
 
   const api = Effect.fn("test.client")(function* (web: Effect.Success<typeof open>, jar = cookies) {
-    const client = Client.make(AuthApi, { baseUrl: origin, fetch: fetchFor(web, jar) });
+    const client = Client.make(AuthApi, { baseUrl: origin });
 
-    return (yield* client.make).auth;
+    const context = yield* Layer.build(
+      client.layerFetch.pipe(
+        Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFor(web, jar))),
+      ),
+    );
+
+    return Context.get(context, client).auth;
   });
 
   yield* Effect.scoped(

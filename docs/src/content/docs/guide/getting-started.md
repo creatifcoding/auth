@@ -79,19 +79,15 @@ be completed before you grant access. Failures stay typed in the error channel; 
 
 <!--@include: @/../README.md#auth-client-->
 
-`auth.session`, `auth.signIn`, and `auth.signOut` are atoms for your application's
-registry. Inside a client Effect, call the client directly:
+Use `auth.session`, `auth.signIn`, and `auth.signOut` directly as queries and
+mutations with ordinary `@effect/atom-react` hooks. Compose your own queries
+through `auth.runtime` to share the client and account lifetime:
 
-<!-- prettier-ignore -->
-```ts
-const client = yield* AppClient;
-const result = yield* client.auth.signIn({ email, password });
-```
+<!--@include: @/../README.md#auth-query-->
 
-Both constructors are synchronous; the registry or application Scope owns the
-client. Composed atoms use `auth.runtime`, and standalone programs provide
-`AppClient.layer`. [Client state](./http-and-client#connect-client-state) covers
-reactivity keys and React hooks.
+Fetch is configured by default. Pass `{ httpClient: ApplicationHttpClient }` to
+`AuthAtom.make` to use your transport Layer. The [client guide](./http-and-client#connect-client-state)
+shows React, shared invalidation, and standalone Effect calls.
 
 ## Add another method
 

@@ -1,4 +1,15 @@
-import { DateTime, Effect, Redacted, Schema, Semaphore } from "effect";
+import {
+  DateTime,
+  Duration,
+  Effect,
+  Function,
+  Option,
+  Redacted,
+  Schema,
+  Semaphore,
+  Stream,
+} from "effect";
+import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
 
 import type { AuthCredentialCommand, CredentialSlot } from "../operations/credentials";
 import { snapshotRevealCommands, type AuthRevealCommandCollector } from "../operations/reveals";
@@ -19,7 +30,9 @@ export interface OperationFetchOptions {
   readonly csrfHeader: string;
   readonly csrfValue: string;
   readonly maximumResponseBytes?: number;
-  readonly fetch?: typeof globalThis.fetch;
+  /** Finite deadline for request dispatch and response body consumption. Defaults to 30 seconds.
+   * A timeout does not establish whether a mutation committed and never authorizes a retry. */
+  readonly requestTimeout?: Duration.Input;
   readonly privateOutput?: AuthRevealCommandCollector & { readonly clear: Effect.Effect<void> };
   readonly native?: {
     readonly modeHeader: string;
@@ -138,61 +151,56 @@ const responseCodec = Schema.fromJsonString(
 );
 
 const credentialCodec = Schema.fromJsonString(CredentialWire);
-const requestCodec = Schema.fromJsonString(HttpRequestBody);
+const encodeBody = HttpClientRequest.schemaBodyJson(HttpRequestBody);
 
-const readBody = (response: Response, maximum: number) =>
-  Effect.tryPromise({
-    try: async (signal) => {
-      if (response.body === null) return "";
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
+// FetchHttpClient's text/json accessors do not enforce MaxBodySize. Consume its
+// scoped Stream with a byte bound and strict UTF-8 before decoding the envelope.
+const readBody = Effect.fnUntraced(function* (
+  response: HttpClientResponse.HttpClientResponse,
+  maximum: number,
+) {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let size = 0;
 
-      const abort = () => {
-        void reader.cancel();
-      };
+  const chunks = yield* response.stream.pipe(
+    Stream.mapEffect((chunk) =>
+      Effect.try({
+        try: () => {
+          size += chunk.length;
+          if (size > maximum) throw OperationHttpError.make({ reason: "response" });
 
-      signal.addEventListener("abort", abort, { once: true });
-      try {
-        while (true) {
-          const part = await reader.read();
+          return decoder.decode(chunk, { stream: true });
+        },
+        catch: () => OperationHttpError.make({ reason: "response" }),
+      }),
+    ),
+    Stream.runCollect,
+    Effect.mapError(() => OperationHttpError.make({ reason: "response" })),
+  );
 
-          if (part.done) break;
-          size += part.value.length;
-          if (size > maximum) {
-            await reader.cancel();
-            throw new Error();
-          }
-          chunks.push(part.value);
-        }
-        const bytes = new Uint8Array(size);
-        let offset = 0;
-
-        for (const chunk of chunks) {
-          bytes.set(chunk, offset);
-          offset += chunk.length;
-        }
-
-        return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      } finally {
-        signal.removeEventListener("abort", abort);
-        reader.releaseLock();
-      }
-    },
+  return yield* Effect.try({
+    try: () => chunks.join("") + decoder.decode(),
     catch: () => OperationHttpError.make({ reason: "response" }),
   });
+});
 
 /** One instance owns credential ordering and stale-result fencing. Share it within
- * a browser authentication lifetime; mutations are never automatically retried. */
+ * an authentication lifetime. Supply a non-retrying, non-redirecting HttpClient;
+ * each call owns its request Scope, including response consumption. */
 export const make = Effect.fn("OperationHttpClient.make")(function* (
   options: OperationFetchOptions,
-): Effect.fn.Return<OperationFetchClient, OperationHttpError> {
+): Effect.fn.Return<OperationFetchClient, OperationHttpError, HttpClient.HttpClient> {
   const base = yield* Effect.try({
     try: () => new URL(options.baseUrl),
     catch: () => OperationHttpError.make({ reason: "request" }),
   });
 
+  const timeout = Duration.fromInput(options.requestTimeout ?? "30 seconds");
+
   if (
+    Option.isNone(timeout) ||
+    !Duration.isFinite(timeout.value) ||
+    !Duration.isPositive(timeout.value) ||
     !Number.isSafeInteger(options.maximumResponseBytes ?? 1048576) ||
     (options.maximumResponseBytes ?? 1048576) < 1 ||
     (options.maximumResponseBytes ?? 1048576) > 1048576 ||
@@ -222,6 +230,7 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
     )
       return yield* OperationHttpError.make({ reason: "request" });
   }
+  const httpClient = (yield* HttpClient.HttpClient).pipe(HttpClient.withScope);
   const gate = yield* Semaphore.make(1);
   let generation = 0;
 
@@ -289,63 +298,79 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
               Effect.mapError(() => OperationHttpError.make({ reason: "request" })),
             );
 
-      const body = yield* Schema.encodeEffect(requestCodec)(
-        payload === undefined ? {} : { payload },
-      ).pipe(Effect.mapError(() => OperationHttpError.make({ reason: "request" })));
-
       if (route.method === "GET" && input !== undefined)
         return yield* OperationHttpError.make({ reason: "request" });
 
-      const headers = new Headers(
-        route.method === "GET"
-          ? {}
-          : {
-              "content-type": "application/json",
-              [options.csrfHeader]: options.csrfValue,
-            },
-      );
+      let request = HttpClientRequest.make(route.method)(new URL(route.path, base).href);
+
+      if (route.method !== "GET") {
+        request = yield* encodeBody(request, payload === undefined ? {} : { payload }).pipe(
+          Effect.mapError(() => OperationHttpError.make({ reason: "request" })),
+        );
+        request = HttpClientRequest.setHeader(request, options.csrfHeader, options.csrfValue);
+      }
 
       if (options.native !== undefined) {
-        headers.set(options.native.modeHeader, "native");
+        request = HttpClientRequest.setHeader(request, options.native.modeHeader, "native");
         const credentials = yield* options.native.read;
 
         for (const slot of credentialSlots)
           if (credentials[slot] !== undefined)
-            headers.set(options.native.requestHeaders[slot], Redacted.value(credentials[slot]!));
+            request = HttpClientRequest.setHeader(
+              request,
+              options.native.requestHeaders[slot],
+              Redacted.value(credentials[slot]!),
+            );
       }
-      const destination = new URL(route.path, base);
 
-      const response = yield* Effect.tryPromise({
-        try: (signal) => {
-          // Native credential reads and schema services may suspend. Admission
-          // and fetch dispatch share this synchronous check so an old workflow
-          // cannot send a write with a newly installed subject's credentials.
-          if (started !== generation) throw OperationHttpError.make({ reason: "stale-response" });
+      const guarded = httpClient.pipe(
+        HttpClient.transform((effect) =>
+          Effect.gen(function* () {
+            if (started !== generation)
+              return yield* OperationHttpError.make({ reason: "stale-response" });
 
-          return (options.fetch ?? globalThis.fetch)(destination, {
-            method: route.method,
-            headers,
-            ...(route.method === "GET" ? {} : { body }),
-            credentials: options.native === undefined ? "include" : "omit",
-            redirect: "error",
-            signal,
-          });
-        },
-        catch: (error) =>
-          Schema.is(OperationHttpError)(error)
-            ? error
-            : OperationHttpError.make({ reason: "network" }),
-      });
+            return yield* effect;
+          }),
+        ),
+      );
 
-      if (
-        response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
-        "application/json"
-      )
-        return yield* OperationHttpError.make({ reason: "response" });
+      const { response, envelope } = yield* Effect.gen(function* () {
+        const response = yield* guarded
+          .execute(request)
+          .pipe(
+            Effect.mapError((error) =>
+              Schema.is(OperationHttpError)(error)
+                ? error
+                : OperationHttpError.make({ reason: "network" }),
+            ),
+          );
 
-      const envelope = yield* Schema.decodeEffect(responseCodec)(
-        yield* readBody(response, options.maximumResponseBytes ?? 1048576),
-      ).pipe(Effect.mapError(() => OperationHttpError.make({ reason: "response" })));
+        if (
+          response.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
+          "application/json"
+        )
+          return yield* OperationHttpError.make({ reason: "response" });
+
+        const envelope = yield* Schema.decodeEffect(responseCodec)(
+          yield* readBody(response, options.maximumResponseBytes ?? 1048576),
+        ).pipe(Effect.mapError(() => OperationHttpError.make({ reason: "response" })));
+
+        return { response, envelope };
+      }).pipe(
+        // Native credential header names are application-defined. Preserve any
+        // transport-captured redaction policy and keep these exchanges out of HTTP spans.
+        options.native === undefined
+          ? Function.identity
+          : Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+        Effect.scoped,
+        // Only the deadline's child may interrupt the exchange. The admitted
+        // caller still waits for settlement before releasing the credential gate.
+        Effect.interruptible,
+        Effect.timeoutOrElse({
+          duration: timeout.value,
+          orElse: () => Effect.fail(OperationHttpError.make({ reason: "timeout" })),
+        }),
+      );
 
       if (started !== generation)
         return yield* OperationHttpError.make({ reason: "stale-response" });
@@ -367,7 +392,8 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
 
         return yield* Effect.fail(failure as RouteFailure<R>);
       }
-      if (!response.ok) return yield* OperationHttpError.make({ reason: "response" });
+      if (response.status < 200 || response.status >= 300)
+        return yield* OperationHttpError.make({ reason: "response" });
 
       const value = yield* Schema.decodeEffect(successSchema)(envelope.value).pipe(
         Effect.provide(services),
@@ -397,9 +423,9 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
         const commands: AuthCredentialCommand[] = [];
 
         for (const slot of credentialSlots) {
-          const raw = response.headers.get(options.native.responseHeaders[slot]);
+          const raw = response.headers[options.native.responseHeaders[slot]];
 
-          if (raw === null) continue;
+          if (raw === undefined) continue;
           if (!route.operation.credentials)
             return yield* OperationHttpError.make({ reason: "credentials" });
 
@@ -436,9 +462,11 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
       return value as RouteSuccess<R>;
     });
 
-    // Once a credential response is admitted it must settle before the lifetime
-    // advances: browsers apply Set-Cookie before JavaScript can inspect a response.
-    return yield* route.operation.credentials ||
+    // Hold admission for every write, including middleware that delays dispatch.
+    // It cannot switch accounts while waiting to send with browser cookies.
+    // Credential responses also settle before the lifetime advances.
+    return yield* route.operation.replay !== "read-only" ||
+    route.operation.credentials ||
     route.operation.reveals.length > 0 ||
     (callOptions?.replaceSubject !== undefined && callOptions.replaceSubject !== false)
       ? gate.withPermits(1)(Effect.uninterruptible(work))
