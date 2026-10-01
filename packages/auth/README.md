@@ -18,5 +18,5 @@ these packages or declare their SDK peers. Effect is its only runtime peer.
 Supply password hashing and OAuth/TOTP secret protection through the maintained
 `@yielded/auth-crypto` Layers or your own implementations of the core services.
 
-Start with the [working starter](https://yielded.dev/auth/guide/getting-started/),
+Start with the [setup guide](https://yielded.dev/auth/guide/getting-started/),
 or read [how authentication fits together](https://yielded.dev/auth/guide/authentication/).

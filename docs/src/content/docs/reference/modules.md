@@ -82,8 +82,9 @@ import { Atom as AuthAtom, AuthContract, Client } from "@yielded/auth";
 React applications use `@effect/atom-react` with the same importable atoms;
 Yielded Auth has no React-specific export.
 
-See [HTTP and client state](../guide/http-and-client) for contract sharing and
-client workflow composition, and [Client and Atom](./client) for options and lifetimes.
+See [HTTP integration](../guide/http-and-client) for contract sharing,
+[Effect Atom client](../guide/client) for workflows, and
+[Client and Atom](./client) for options and lifetimes.
 
 ## Optional adapters
 

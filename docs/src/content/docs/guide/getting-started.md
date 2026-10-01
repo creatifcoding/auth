@@ -1,16 +1,20 @@
 ---
 title: Getting started
-description: Install Yielded Auth, define one shared contract, and use it from your server and client.
+description: Add authentication to your Effect application with a shared contract, server Layers, and client atoms.
 ---
 
-Install the beta release with Effect:
+Define a shared contract, bind it to authentication strategies, and supply your
+application's services with Layers. The same contract gives your client typed
+Effects and atoms.
+
+## Install
 
 ```sh
 bun add @yielded/auth@beta effect
 ```
 
-Add companion packages, such as Drizzle persistence or Argon2id hashing, only for
-the [adapters](../reference/adapters) you use.
+For React, also install `@effect/atom-react`. Add companion packages for the
+[storage and protocol adapters](../reference/adapters) you choose.
 
 ## Define the shared contract
 
@@ -87,31 +91,16 @@ through `auth.runtime` to share the client and account lifetime:
 
 Fetch is configured by default. To customize transport, compose `AppClient.layer`
 with your HttpClient Layer and pass `{ layer: ClientLive }` to `AuthAtom.make`.
-The [client guide](./http-and-client#connect-client-state)
+The [Effect Atom client guide](./client)
 shows React, shared invalidation, and standalone Effect calls.
 
-## Add another method
+## Choose your next step
 
-Name each strategy in `Auth.make`:
+- [Auth in an Effect application](./effect): services, Layers, identity, and ownership.
+- [Database and backend choices](./storage): keep managed tables, map your schema, or supply services.
+- [HTTP integration](./http-and-client): mount routes and protect application handlers.
+- [Effect Atom client](./client): render sessions, handle mutations, and compose workflows.
 
-```ts title="apps/server/auth.ts"
-export const AppAuth = Auth.make(AuthApi, {
-  sessions: Sessions.stateful(),
-  strategies: {
-    password: Password.make(),
-    passkey: Passkey.make(),
-  },
-  defaultStrategy: "password",
-});
-```
-
-Calls use the default strategy unless they name another:
-
-<!-- prettier-ignore -->
-```ts
-yield* auth.signIn({ email, password });
-yield* auth.signIn("passkey", { flowId, commandId, profileId: "default" });
-```
-
-Clients reach a method only through a contract action. The
-[passkey guide](./passkeys) shows the browser ceremony and its actions.
+Then add an authentication method, such as [passkeys](./passkeys) or
+[GitHub sign-in](./github). Each method adds its required services to the server;
+its public actions belong in the shared contract.

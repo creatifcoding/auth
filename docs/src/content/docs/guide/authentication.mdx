@@ -16,14 +16,14 @@ they act on.
       title: "Call the contract",
       code: "yield* client.auth.signIn({ email, password })",
       detail:
-        "The client encodes the input with your contract's schema, keeps the password `Redacted`, and posts it to `/auth/signIn`.",
+        "The client sends the contract's input to `/auth/signIn`. The password travels in the request body, never in the URL.",
     },
     {
       lane: "auth",
       title: "Decode the request",
       code: "Http.layer(AppAuth, { origin })",
       detail:
-        "The route decodes the input against the same contract and reads any session cookie into the request context.",
+        "The route decodes the input against the same contract, wraps the password in `Redacted`, and reads any session cookie into the request context.",
     },
     {
       lane: "auth",
@@ -35,7 +35,7 @@ they act on.
     {
       lane: "app",
       title: "Resolve the account",
-      code: "ClaimsForPassword.resolve(credential)",
+      code: "SessionClaims.resolve({ subjectId, credential })",
       detail:
         "Your account code returns the session claims, such as `displayName`, or rejects a disabled account.",
     },
@@ -63,24 +63,71 @@ they act on.
 
 ## What your code supplies
 
-| Service                      | Provides                                                                          |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| `ClaimsForPassword`          | Session claims for an account, or a rejection.                                    |
-| Password and session storage | [Managed tables, your own schema, or custom services](/auth/reference/adapters/). |
-| `PasswordHashing`            | Argon2id from `@yielded/auth-crypto/Password`, or your own.                       |
+`SessionClaims` is the Effect service your application implements to turn a verified
+identity into session data. For password sign-in:
 
-You don't need to memorize this list. `AppAuth.layer` names every missing service
-in its type, and each method you install adds its own.
-[Getting started](/auth/guide/getting-started/) wires these Layers.
+```ts title="apps/server/auth-claims.ts"
+import { Password } from "@yielded/auth";
+import { Effect, Layer } from "effect";
 
-Start with `Auth.make` and the strategies. For lower-level composition,
-`Password.makeModule`, `Email.makeModule`, and `Sessions.make` expose the same
-implementations.
+import { AppAuth } from "./auth";
+import { Customers } from "./customers";
+
+export const ClaimsLive = Layer.effect(
+  AppAuth.strategies.password.SessionClaims,
+  Effect.gen(function* () {
+    const customers = yield* Customers;
+
+    return {
+      resolve: Effect.fn("Auth.passwordClaims")(
+        function* ({ subjectId }) {
+          const customer = yield* customers.findById(subjectId);
+          if (customer === null || !customer.enabled)
+            return yield* Password.PasswordUnavailable.make({});
+
+          return { displayName: customer.displayName };
+        },
+        Effect.mapError(() => Password.PasswordUnavailable.make({})),
+      ),
+    };
+  }),
+);
+```
+
+`Customers` is your application's account service. Here it returns a customer
+or `null`; database access stays in that service.
+
+Each sign-in strategy exposes `SessionClaims`. Use `subjectId` for account lookups;
+`credential` contains method-specific details such as the password's email identifier.
+OAuth also supplies the verified provider `identity`.
+
+Provide the claims Layer alongside hashing and storage:
+
+```ts title="apps/server/auth-live.ts"
+import { Layer } from "effect";
+
+import { AppAuth } from "./auth";
+import { ClaimsLive } from "./auth-claims";
+import { AuthDependencies } from "./auth-dependencies";
+import { PasswordPersistenceLive } from "./auth-persistence";
+import { CustomersLive } from "./customers";
+import { HashingLive } from "./hashing";
+
+export const AuthLive = AppAuth.layer.pipe(
+  Layer.provide(ClaimsLive.pipe(Layer.provide(CustomersLive))),
+  Layer.provide(HashingLive),
+  Layer.provide(PasswordPersistenceLive),
+  Layer.provide(AuthDependencies),
+);
+```
+
+Use the [Argon2id Layer](./passwords.md#supply-the-services) for hashing and
+[your chosen adapter](./storage.mdx) for storage. `AuthDependencies` supplies
+[session authority, persistence, and keys](../reference/adapters.md#compose-the-application-layer).
 
 ## Other methods, same path
 
-Every method follows the same route through your code. Multi-step methods
-return a public flow ID between calls; the private binding that ties the steps
+Multi-step methods return a public flow ID between calls; the private binding that ties the steps
 to one browser travels as a cookie, like the session.
 
 | Method                                         | Calls                                                                         |

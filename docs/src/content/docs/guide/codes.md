@@ -160,7 +160,7 @@ import { emailVendor, sendEmail } from "./email";
 export const EmailLive = Layer.mergeAll(
   ProofPersistenceLive,
   Layer.succeed(Email.EmailSignInTargets, { lookup: lookupEmail }),
-  Layer.succeed(AppAuth.strategies.email.ClaimsForEmail, { resolve: resolveEmailClaims }),
+  Layer.succeed(AppAuth.strategies.email.SessionClaims, { resolve: resolveEmailClaims }),
   Email.EmailReturnTargets.exactRoutes(["/account"]),
   Proofs.EmailProofDelivery.layer(emailVendor, sendEmail),
 );

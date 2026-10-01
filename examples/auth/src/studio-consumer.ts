@@ -481,13 +481,13 @@ export const makeStudioStorage = Effect.fn("Studio.storage")(function* (
       registration.passkeyRegistrationAuthority,
     ),
     Layer.succeed(Totp.TotpPersistence, totp.totpPersistence),
-    Layer.succeed(StudioAuth.strategies.passkey.ClaimsForPasskey, {
-      resolve: (credential) =>
+    Layer.succeed(StudioAuth.strategies.passkey.SessionClaims, {
+      resolve: ({ subjectId }) =>
         Effect.gen(function* () {
           const [member] = yield* db
             .select()
             .from(Studio.subject)
-            .where(eq(Studio.subject.id, credential.revision.subjectId));
+            .where(eq(Studio.subject.id, subjectId));
 
           if (member === undefined) return yield* Passkey.PasskeyUnavailable.make({});
 

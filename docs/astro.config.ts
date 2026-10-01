@@ -17,15 +17,23 @@ export default defineConfig({
           label: "Start",
           items: [
             { label: "Getting started", slug: "guide/getting-started" },
-            { label: "Choose how much you own", slug: "guide/storage" },
-            { label: "How sign-in works", slug: "guide/authentication" },
+            { label: "Auth in an Effect application", slug: "guide/effect" },
             { label: "Examples", slug: "guide/examples" },
+          ],
+        },
+        {
+          label: "Build your application",
+          items: [
+            { label: "Database & backend choices", slug: "guide/storage" },
+            { label: "HTTP integration", slug: "guide/http-and-client" },
+            { label: "Effect Atom client", slug: "guide/client" },
+            { label: "Sessions & protected routes", slug: "guide/sessions" },
+            { label: "How sign-in works", slug: "guide/authentication" },
           ],
         },
         {
           label: "Authentication",
           items: [
-            { label: "Sessions", slug: "guide/sessions" },
             { label: "Passwords", slug: "guide/passwords" },
             { label: "Email codes & magic links", slug: "guide/codes" },
             { label: "Phone codes", slug: "guide/phone" },
@@ -36,24 +44,19 @@ export default defineConfig({
         {
           label: "OAuth providers",
           items: [
+            { label: "OAuth setup", slug: "guide/oauth" },
             { label: "GitHub", slug: "guide/github" },
             { label: "Google", slug: "guide/google" },
             { label: "Other OAuth / OIDC", link: "/guide/oauth/#other-providers" },
-          ],
-        },
-        {
-          label: "Integration",
-          items: [
-            { label: "OAuth setup", slug: "guide/oauth" },
             { label: "MCP authorization", link: "/guide/oauth/#authorize-mcp-clients" },
-            { label: "HTTP & client state", slug: "guide/http-and-client" },
-            { label: "Adapters & persistence", slug: "reference/adapters" },
           ],
         },
         {
           label: "Reference",
           items: [
             { label: "Public modules", slug: "reference/modules" },
+            { label: "Adapters & persistence", slug: "reference/adapters" },
+            { label: "HTTP & action contracts", slug: "reference/http" },
             { label: "Client & Atom", slug: "reference/client" },
             { label: "OAuth", slug: "reference/oauth" },
             { label: "iOS passkeys", slug: "reference/passkey-react-native" },

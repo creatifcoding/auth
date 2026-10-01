@@ -3,7 +3,7 @@ title: Client and Atom
 description: Transport configuration, Atom options, and account lifetime.
 ---
 
-Start with the [HTTP and client guide](../guide/http-and-client#connect-client-state)
+Start with the [Effect Atom client guide](../guide/client)
 for Atom, React, and HttpClient examples. `Client.make` defines a service;
 `AuthAtom.make` defines atoms. Neither acquires resources until used.
 

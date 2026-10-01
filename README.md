@@ -2,22 +2,20 @@
 
 Composable authentication, sessions, and identity workflows for Effect.
 
-Yielded Auth owns security-sensitive authentication behavior. Applications provide
-identity authority, persistence, protocol verification, and credential delivery.
-`@yielded/auth-persistence` supplies direct Effect SQL and shared storage contracts.
-`@yielded/auth-persistence-drizzle` supplies Drizzle bindings and migration helpers.
-Companion packages provide Cloudflare, OAuth/OIDC, WebAuthn, iOS React Native passkeys,
-and maintained cryptography.
-Core has only Effect as a runtime peer; applications supply adapter Layers.
+Define your contract with Schema, supply infrastructure with Layers, and call auth
+alongside your other Effects. The same contract connects your server to an Effect
+HttpClient service and Effect Atom queries and mutations.
 
-Use generated auth tables and migrations, bring your own schema, or replace
-individual services. [Choose how much you own](docs/src/content/docs/guide/storage.mdx); four [runnable account apps](docs/src/content/docs/guide/examples.md#run-an-account-app)
-show how much control you can take.
+Your application owns its accounts, identifiers, and authorization policy.
+Use managed auth tables, map an existing SQL schema, or implement storage services
+against another backend. The auth API stays the same when you change storage.
+Core has only Effect as a runtime peer; companion packages supply database,
+cryptography, and protocol adapters.
 
-For an app using GitHub, [`OAuth.make({ access })`](docs/src/content/docs/guide/oauth.md#sign-in-and-retain-provider-access)
-signs users in and retains encrypted provider grants with refresh, through the same
-sessions as your other methods. Supply your provider configuration, account policy,
-keys, and storage; see the [runnable example](examples/auth/src/github-app.ts).
+Start with [Auth in an Effect application](docs/src/content/docs/guide/effect.md)
+or compare [database and backend choices](docs/src/content/docs/guide/storage.mdx).
+The [four account apps](docs/src/content/docs/guide/examples.md#run-an-account-app)
+show managed Drizzle, custom Drizzle, Effect SQL, and non-SQL persistence.
 
 Install the beta release with Effect:
 
@@ -30,10 +28,6 @@ Prefer named namespace imports from `@yielded/auth`. Direct module paths such as
 [import guide](docs/src/content/docs/reference/modules.md#imports-and-tree-shaking).
 
 ## One API, server and client
-
-Want a working app first? [Download the starter](https://yielded.dev/auth/auth-starter.tar.gz).
-It includes registration, password and passkey sign-in, email verification, recovery,
-and SQLite storage. Local email delivery needs no provider credentials.
 
 Define the shared contract in `packages/domain/auth-contract.ts`:
 
@@ -102,7 +96,8 @@ export const auth = AuthAtom.make(AppClient);
 <!-- #endregion auth-client -->
 
 Use `auth.session`, `auth.signIn`, and `auth.signOut` with ordinary
-`@effect/atom-react` hooks. Compose your own queries through the same client:
+`@effect/atom-react` hooks. Auth mutations refresh auth queries automatically;
+React renders and dispatches. Compose your own queries through the same client:
 
 <!-- #region auth-query -->
 
@@ -125,8 +120,15 @@ export const memberName = auth.runtime.atom(
 
 Fetch is configured by default. To customize transport, compose `AppClient.layer`
 with your HttpClient Layer and pass `{ layer: ClientLive }` to `AuthAtom.make`. See the
-[client guide](docs/src/content/docs/guide/http-and-client.md#connect-client-state)
+[client guide](docs/src/content/docs/guide/client.md)
 for React, shared invalidation, and standalone Effect calls.
+
+Add [passwords](docs/src/content/docs/guide/passwords.md),
+[passkeys](docs/src/content/docs/guide/passkeys.md),
+[email](docs/src/content/docs/guide/codes.md) or [phone codes](docs/src/content/docs/guide/phone.md),
+[two-factor authentication](docs/src/content/docs/guide/totp.md), and
+[OAuth](docs/src/content/docs/guide/oauth.md) through strategies and their required Layers.
+OAuth can also retain encrypted provider grants for calling APIs after sign-in.
 
 Start with the [documentation](https://yielded.dev/auth/) and
 [consumer examples](examples/auth). The public library lives in

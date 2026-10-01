@@ -5,6 +5,7 @@ import { cryptoLayer } from "../../auth/defaults";
 import { HookDenied } from "../../hooks/models";
 import type { AuthInvocation } from "../../operations/context";
 import { makeOperation, operationGroup } from "../../operations/operation";
+import type { SubjectId } from "../../Schema";
 import { AuthenticationFlowId } from "../../sessions/models";
 import type { makeSessionModule } from "../../sessions/module";
 import { PasswordSignInInput } from "./contracts";
@@ -50,16 +51,18 @@ export const makePasswordSignIn = <
   const source = options.policy ?? defaultPasswordMethodPolicy;
   const policy = validatePasswordMethodPolicy(snapshotPasswordMethodPolicy(source));
 
-  const ClaimsForPassword = Context.Service<
+  /** Supply application session claims for the verified password's subject. */
+  const SessionClaims = Context.Service<
     {
       readonly moduleId: Id;
       readonly kind: "claims";
       readonly claims: Types.Invariant<Claims["Type"]>;
     },
     {
-      readonly resolve: (
-        credential: PasswordCredentialSnapshot,
-      ) => Effect.Effect<Claims["Type"], PasswordUnavailable>;
+      readonly resolve: (input: {
+        readonly subjectId: SubjectId;
+        readonly credential: PasswordCredentialSnapshot;
+      }) => Effect.Effect<Claims["Type"], PasswordUnavailable>;
     }
   >(`effect-auth/password/${moduleId}/Claims`);
 
@@ -95,9 +98,12 @@ export const makePasswordSignIn = <
           const { verifyPassword } = makePasswordVerification({ moduleId, policy: configured });
           const verified = yield* verifyPassword(request, "sign-in");
 
-          const claims = yield* (yield* ClaimsForPassword).resolve(
-            yield* snapshotPasswordCredential(verified.credential),
-          );
+          const credential = yield* snapshotPasswordCredential(verified.credential);
+
+          const claims = yield* (yield* SessionClaims).resolve({
+            subjectId: credential.revision.subjectId,
+            credential,
+          });
 
           return yield* (yield* sessions.AuthenticationCompletion)
             .prepare({ evidence: verified.evidence, claims })
@@ -111,7 +117,7 @@ export const makePasswordSignIn = <
 
   return Object.freeze({
     persistence: { kind: "password" as const, moduleId, management: false as const },
-    ClaimsForPassword,
+    SessionClaims,
     layer,
     handlersLayer,
     operations: { SignIn },

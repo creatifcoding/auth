@@ -177,7 +177,7 @@ the original request-binding cookie. A session
 is issued only after server verification and the current account checks succeed.
 The client exposes the same calls as `client.auth.signIn(...)` and
 `client.auth.completeSignIn(...)`. The
-[Atom workflow](./http-and-client#compose-a-passkey-workflow) connects these steps.
+[Atom workflow](./client#compose-a-passkey-workflow) connects these steps.
 
 ## Install the server verifier
 
@@ -216,7 +216,7 @@ export const PasskeyLive = Layer.mergeAll(
   PasskeyPersistenceLive,
   PasskeyConfigLive,
   PasskeyProtocolLive,
-  Layer.succeed(AppAuth.strategies.passkey.ClaimsForPasskey, { resolve: resolvePasskeyClaims }),
+  Layer.succeed(AppAuth.strategies.passkey.SessionClaims, { resolve: resolvePasskeyClaims }),
 );
 
 export const AuthLive = AppAuth.layer.pipe(

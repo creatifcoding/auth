@@ -38,7 +38,7 @@ import {
 } from "../proofs/models";
 import { makeProofModule } from "../proofs/module";
 import type { ProofPolicy } from "../proofs/policy";
-import { Email, TokenDigest } from "../Schema";
+import { Email, type SubjectId, TokenDigest } from "../Schema";
 import { AuthenticationAuthority } from "../sessions/AuthenticationAuthority";
 import {
   SessionCapabilityUnsupported,
@@ -170,12 +170,14 @@ export const makeEmailSignInModule = <
   const sessions = options.sessions;
   const binding = makeRequestBinding(moduleId, "email-entry");
 
-  const ClaimsForEmail = Context.Service<
+  /** Supply application session claims for the verified email's subject. */
+  const SessionClaims = Context.Service<
     EmailModule<Id, "claims", Claims["Type"]>,
     {
-      readonly resolve: (
-        credential: EmailCredentialSnapshot,
-      ) => Effect.Effect<Claims["Type"], EmailUnavailable>;
+      readonly resolve: (input: {
+        readonly subjectId: SubjectId;
+        readonly credential: EmailCredentialSnapshot;
+      }) => Effect.Effect<Claims["Type"], EmailUnavailable>;
     }
   >(`effect-auth/email/${moduleId}/Claims`);
 
@@ -247,7 +249,7 @@ export const makeEmailSignInModule = <
         const targets = yield* EmailSignInTargets;
         const returns = yield* EmailReturnTargets;
         const proofs = yield* proof.Proofs;
-        const claims = yield* ClaimsForEmail;
+        const claims = yield* SessionClaims;
         const completion = yield* sessions.AuthenticationCompletion;
         const authority = yield* AuthenticationAuthority;
         const crypto = yield* Crypto.Crypto;
@@ -397,9 +399,12 @@ export const makeEmailSignInModule = <
               ],
             };
 
-            const applicationClaims = yield* claims.resolve(
-              yield* snapshotEmailCredential(current.target.value),
-            );
+            const credential = yield* snapshotEmailCredential(current.target.value);
+
+            const applicationClaims = yield* claims.resolve({
+              subjectId: credential.revision.subjectId,
+              credential,
+            });
 
             // Proof consumption has committed. Session failure burns this proof and
             // requires a fresh request; no cross-owner atomicity is claimed here.
@@ -511,7 +516,7 @@ export const makeEmailSignInModule = <
     binding,
     Begin,
     beginLayer,
-    ClaimsForEmail,
+    SessionClaims,
   });
 };
 
@@ -532,7 +537,7 @@ export const makeEmailAccountModule = <
 ) => {
   const sessions = options.sessions;
   const code = makeEmailSignInModule(moduleId, { sessions, mode: "code", proof: options.code });
-  const { binding, Begin, beginLayer, ClaimsForEmail } = code;
+  const { binding, Begin, beginLayer, SessionClaims } = code;
 
   const registrationProof = makeProofModule(`${moduleId}/registration`, {
     ...options.code,
@@ -622,7 +627,7 @@ export const makeEmailAccountModule = <
     binding,
     Begin,
     beginLayer,
-    ClaimsForEmail,
+    SessionClaims,
     registration,
     addresses,
   });

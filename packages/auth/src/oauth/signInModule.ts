@@ -24,7 +24,7 @@ import type { AuthOperationResult } from "../operations/credentials";
 import { InvalidOperationInput } from "../operations/errors";
 import { makeOperation, operationGroup } from "../operations/operation";
 import { makeRequestBinding } from "../operations/requestBinding";
-import { TokenDigest } from "../Schema";
+import { type SubjectId, TokenDigest } from "../Schema";
 import { AuthenticationFlowId } from "../sessions/models";
 import type { makeSessionModule } from "../sessions/module";
 import { makeOAuthAccounts } from "./accounts";
@@ -143,15 +143,16 @@ export const makeOAuthMethod = <
   const sessions = options.sessions;
   const binding = makeRequestBinding(moduleId, "oauth-entry");
 
-  const ClaimsForOAuth = Context.Service<
+  /** Supply application session claims after provider verification and local account matching. */
+  const SessionClaims = Context.Service<
     OAuthModule<Id, "claims", Claims["Type"]>,
     {
-      readonly resolve: (
-        credential: OAuthCredentialSnapshot,
-        /** Fresh provider metadata, after exact local credential/identity matching.
-         * Select application claims explicitly; profile email grants no linking authority. */
-        verified: OAuthVerifiedExternalIdentity,
-      ) => Effect.Effect<Claims["Type"], OAuthUnavailable>;
+      readonly resolve: (input: {
+        readonly subjectId: SubjectId;
+        readonly credential: OAuthCredentialSnapshot;
+        /** Fresh provider metadata. Select claims explicitly; profile email grants no linking authority. */
+        readonly identity: OAuthVerifiedExternalIdentity;
+      }) => Effect.Effect<Claims["Type"], OAuthUnavailable>;
     }
   >(`effect-auth/oauth/${moduleId.length}:${moduleId}/Claims`);
 
@@ -208,7 +209,7 @@ export const makeOAuthMethod = <
         const { resolve: returnTarget } = yield* OAuthReturnTargets;
         const { seal, open } = yield* OAuthTransactionProtector;
         const { issue, claim, settle } = yield* OAuthSignInPersistence;
-        const { resolve: resolveClaims } = yield* ClaimsForOAuth;
+        const { resolve: resolveClaims } = yield* SessionClaims;
         const { prepare: completeAuthentication } = yield* sessions.AuthenticationCompletion;
         const crypto = yield* Crypto.Crypto;
         const { randomBytes, digest } = crypto;
@@ -754,10 +755,11 @@ export const makeOAuthMethod = <
               ),
             );
 
-            const claims = yield* resolveClaims(
-              snapshotOAuthSync(OAuthCredentialSnapshot, credential),
-              snapshotOAuthSync(OAuthVerifiedExternalIdentity, identity),
-            );
+            const claims = yield* resolveClaims({
+              subjectId: credential.revision.subjectId,
+              credential: snapshotOAuthSync(OAuthCredentialSnapshot, credential),
+              identity: snapshotOAuthSync(OAuthVerifiedExternalIdentity, identity),
+            });
 
             const established = yield* completeAuthentication({
               claims,
@@ -964,7 +966,7 @@ export const makeOAuthMethod = <
 
   return Object.freeze({
     binding,
-    ClaimsForOAuth,
+    SessionClaims,
     SignIn,
     signInLayer,
     layer,

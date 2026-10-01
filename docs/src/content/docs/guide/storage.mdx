@@ -1,14 +1,26 @@
 ---
-title: Choose how much you own
-description: Use managed auth tables, map your own schema, or implement the storage services yourself, without changing your auth API.
+title: Database and backend choices
+description: Keep your account model. Use managed auth tables, map an existing SQL schema, or supply Effect services for another backend.
 ---
 
 import OwnershipLadder from "../../../components/OwnershipLadder.astro";
 import TableMap from "../../../components/TableMap.astro";
 
-Yielded Auth stores identifiers, credentials, proofs, and sessions. You choose
-who owns that storage, one layer at a time. Your contract, `AppAuth`, and client
-stay the same at every level; only the Layers you provide change.
+Your account model belongs to your application. A subject can be a row in your
+existing customer table or an identity managed by another service. Yielded Auth
+needs ways to look up that identity and durably store credentials, proofs, and
+sessions; core does not require an ORM or a particular database.
+
+Choose how to provide those services:
+
+| Start with                        | When it fits                                                 |
+| --------------------------------- | ------------------------------------------------------------ |
+| [Managed tables](#managed-tables) | You want auth storage supplied alongside your account table. |
+| [Your schema](#your-schema)       | You already own SQL tables and migrations.                   |
+| [Your services](#your-services)   | Your backend needs a custom store or transaction model.      |
+
+Replacing storage Layers keeps your contract, `AppAuth`, and client unchanged. Moving existing data still
+requires an application-owned migration.
 
 <OwnershipLadder />
 
@@ -62,8 +74,8 @@ export const authSchema = storage.schema;
 
 Only the methods you install add tables. Export them from `authSchema` and
 Drizzle Kit generates their migrations; review, commit, and apply them like any
-other migration. Startup applies committed migrations and never pushes schema
-changes.
+other migration. In the example, a migration Layer applies committed files at
+startup; it never pushes schema changes. You decide when migrations run.
 
 To give a single table your own layout, pass it in `tables`. The rest stay managed.
 
@@ -113,7 +125,8 @@ runs on SQLite and PostgreSQL.
 ## Your services
 
 Each storage role is a public service, such as `Password.PasswordPersistence`.
-Implement them in your own Layers, on any store:
+Implement them in your own Layers. The rest of auth calls those services through
+Effect, without knowing whether they use SQL:
 
 ```ts title="apps/server/live.ts"
 export const PersistenceLive = Layer.mergeAll(
@@ -125,26 +138,32 @@ export const PersistenceLive = Layer.mergeAll(
 );
 ```
 
-Your implementation owns transactions, durability, and receipts. The
+The Layers above are application implementations, not library exports. The
 [custom services app](https://github.com/yielded-dev/auth/tree/main/examples/persistence-custom)
-uses a single-writer file store with no SQL at all.
+implements these boundaries with a single-writer file store and no persistence
+package. It runs the account workflows with the same shared UI; its extra
+username sign-in uses an extended contract.
 
-Layer composition also replaces one method while keeping the others:
+### What a custom backend must guarantee
 
-```ts title="apps/server/password-methods.ts"
-const Passwords = AppAuth.strategies.password.Passwords;
+Storage services describe workflow commits, not just CRUD. Your implementation
+must recheck the relevant account and credential state, consume proofs, and
+commit changes with their retry receipts atomically where the operation requires
+it. A receipt records the original decision so a retry can recover it safely.
 
-export const PasswordMethodsLive = Layer.effect(
-  Passwords,
-  Effect.gen(function* () {
-    const defaults = yield* Passwords;
-    return { ...defaults, planRegister: customPlanRegister(defaults.planRegister) };
-  }),
-).pipe(Layer.provide(AppAuth.strategies.password.layer));
-```
+Choose a transaction or batch owner that can uphold those contracts. Splitting
+account and credential writes across independent backends does not make them
+atomic. An uncertain commit requires reconciliation, not another credential
+issuance. The [adapter reference](../reference/adapters) covers the supported
+transaction boundaries, including D1 and Durable Objects.
+
+The file-store example supports one process on a local filesystem. It illustrates
+the service boundary; replication and production storage operations remain yours.
 
 ## Run each level
 
 The [four example apps](/auth/guide/examples/#run-an-account-app) implement the
-same account features at each level. [Adapters and persistence](/auth/reference/adapters/)
-covers drivers, provisioning, and transaction requirements.
+same account features with managed Drizzle, custom Drizzle, Effect SQL, and
+custom services. Compare their `schema.ts` and `live.ts` files to see what changes.
+The [driver reference](../reference/adapters#choose-a-driver) lists the maintained
+SQL adapters; workflow-specific support is described beside each adapter.

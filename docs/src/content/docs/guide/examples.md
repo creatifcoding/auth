@@ -3,8 +3,9 @@ title: Examples
 description: Run a complete account app or explore focused authentication and client examples.
 ---
 
-The account apps below show each storage level, and the source references after
-them cover individual features. All examples use the package's public API.
+Use these examples to compare backend choices or explore a particular feature.
+All examples use the package's public API. For the setup in your own application,
+start with [getting started](./getting-started).
 
 ## Run an account app
 
@@ -79,7 +80,8 @@ The Studio example separates
 [HTTP server](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/studio-http-server.ts),
 and [browser client](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/studio-browser.ts).
 These are lower-level integration references rather than a packaged application.
-The [HTTP and client state guide](./http-and-client) explains contract sharing.
+The [HTTP integration](./http-and-client) and [Effect Atom client](./client)
+guides explain how these pieces fit together.
 
 Example stores, keys, delivery services, and policies are disposable development
 fixtures. Replace them with your application's authority and durable adapters before

@@ -15,7 +15,7 @@ their driver.
 
 ## Runnable examples
 
-[Choose how much you own](../guide/storage) explains the three storage levels. The [four account apps](../guide/examples#run-an-account-app)
+[Database and backend choices](../guide/storage) explains the three storage options. The [four account apps](../guide/examples#run-an-account-app)
 show managed Drizzle tables, an application-owned Drizzle schema, direct Effect
 SQL, and custom services. Start there to compare ownership and composition, or
 [run an example](../guide/examples#run-an-account-app) for the complete setup.
@@ -254,7 +254,8 @@ secret keys. Adapters provide implementations; they are not installed automatica
 Install the selected driver's Effect SQL and Drizzle peers. Import it directly to
 avoid loading unrelated adapters. Shared mapping types live in `@yielded/auth-persistence-drizzle`.
 
-Effect SQL peers must be rc.117 or newer. The native PostgreSQL driver accepts one
+Use the Effect SQL peer ranges declared by your selected adapter package. The
+native PostgreSQL driver accepts one
 statement per query, decodes `int8` as `bigint`, timestamps as `Date`, and `bytea`
 as `Uint8Array`. Match application-owned column codecs to these values; use
 `sql.json` for JSON parameters. Set `prepare: false` for poolers that cannot retain

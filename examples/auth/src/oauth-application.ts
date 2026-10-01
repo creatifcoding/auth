@@ -58,7 +58,7 @@ export const makeExample = <E, R>(config: {
 
   const dependencies = Layer.mergeAll(
     storage,
-    Layer.succeed(oauth.ClaimsForOAuth, {
+    Layer.succeed(oauth.SessionClaims, {
       resolve: () => Effect.succeed({ role: "owner" as const }),
     }),
     Auth.RequestBindingConfig.layer({

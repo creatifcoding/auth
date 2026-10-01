@@ -108,7 +108,7 @@ and revocation support. It does not provision accounts or select a session mode.
 | `OAuthConnectedTransactionProtector`                         | Connected-operation transaction secrets                              |
 | `OAuthConnectedTokenProtector`                               | Encrypted provider tokens and cleanup jobs                           |
 | `OAuthConnectedUseAuthority`, `OAuthConnectedActionEvidence` | Current permission for token use and disconnect                      |
-| `ClaimsForOAuth`, shared session services                    | Application claims and authentication completion                     |
+| `SessionClaims`, shared session services                     | Application claims and authentication completion                     |
 
 The Drizzle connected mapping must include `signIn: { credential, flow }` pointing
 to the same tables as sign-in persistence, plus `flow.encodeSignIn`. Connected-flow
@@ -193,7 +193,7 @@ import { AuthRoutes } from "./github";
 
 const OAuthLive = Layer.mergeAll(
   OAuthPersistenceLive,
-  Layer.succeed(AppAuth.strategies.social.ClaimsForOAuth, { resolve: resolveOAuthClaims }),
+  Layer.succeed(AppAuth.strategies.social.SessionClaims, { resolve: resolveOAuthClaims }),
   OAuthCrypto.transactionLayer(transactionKeys),
   OAuth.OAuthReturnTargets.exactRoutes(["/account"]),
 );
@@ -299,10 +299,10 @@ metadata: display fields plus bounded `providerData`. It does not authorize acco
 linking or local roles. Expose only needed fields in claims; treat profile URLs as
 untrusted input.
 
-| Consumer                      | Profile access                                 |
-| ----------------------------- | ---------------------------------------------- |
-| Returning shared-auth sign-in | `ClaimsForOAuth.resolve(credential, verified)` |
-| Shared-auth registration      | Server-side `OAuthRegistrationIntent.profile`  |
+| Consumer                      | Profile access                                               |
+| ----------------------------- | ------------------------------------------------------------ |
+| Returning shared-auth sign-in | `SessionClaims.resolve({ subjectId, credential, identity })` |
+| Shared-auth registration      | Server-side `OAuthRegistrationIntent.profile`                |
 
 `GitHubUserProfile` and `OidcUserProfile` schemas decode the adapters' provider data.
 Missing fields remain absent; GitHub nullable values remain null. GitHub's `/user`

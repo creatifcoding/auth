@@ -59,16 +59,16 @@ export class GitHubReferenceAccounts extends Context.Service<
 >()("example/GitHubReferenceAccounts") {}
 
 const claimsLayer = Layer.effect(
-  githubSignIn.ClaimsForOAuth,
+  githubSignIn.SessionClaims,
   Effect.gen(function* () {
     const { claims } = yield* GitHubReferenceAccounts;
 
-    return githubSignIn.ClaimsForOAuth.of({
-      resolve: (credential, verified) =>
-        claims(credential.revision.subjectId).pipe(
+    return githubSignIn.SessionClaims.of({
+      resolve: ({ subjectId, identity }) =>
+        claims(subjectId).pipe(
           Effect.map((local) => ({
             ...local,
-            displayName: verified.profile?.displayName ?? local.displayName,
+            displayName: identity.profile?.displayName ?? local.displayName,
           })),
         ),
     });

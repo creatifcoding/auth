@@ -1,15 +1,15 @@
-# Yielded Auth starter
+# Managed Drizzle account example
 
 A runnable account app: registration, email verification, password and passkey sign-in,
 password recovery, and sign-out. Accounts and sessions survive restarts in `.data/auth.sqlite`;
 private proof and request-binding keys live in `.data/keys.json`.
 
-No email-provider credentials or database server are needed. With Bun installed,
-run these commands in the downloaded starter:
+No email-provider credentials or database server are needed. From the repository
+root, install dependencies and start the example:
 
 ```sh
-bun install
-bunx vp run start
+vp install
+vp -C examples/persistence-drizzle-managed run start
 ```
 
 Open http://localhost:4181 and create an account with a name, an email such as
@@ -56,17 +56,18 @@ delivery, and protect the persistent database and keys. Start with the
 
 [Schema](src/schema.ts) maps the application's customer table and selects managed
 auth tables. [Drizzle Kit](drizzle.config.ts) reads the exported tables and generates
-versioned SQL and snapshots in [drizzle](drizzle). After changing the schema, run:
+versioned SQL and snapshots in [drizzle](drizzle). After changing the schema, run
+from the repository root:
 
 ```sh
-bunx vp run db:generate --name=describe_change
+vp -C examples/persistence-drizzle-managed run db:generate --name=describe_change
 ```
 
 Generation compacts JSON snapshots to one line; Git marks them as generated.
 
 Review and commit the generated migration. [MigrationsLive](src/migrations.ts) applies
 those files with Drizzle before auth starts, recording them in `__drizzle_migrations`.
-Run `bunx vp run db:migrate` to apply them separately.
+Run `vp -C examples/persistence-drizzle-managed run db:migrate` from the root to apply them separately.
 Startup never generates or pushes schema changes.
 
 [Layers](src/live.ts) provide subject creation, claims, and [custom hashing](../shared/account/hashing.ts). The library commits customer creation,
@@ -81,11 +82,9 @@ accounts, sessions, proofs, and keys. It does not affect the other examples.
 
 The [AuthApi](../shared/account/contract.ts), [AppAuth](../shared/account/auth.ts),
 and [client](../shared/account/email-client.ts) are shared with the repository's
-other account examples. The download places them in `src/account/`.
+other account examples.
 This app's [live.ts](src/live.ts) supplies persistence and account Layers;
 [delivery.ts](src/delivery.ts) selects local or Cloudflare email.
 
-When working in the repository, install with `vp install` and run
-`vp -C examples/persistence-drizzle-managed run start` from the root.
 `vp -C examples/persistence-drizzle-managed run test` checks registration rollback
 after credential storage fails, through HTTP against a temporary database.

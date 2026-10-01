@@ -45,17 +45,14 @@ const ProvisioningLive = Layer.effect(
 ).pipe(Layer.provide(WebCrypto.layerWebCrypto));
 
 const ClaimsLive = Layer.effect(
-  AppAuth.strategies.password.ClaimsForPassword,
+  AppAuth.strategies.password.SessionClaims,
   Effect.gen(function* () {
     const database = yield* Drizzle.makeWithDefaults({});
 
     return {
       resolve: Effect.fn("Customers.claims")(
-        function* (credential) {
-          const rows = yield* database
-            .select()
-            .from(customers)
-            .where(eq(customers.id, credential.revision.subjectId));
+        function* ({ subjectId, credential }) {
+          const rows = yield* database.select().from(customers).where(eq(customers.id, subjectId));
 
           if (rows.length !== 1 || !rows[0].enabled)
             return yield* Password.PasswordUnavailable.make({});
@@ -73,17 +70,17 @@ const ClaimsLive = Layer.effect(
 );
 
 const PasskeyClaimsLive = Layer.effect(
-  AppAuth.strategies.passkey.ClaimsForPasskey,
+  AppAuth.strategies.passkey.SessionClaims,
   Effect.gen(function* () {
     const passwords = yield* Password.PasswordPersistence;
-    const claims = yield* AppAuth.strategies.password.ClaimsForPassword;
+    const claims = yield* AppAuth.strategies.password.SessionClaims;
 
     return {
       resolve: Effect.fn("Customers.passkeyClaims")(
-        function* (credential) {
+        function* ({ subjectId, credential }) {
           const current = yield* passwords.readForSubject({
             moduleId: AppAuth.strategies.password.persistence.moduleId,
-            subjectId: credential.revision.subjectId,
+            subjectId,
           });
 
           if (
@@ -92,7 +89,10 @@ const PasskeyClaimsLive = Layer.effect(
           )
             return yield* Passkey.PasskeyUnavailable.make({});
 
-          return yield* claims.resolve(current.value);
+          return yield* claims.resolve({
+            subjectId: current.value.revision.subjectId,
+            credential: current.value,
+          });
         },
         Effect.mapError(() => Passkey.PasskeyUnavailable.make({})),
       ),
@@ -106,7 +106,7 @@ const SessionClaimsLive = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* AppAuth.sessions.StatefulSessionPersistence;
     const passwords = yield* Password.PasswordPersistence;
-    const claims = yield* AppAuth.strategies.password.ClaimsForPassword;
+    const claims = yield* AppAuth.strategies.password.SessionClaims;
 
     return {
       ...sessions,
@@ -126,7 +126,13 @@ const SessionClaimsLive = Layer.effect(
           )
             return yield* Sessions.SessionInvalid.make({});
 
-          return { ...session, claims: yield* claims.resolve(current.value) };
+          return {
+            ...session,
+            claims: yield* claims.resolve({
+              subjectId: current.value.revision.subjectId,
+              credential: current.value,
+            }),
+          };
         },
         Effect.mapError((error) =>
           Schema.is(Sessions.SessionInvalid)(error) ? error : Sessions.SessionUnavailable.make({}),

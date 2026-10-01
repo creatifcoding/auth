@@ -736,10 +736,10 @@ export const makeEmailConsumer = Effect.gen(function* () {
             return row ? Option.some(snapshot(state, row)) : Option.none();
           }),
       }),
-      Layer.succeed(email.ClaimsForEmail, {
-        resolve: (credential) =>
+      Layer.succeed(email.SessionClaims, {
+        resolve: ({ subjectId }) =>
           Effect.suspend(() => {
-            const row = state.subjects.get(credential.revision.subjectId);
+            const row = state.subjects.get(subjectId);
 
             return row
               ? Effect.succeed({ team: row.team, number: row.number })
