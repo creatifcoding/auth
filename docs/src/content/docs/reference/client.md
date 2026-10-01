@@ -9,13 +9,13 @@ for Atom, React, and HttpClient examples. `Client.make` defines a service;
 
 ## Transport
 
-| Entry point                                | Transport                         | Lifetime owner            |
-| ------------------------------------------ | --------------------------------- | ------------------------- |
-| `AuthAtom.make(AppClient)`                 | Configured Fetch via `layerFetch` | Application Atom registry |
-| `AuthAtom.make(AppClient, { httpClient })` | Supplied HttpClient Layer         | Application Atom registry |
-| `AppClient.layerFetch`                     | Configured Fetch                  | Application Scope         |
-| `AppClient.layer`                          | Requires `HttpClient.HttpClient`  | Application Scope         |
-| `AppClient.make`                           | Requires `HttpClient.HttpClient`  | Caller-provided Scope     |
+| Entry point                           | Transport                         | Lifetime owner            |
+| ------------------------------------- | --------------------------------- | ------------------------- |
+| `AuthAtom.make(AppClient)`            | Configured Fetch via `layerFetch` | Application Atom registry |
+| `AuthAtom.make(AppClient, { layer })` | Supplied client service Layer     | Application Atom registry |
+| `AppClient.layerFetch`                | Configured Fetch                  | Application Scope         |
+| `AppClient.layer`                     | Requires `HttpClient.HttpClient`  | Application Scope         |
+| `AppClient.make`                      | Requires `HttpClient.HttpClient`  | Caller-provided Scope     |
 
 Effect HttpClient owns execution, cancellation, tracing, and response resources.
 Auth owns credential settlement, CSRF, and bounded envelope decoding. A plain
@@ -81,11 +81,10 @@ does not repeat the request.
 
 | Option           | Purpose                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------- |
-| `httpClient`     | Application transport Layer; defaults to `AppClient.layerFetch`.                            |
 | `runtime`        | Application runtime factory for shared Layers and invalidation; defaults to `Atom.runtime`. |
 | `reactivityKeys` | Additional keys invalidated by each successful named mutation.                              |
 | `services`       | Decoder service Layer; required by the types when response codecs need services.            |
-| `layer`          | Replace the entire client service Layer; takes precedence over `httpClient`.                |
+| `layer`          | Client service Layer with its dependencies provided; defaults to `AppClient.layerFetch`.    |
 | `initialSession` | Encoded public session for request-local server rendering.                                  |
 
 ## Account lifetime
