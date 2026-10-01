@@ -3,12 +3,17 @@ title: HTTP and client state
 description: Mount a shared auth API, configure cookies, and compose Effect Atom workflows.
 ---
 
-One shared contract supplies local server methods, HTTP endpoints, and a named
-client. Effect Atom owns client queries, mutations, and workflows.
+One contract supplies server methods and a typed client. Effect Atom owns client
+state and workflows; Effect HttpClient owns transport.
 
-```text
-AuthApi ──→ Auth.make ──→ local Effects + HTTP handlers
-    └─────→ Client.make ──→ client.auth + Effect Atom ──→ UI
+```mermaid
+flowchart LR
+  accTitle: Shared auth contract
+  accDescr: AuthApi defines both server handlers and a client used by Effect Atom over Effect HttpClient.
+  Contract[AuthApi] --> Server[Auth.make + Http.layer]
+  Contract --> Client[Client.make]
+  UI[React] --> Atom[Effect Atom] --> Client
+  Client --> Transport[Effect HttpClient] --> Server
 ```
 
 ## Define the routes
@@ -199,79 +204,65 @@ delivery, and reveal declarations; the subject projection remains explicit.
 See the [passkey contract](./passkeys#define-the-shared-actions) for a complete
 example and [TOTP](./totp#expose-private-reveals-over-http) for private reveals.
 
-## Call the client directly
+## Connect client state
 
-```ts title="client-service.ts"
-import { Client } from "@yielded/auth";
+```ts title="auth-client.ts"
+import { Atom as AuthAtom, Client } from "@yielded/auth";
 
 import { AuthApi } from "./auth-contract";
 
 export const AppClient = Client.make(AuthApi, { baseUrl: "https://app.example.com" });
-```
-
-Inside an existing Effect with `AppClient` provided:
-
-<!-- prettier-ignore -->
-```ts
-const client = yield* AppClient;
-const session = yield* client.auth.getSession();
-```
-
-`Client.make` declares a yieldable service. Provide `AppClient.layerFetch` for the
-configured Fetch transport. To use an application transport, provide its
-`HttpClient` Layer to `AppClient.layer`, or yield `AppClient.make` inside a Scope
-with `HttpClient.HttpClient` available.
-`client.auth.signIn({ email, password })` and `client.auth.signOut()` return Effects
-with typed errors and schema requirements. Effect's HTTP client owns request
-execution, tracing, cancellation, and response resources. Auth owns credential
-settlement, envelopes, CSRF, and bounded decoding; the browser manages Origin and cookies.
-
-Supply a transport without automatic retries, redirect following, or status filtering:
-auth mutations make one attempt, and expected failures are decoded from their response
-envelopes. `layerFetch` defaults to `credentials: "include"` (`"omit"` in native mode)
-and `redirect: "error"`, preserving other `FetchHttpClient.RequestInit` construction
-defaults. Customize Fetch through `FetchHttpClient.Fetch` when constructing the Layer.
-An application-supplied transport owns these settings itself. Native exchanges disable
-standard HTTP tracing and automatic trace-header propagation to keep custom credential
-headers private; application redaction settings remain intact.
-
-Writes settle in order within one client instance; reads can run concurrently.
-Account changes wait for admitted writes, including requests delayed by middleware.
-
-Each request and response body has a 30-second deadline. Set a positive, finite
-`requestTimeout` in `Client.make` to change it. Timeout returns `OperationHttpError`
-with reason `"timeout"`; a mutation may already have committed. Reconcile with the
-server or start a fresh flow; never retry credential issuance based on timeout alone.
-`maximumResponseBytes` defaults to 1 MiB and may only lower that limit.
-
-The native HttpApi group documents the exact transport envelopes. A plain
-`HttpApiClient` does not supply the auth client's credential settlement, private
-reveal handling, or account transition coordination.
-
-## Connect client state
-
-```ts title="auth-client.ts"
-import { Atom as AuthAtom } from "@yielded/auth";
-
-import { AppClient } from "./client-service";
-
 export const auth = AuthAtom.make(AppClient);
 ```
 
-Both constructors are synchronous and perform no I/O. The application Atom
-registry owns client acquisition and finalization. `auth.getSession` is a query
-atom, `auth.session` is its alias, and `auth.signIn` and `auth.signOut` are mutation
-atoms. Queries expose loading, success, and failure through `AsyncResult`,
-including setup errors. The default client Layer is `AppClient.layerFetch`; pass
-`{ httpClient: ApplicationHttpClient }` to use the application's transport Layer.
+`auth.session` is a query atom; `auth.signIn` and `auth.signOut` are mutation atoms.
+The application registry acquires and closes the client. Fetch is configured by
+default; declaring the client and atoms performs no I/O.
 
-Compose application queries with the same scoped client:
+### React
+
+Use ordinary `@effect/atom-react` hooks under your application's `RegistryProvider`:
+
+```tsx title="account.tsx"
+import { RegistryProvider, useAtom, useAtomValue } from "@effect/atom-react";
+
+import { auth } from "./auth-client";
+
+export function Account() {
+  const session = useAtomValue(auth.session);
+  const [signOutResult, signOut] = useAtom(auth.signOut);
+
+  if (session._tag === "Initial") return <p>Loading…</p>;
+  if (session._tag === "Failure") return <p>Session unavailable</p>;
+  if (session.value === null) return <p>Signed out</p>;
+
+  return (
+    <button disabled={signOutResult.waiting} onClick={() => signOut(undefined)}>
+      Sign out {session.value.claims.displayName}
+    </button>
+  );
+}
+
+export function App() {
+  return (
+    <RegistryProvider>
+      <Account />
+    </RegistryProvider>
+  );
+}
+```
+
+Reuse an existing provider if you have one. React renders and dispatches; put
+multi-step logic in [workflow atoms](#compose-a-passkey-workflow).
+
+### Compose queries
+
+`auth.runtime` supplies the same client and account lifetime to your own atoms:
 
 ```ts title="member-name.ts"
 import { Effect } from "effect";
 
-import { auth } from "./auth-client";
-import { AppClient } from "./client-service";
+import { AppClient, auth } from "./auth-client";
 
 export const memberName = auth.runtime.atom(
   Effect.gen(function* () {
@@ -283,51 +274,13 @@ export const memberName = auth.runtime.atom(
 );
 ```
 
-Pass a `services` Layer to `AuthAtom.make` when response codecs require services;
-the types require this option when necessary. Its optional `layer` replaces the
-configured client Layer for testing or a custom implementation. A separately
-provided `AppClient.layer` acquires a separate instance unless the host deliberately
-shares its Layer memo map.
-
-### React
-
-Use the standard `@effect/atom-react` adapter and the application's ordinary
-`RegistryProvider`. Yielded Auth has no React-specific provider or hooks:
-
-```tsx title="account.tsx"
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
-
-import { auth } from "./auth-client";
-
-export function Account() {
-  const session = useAtomValue(auth.session);
-  const signOut = useAtomSet(auth.signOut);
-
-  if (session._tag === "Initial") return <p>Loading…</p>;
-  if (session._tag === "Failure") return <p>Session unavailable</p>;
-  if (session.value === null) return <p>Signed out</p>;
-
-  return (
-    <button onClick={() => signOut(undefined)}>Sign out {session.value.claims.displayName}</button>
-  );
-}
-```
-
-Keep multi-step logic in Effects and workflow atoms. Components render and dispatch;
-promise-mode handlers return the dispatch promise without `.then` chains. See the
-[React example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/auth-react.ts).
-
 ### Invalidation and account lifetime
 
-Auth mutations refresh auth queries automatically. Extra reactivity keys describe
-application data that must also refresh. Use the same runtime factory as the
-queries subscribed to those keys:
+Auth mutations refresh auth queries automatically. To also refresh application
+queries, replace the `AuthAtom.make` call with a shared runtime and reactivity keys:
 
-```ts title="shared-runtime.ts"
-import { Atom as AuthAtom } from "@yielded/auth";
+```ts
 import { Atom } from "effect/unstable/reactivity";
-
-import { AppClient } from "./client-service";
 
 export const appRuntime = Atom.context();
 export const auth = AuthAtom.make(AppClient, {
@@ -336,36 +289,77 @@ export const auth = AuthAtom.make(AppClient, {
 });
 ```
 
-The default factory is `Atom.runtime`, with a separate memo map per registry.
-`auth.runtime` owns account-scoped queries, workflows, and state read or written
-inside them. An account transition disposes the old account registry before
-publishing its replacement. Ordinary application atoms outside that runtime keep
-their own lifetime; invalidation does not make them account-scoped.
-
-Named auth mutations survive their own admitted sign-in or sign-out until the
-public result settles. Unrelated account changes interrupt pending mutations and
-clear previous results. Execute mutations by writing an input; refreshing their
-result view does not resend credentials. Custom account-scoped workflows retire
-on account replacement, including when they complete authentication. Awaiting
-callers receive interruption. Use an application-owned lifetime for workflows
-intentionally spanning accounts.
+Use `appRuntime` for the queries subscribed to `"projects"` too. Account changes
+dispose work and state owned by `auth.runtime`; other application atoms keep their
+own lifetime. See [account lifetime](../reference/client#account-lifetime).
 
 ### Server rendering and hydration
 
 Default atoms render `Initial` on the server without fetching. For session-aware
-rendering, create request-local atoms with the encoded local `auth.getSession()`
-result as `initialSession`. Acquire their runtime in a request-owned registry
-before rendering to decode the seed, then provide that registry through the
-standard Atom adapter. Serialize only the public session. Hydrate using a separate
-browser registry and the same display seed; close each registry with its host Scope.
-
-The seed is display data, not authentication authority. Runtime acquisition does
-not fetch. Browser query reads verify the live cookie, and a result, failure, or
-account change permanently retires the seed. Never share server registries,
-clients, or request-bearing memo maps across requests, or apply generic late
-hydration updates to auth atoms. The
+rendering, use request-local atoms and registries; serialize only public session
+data. Follow the [hydration reference](../reference/client#server-rendering) and
 [SSR example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/auth-ssr.ts)
-shows rendering, hydration, and unmount finalizers.
+for acquisition and cleanup.
+
+## Use your Effect HttpClient
+
+Replace the default `AuthAtom.make` call with your application's transport Layer:
+
+```ts
+import { ApplicationHttpClient } from "./http-client";
+
+export const auth = AuthAtom.make(AppClient, { httpClient: ApplicationHttpClient });
+```
+
+For example, configure Effect's Fetch transport with browser credentials:
+
+```ts title="http-client.ts"
+import { Layer } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
+
+export const ApplicationHttpClient = FetchHttpClient.layer.pipe(
+  Layer.provide(
+    Layer.succeed(FetchHttpClient.RequestInit, {
+      credentials: "include",
+      redirect: "error",
+    }),
+  ),
+);
+```
+
+Supply a transport without retries, redirects, or status filtering: auth mutations
+make one attempt, and auth decodes expected failures from response bodies. A timeout
+may leave a mutation committed; reconcile with the server instead of retrying it.
+See [transport options](../reference/client#transport) for deadlines and native clients.
+
+## Call the client directly
+
+Provide `layerFetch` to a standalone Effect program:
+
+```ts
+import { Effect } from "effect";
+
+import { AppClient } from "./auth-client";
+
+export const session = Effect.gen(function* () {
+  const client = yield* AppClient;
+  return yield* client.auth.getSession();
+}).pipe(Effect.provide(AppClient.layerFetch));
+```
+
+With your own transport, compose `AppClient.layer` instead:
+
+```ts
+import { Layer } from "effect";
+
+import { AppClient } from "./auth-client";
+import { ApplicationHttpClient } from "./http-client";
+
+export const ClientLive = AppClient.layer.pipe(Layer.provide(ApplicationHttpClient));
+```
+
+Use `Effect.provide(ClientLive)` at that program's boundary. To share the Atom
+client, compose through `auth.runtime` instead of acquiring a separate Layer.
 
 ## Compose a passkey workflow
 
