@@ -5,8 +5,8 @@ description: Set up GitHub sign-in with Yielded Auth.
 
 Sign in with a GitHub OAuth App. Start with [OAuth setup](./oauth).
 
-For managed sessions and retained API access, use the [GitHub app example](./oauth#sign-in-and-connect-provider-access).
-The setup below adds GitHub to a shared auth service.
+To retain GitHub API access during sign-in, configure [OAuth with an access profile](./oauth#sign-in-and-retain-provider-access).
+The provider setup below supplies ordinary sign-in for your shared Auth service.
 
 ## Get your credentials
 
@@ -58,4 +58,4 @@ The callback completes sign-in and redirects to `returnTarget`.
 See the [browser example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/login-client.ts)
 for the client and Atom workflow.
 
-For GitHub API access, see [connected accounts](./oauth#accounts-and-api-access).
+For GitHub API access, see [connected accounts](./oauth#use-the-session-and-provider-access).

@@ -1,6 +1,8 @@
 import { OAuthProtocol, type ProviderDefinition, type OAuthUnavailable } from "@yielded/auth/OAuth";
 import { Effect, Layer } from "effect";
 
+import type { OpenIdClientConnectedOidcProvider } from "./connected/models";
+import { makeOpenIdClientConnectedProtocol } from "./connected/protocol";
 import type {
   OpenIdClientConfigurationError,
   OpenIdClientOAuthProtocolOptions,
@@ -31,7 +33,17 @@ type WithoutBinding<P> = P extends unknown
   ? Omit<P, "provider" | "redirectUri" | "callbackId" | "callbacks">
   : never;
 
-export type ProviderRegistration<R = never> = WithoutBinding<Provider<R>>;
+export type ProviderRegistration<R = never> = WithoutBinding<Provider<R>> & {
+  readonly access?: Pick<
+    OpenIdClientConnectedOidcProvider,
+    | "clientRegistrationId"
+    | "profiles"
+    | "resourceIndicators"
+    | "refreshParameters"
+    | "refreshExpiry"
+    | "revocation"
+  >;
+};
 
 export type ProviderOptions<R = never> = Pick<Options<R>, "timeoutSeconds" | "fetch"> &
   (ProviderRegistration<R> | { readonly registrations: ReadonlyArray<ProviderRegistration<R>> });
@@ -60,16 +72,40 @@ export const provider = <R = never>(
   options: ProviderOptions<R>,
 ): ProviderDefinition<OpenIdClientConfigurationError | OAuthUnavailable, R> => ({
   configure: (binding) =>
-    resolveOptions(() => ({
-      providers: resolve(
-        ("registrations" in options ? options.registrations : [options]).map((registration) => ({
-          ...registration,
-          ...binding,
-        })),
-      ),
-      timeoutSeconds: options.timeoutSeconds ?? 10,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-    })).pipe(Effect.flatMap(makeOpenIdClientOAuthProtocol<R>)),
+    Effect.gen(function* () {
+      const registrations = yield* resolveOptions(() =>
+        resolve(
+          ("registrations" in options ? options.registrations : [options]).map((registration) => ({
+            ...registration,
+            ...binding,
+          })),
+        ),
+      );
+
+      const protocol = yield* makeOpenIdClientOAuthProtocol<R>({
+        providers: registrations,
+        timeoutSeconds: options.timeoutSeconds ?? 10,
+        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      });
+
+      const access = "registrations" in options ? options.registrations : [options];
+
+      const connectedProviders = registrations.flatMap((registration, index) => {
+        const configuration = access[index]?.access;
+
+        return configuration === undefined ? [] : [{ ...registration, ...configuration }];
+      });
+
+      if (connectedProviders.length === 0) return protocol;
+
+      const connected = yield* makeOpenIdClientConnectedProtocol<R>({
+        providers: connectedProviders,
+        timeoutSeconds: options.timeoutSeconds ?? 10,
+        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      });
+
+      return { ...protocol, connected };
+    }),
 });
 
 /** One protocol Layer for all OAuth/OIDC hosts. Each provider defaults to

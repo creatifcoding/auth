@@ -374,6 +374,9 @@ export const makeD1OAuthConnectedTarget = <Database, Family extends Table, Extra
           );
 
           const service: OAuthConnectedPersistence["Service"] = {
+            claimSignIn: (input, prepare) => owner.run(original.claimSignIn(input, prepare)),
+            inspectSignIn: (input) => owner.run(original.inspectSignIn(input)),
+            settleSignIn: (input, prepare) => owner.run(original.settleSignIn(input, prepare)),
             capture: (input) => owner.run(original.capture(input)),
             issue: (input, prepare) => owner.run(original.issue(input, prepare)),
             preflight: (input) => owner.run(original.preflight(input)),

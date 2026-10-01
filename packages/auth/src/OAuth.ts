@@ -148,6 +148,13 @@ export {
 
 export { OAuthConnectedTransactionProtector } from "./oauth/OAuthConnectedTransactionProtector";
 export { OAuthConnectedUseAuthority } from "./oauth/OAuthConnectedUseAuthority";
+
+export {
+  OAuthSignInAccessClaim,
+  OAuthSignInAccessInspection,
+  OAuthSignInAccessOutcome,
+} from "./oauth/signInAccessModels";
+
 export { OAuthLinkTransactionProtector } from "./oauth/OAuthLinkTransactionProtector";
 
 export { OAuthProtocol } from "./oauth/OAuthProtocol";

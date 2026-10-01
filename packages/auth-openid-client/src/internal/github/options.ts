@@ -6,7 +6,6 @@ import {
   type ProviderDefinition,
   type OAuthUnavailable,
 } from "@yielded/auth/OAuth";
-import { type Provider as AppProvider } from "@yielded/auth/OAuthApp";
 import { Effect, Layer } from "effect";
 
 import type { OpenIdClientConfigurationError } from "../openid-client/models";
@@ -56,76 +55,69 @@ const registration = (input: Registration): GitHubOAuthAppGeneration => ({
 export type ProviderRegistration = Pick<GitHubOAuthAppGeneration, "clientId" | "clientSecret"> &
   Pick<RegistrationOptions, "configurationGeneration" | "issuance">;
 
-export type ProviderOptions = Transport &
-  (ProviderRegistration | { readonly registrations: ReadonlyArray<ProviderRegistration> });
+export type ProviderOptions = Transport & {
+  readonly access?: ReadonlyArray<OAuthConnectedProfile>;
+} & (ProviderRegistration | { readonly registrations: ReadonlyArray<ProviderRegistration> });
 
-export type AppProviderOptions = Transport &
-  Pick<ProviderRegistration, "clientId" | "clientSecret"> & {
-    /** API permissions; defaults to read:user. Refresh access is requested separately. */
-    readonly scopes?: ReadonlyArray<string>;
-    /** Local refresh retention; defaults to 30 days from the latest exchange. */
-    readonly maximumRefreshLifetimeMillis?: number;
-  };
-
-/** GitHub.com OAuth App sign-in and API access through OAuthApp. Reuses the
- * GitHub verifier, S256 PKCE, issuer validation and rotating-token protocol.
- * Requests offline_access for expiring tokens; does not configure a GitHub App.
- */
-export const appProvider = (
-  options: AppProviderOptions,
-): AppProvider<OpenIdClientConfigurationError | OAuthUnavailable> => ({
-  configure: Effect.fn("GitHub.appProvider.configure")(function* (redirectUri) {
-    const configured = yield* resolveOptions(() => {
-      const profile = OAuthConnectedProfile.make({
-        key: OAuthPermissionProfileKey.make("github"),
-        generation: 1,
-        issuance: "active",
-        provider: gitHubOAuthAppProviderKey,
-        clientRegistrationId: options.clientId,
-        scopes: options.scopes ?? ["read:user"],
-        resources: [],
-        retention: "access-and-refresh",
-        maximumAccessLifetimeMillis: 8 * 60 * 60 * 1000,
-        maximumRefreshLifetimeMillis:
-          options.maximumRefreshLifetimeMillis ?? 30 * 24 * 60 * 60 * 1000,
-        refreshAheadMillis: 60_000,
-        refresh: "rotating",
-        revocation: "cohort",
-      });
-
-      return {
-        profile,
-        registration: { ...registration({ ...options, redirectUri }), profiles: [profile] },
-      };
-    });
-
-    const protocol = yield* makeGitHubOAuthAppConnectedProtocol({
-      registrations: [configured.registration],
-      timeoutSeconds: options.timeoutSeconds ?? 10,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-    });
-
-    return { profile: configured.profile, protocol };
-  }),
-});
+/** Provider API permissions and token retention, supplied to OAuth.make({ access }). */
+export const accessProfile = (options: {
+  readonly clientId: string;
+  readonly scopes?: ReadonlyArray<string>;
+  readonly maximumRefreshLifetimeMillis?: number;
+}) =>
+  OAuthConnectedProfile.make({
+    key: OAuthPermissionProfileKey.make("github"),
+    generation: 1,
+    issuance: "active",
+    provider: gitHubOAuthAppProviderKey,
+    clientRegistrationId: options.clientId,
+    scopes: options.scopes ?? ["read:user"],
+    resources: [],
+    retention: "access-and-refresh",
+    maximumAccessLifetimeMillis: 8 * 60 * 60 * 1000,
+    maximumRefreshLifetimeMillis: options.maximumRefreshLifetimeMillis ?? 30 * 24 * 60 * 60 * 1000,
+    refreshAheadMillis: 60_000,
+    refresh: "rotating",
+    revocation: "cohort",
+  });
 
 /** Declare GitHub for Http.layer. The host supplies its provider key and
  * callback destinations. Retired registrations remain available to finish flows. */
 export const provider = (
   options: ProviderOptions,
 ): ProviderDefinition<OpenIdClientConfigurationError | OAuthUnavailable> => ({
-  configure: (binding) =>
-    resolveOptions(() => ({
-      providers: ("registrations" in options ? options.registrations : [options]).map((input) => ({
-        ...gitHubOAuthAppProvider({
-          ...input,
-          ...resolveRegistration({ ...input, callbacks: binding.callbacks }, binding.provider),
-        }),
+  configure: Effect.fn("GitHub.provider.configure")(function* (binding) {
+    const registrations = yield* resolveOptions(() =>
+      ("registrations" in options ? options.registrations : [options]).map((input) => ({
+        ...input,
+        ...resolveRegistration({ ...input, callbacks: binding.callbacks }, binding.provider),
+      })),
+    );
+
+    const protocol = yield* makeOpenIdClientOAuthProtocol({
+      providers: registrations.map((input) => ({
+        ...gitHubOAuthAppProvider(input),
         provider: binding.provider,
       })),
       timeoutSeconds: options.timeoutSeconds ?? 10,
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-    })).pipe(Effect.flatMap(makeOpenIdClientOAuthProtocol)),
+    });
+
+    const profiles = options.access;
+
+    if (profiles === undefined) return protocol;
+
+    const connected = yield* makeGitHubOAuthAppConnectedProtocol({
+      registrations: registrations.map((input) => ({
+        ...input,
+        profiles: profiles.filter((profile) => profile.clientRegistrationId === input.clientId),
+      })),
+      timeoutSeconds: options.timeoutSeconds ?? 10,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    });
+
+    return { ...protocol, connected };
+  }),
 });
 
 /** GitHub OAuth sign-in. Defaults to callback ID github, generation 1, active

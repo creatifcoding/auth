@@ -34,6 +34,7 @@ import {
 } from "../http-operation/OperationHttpServerConfig";
 import { mutationSecurity, requestSecurity } from "../http-operation/security";
 import { make as makeOperationServer } from "../http-operation/server";
+import type { OAuthConnectedProtocol } from "../oauth/OAuthConnectedProtocol";
 import type { OAuthProtocol } from "../oauth/OAuthProtocol";
 import type { ProviderDefinition } from "../oauth/providerDefinition";
 import type { ActionSuccess, AuthActions } from "../operations/actions";
@@ -103,7 +104,7 @@ type ResponseRequirements<O> = Exclude<
 >;
 type OAuthConfigured<O, A> = [OAuthConfiguration<O>] extends [never] ? never : A;
 type OAuthProvided<O> = O extends { readonly oauth: OAuthOptions<unknown, unknown, unknown> }
-  ? OAuthProtocol
+  ? OAuthProtocol | OAuthConnectedProtocol
   : never;
 
 /** Mount the shared auth actions and OAuth callbacks with their configured services.
