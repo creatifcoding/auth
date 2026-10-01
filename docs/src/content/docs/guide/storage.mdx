@@ -3,8 +3,8 @@ title: Database and backend choices
 description: Keep your account model. Use managed auth tables, map an existing SQL schema, or supply Effect services for another backend.
 ---
 
-import OwnershipLadder from "../../../components/OwnershipLadder.astro";
-import TableMap from "../../../components/TableMap.astro";
+import StorageLadder from "../../../components/StorageLadder.astro";
+import { TableMap } from "@yielded/starlight-theme/components";
 
 Your account model belongs to your application. A subject can be a row in your
 existing customer table or an identity managed by another service. Yielded Auth
@@ -22,7 +22,7 @@ Choose how to provide those services:
 Replacing storage Layers keeps your contract, `AppAuth`, and client unchanged. Moving existing data still
 requires an application-owned migration.
 
-<OwnershipLadder />
+<StorageLadder />
 
 ## Managed tables
 

@@ -3,13 +3,13 @@ title: How sign-in works
 description: Follow one password sign-in from the browser to the session cookie, and see which code runs each step.
 ---
 
-import SignInTrace from "../../../components/SignInTrace.astro";
+import { Trace } from "@yielded/starlight-theme/components";
 
 Follow one password sign-in from the browser to the session cookie. Yielded Auth
 runs the security-sensitive steps; your code supplies the accounts and storage
 they act on.
 
-<SignInTrace
+<Trace
   steps={[
     {
       lane: "browser",
@@ -19,14 +19,14 @@ they act on.
         "The client sends the contract's input to `/auth/signIn`. The password travels in the request body, never in the URL.",
     },
     {
-      lane: "auth",
+      lane: "library",
       title: "Decode the request",
       code: "Http.layer(AppAuth, { origin })",
       detail:
         "The route decodes the input against the same contract, wraps the password in `Redacted`, and reads any session cookie into the request context.",
     },
     {
-      lane: "auth",
+      lane: "library",
       title: "Verify the password",
       code: "Password.make()",
       detail:
@@ -46,7 +46,7 @@ they act on.
         "Your session storage writes the new session in one transaction, whether it uses managed tables, your own schema, or a custom service.",
     },
     {
-      lane: "auth",
+      lane: "library",
       title: "Set the cookie",
       detail:
         "Only after the commit does the session cookie go on the response. Credentials never appear in the result.",

@@ -3,19 +3,39 @@ title: Effect Atom client
 description: Read sessions, dispatch auth mutations, and compose workflows with Effect Atom and Effect HttpClient.
 ---
 
+import { FlowMap } from "@yielded/starlight-theme/components";
+
 The auth client is an Effect service. Effect Atom turns its contract actions into
 queries and mutations; React renders their state and dispatches inputs. The
 client uses Effect `HttpClient`, so it fits the same transport and Layer
 composition as the rest of your application.
 
-```mermaid
-flowchart LR
-  accTitle: From a React action to an authenticated session
-  accDescr: React dispatches to an Effect Atom mutation. The typed client sends it through Effect HttpClient to the auth HTTP routes. The mutation refreshes session state rendered by React.
-  UI[React] --> Mutation[Mutation atom] --> Client[Client service]
-  Client --> HTTP[Effect HttpClient] --> Server[Auth HTTP routes]
-  Mutation --> Session[Session query] --> UI
-```
+<FlowMap
+  title="From a React action to an authenticated session"
+  description="React dispatches to an Effect Atom mutation. The client service sends it over Effect HttpClient to the auth HTTP routes. A successful mutation refreshes the session query, which React renders."
+  columns={3}
+  boundary={{ row: 3, above: "Browser", below: "Server" }}
+  nodes={[
+    { id: "react", at: [1, 1], owner: "app", title: "React", code: "useAtom(auth.signIn)" },
+    { id: "mutation", at: [1, 2], owner: "library", title: "Mutation atom", code: "auth.signIn" },
+    { id: "client", at: [1, 3], owner: "library", title: "Client service", code: "AppClient" },
+    { id: "session", at: [2, 2], owner: "library", title: "Session query", code: "auth.session" },
+    {
+      id: "routes",
+      at: [4, 3],
+      owner: "library",
+      title: "Auth HTTP routes",
+      code: "Http.layer(AppAuth, …)",
+    },
+  ]}
+  edges={[
+    { from: "react", to: "mutation" },
+    { from: "mutation", to: "client" },
+    { from: "client", to: "routes", label: "Effect HttpClient" },
+    { from: "mutation", to: "session", label: "refreshes" },
+    { from: "session", to: "react", label: "useAtomValue" },
+  ]}
+/>
 
 This guide uses the `AuthApi` shared contract from
 [getting started](./getting-started#define-the-shared-contract), served through

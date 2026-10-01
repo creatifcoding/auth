@@ -3,6 +3,8 @@ title: Sessions
 description: Configure session lifetimes, read a session, and sign out.
 ---
 
+import { Trace } from "@yielded/starlight-theme/components";
+
 Configure sessions on `Auth.make`. Request-aware methods handle credential lookup
 and delivery through the [HTTP boundary](./http-and-client).
 
@@ -44,7 +46,7 @@ namespace, generation to `1`, and the token limit to `4096` bytes. After reducin
 
 Inside an existing Effect handler covered by `http.middleware`:
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const session = yield* auth.getSession();
@@ -57,7 +59,7 @@ needed in application code.
 
 For a handler that requires authentication:
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const session = yield* auth.requireSession();
@@ -69,7 +71,7 @@ session for an entire HttpApi group.
 
 Outside a request, verify an explicit credential:
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const session = yield* auth.verifySession(redactedCredential);
@@ -79,7 +81,7 @@ const session = yield* auth.verifySession(redactedCredential);
 
 In the same request context, call the service directly:
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const result = yield* auth.signOut();
@@ -94,7 +96,7 @@ request context and cookie delivery.
 
 ## Renew a session
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const session = yield* auth.renewSession();
@@ -105,13 +107,15 @@ Renewal delivers a replacement credential through the request boundary.
 
 ## Session lifecycle
 
-```text
-verify password / passkey / provider
-  → approve current account and credential revision
-  → commit session
-  → deliver cookie
-  → return public session
-```
+<Trace
+  steps={[
+    { lane: "library", title: "Verify the password, passkey, or provider" },
+    { lane: "app", title: "Approve the current account and credential revision" },
+    { lane: "app", title: "Commit the session" },
+    { lane: "library", title: "Deliver the cookie" },
+    { lane: "browser", title: "Read the public session" },
+  ]}
+/>
 
 ## Custom completion and additional factors
 

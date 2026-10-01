@@ -3,21 +3,61 @@ title: HTTP integration
 description: Mount auth in an Effect HttpRouter or HttpApi and call the service from application handlers.
 ---
 
+import { FlowMap } from "@yielded/starlight-theme/components";
+
 Mount auth beside your existing Effect routes. The HTTP boundary decodes the
 shared contract, supplies request credentials, and delivers cookies. Application
 handlers call the same auth service directly.
 
 For browser queries and mutations, continue with the [Effect Atom client](./client).
 
-```mermaid
-flowchart LR
-  accTitle: Shared auth contract
-  accDescr: AuthApi defines both server handlers and a client used by Effect Atom over Effect HttpClient.
-  Contract[AuthApi] --> Server[Auth.make + Http.layer]
-  Contract --> Client[Client.make]
-  UI[React] --> Atom[Effect Atom] --> Client
-  Client --> Transport[Effect HttpClient] --> Server
-```
+<FlowMap
+  title="Auth beside your routes"
+  description="Browser requests reach two route sets. Auth routes from Http.layer decode the shared contract and set cookies. Your routes run under http.middleware, which reads request credentials and sets cookies. Both call the same Auth service, which uses your Layers for accounts, policy, and storage."
+  columns={3}
+  boundary={{ row: 2, above: "Browser", below: "Server" }}
+  nodes={[
+    { id: "app", at: [1, 1], owner: "app", title: "Your app", note: "Calls your own routes" },
+    {
+      id: "client",
+      at: [1, 3],
+      owner: "library",
+      title: "Auth client",
+      code: "Client.make(AuthApi, …)",
+    },
+    {
+      id: "yours",
+      at: [3, 1],
+      owner: "app",
+      title: "Your routes",
+      code: "http.middleware",
+      note: "Reads credentials, sets cookies",
+    },
+    {
+      id: "routes",
+      at: [3, 3],
+      owner: "library",
+      title: "Auth routes",
+      code: "Http.layer(AppAuth, …)",
+      note: "Decodes the contract, sets cookies",
+    },
+    { id: "auth", at: [4, 2], owner: "library", title: "Auth service", code: "AppAuth" },
+    {
+      id: "layers",
+      at: [5, 2],
+      owner: "app",
+      title: "Your Layers",
+      note: "Accounts, policy, storage",
+    },
+  ]}
+  edges={[
+    { from: "app", to: "yours" },
+    { from: "client", to: "routes", label: "Contract actions" },
+    { from: "yours", to: "auth", label: "requireSession()" },
+    { from: "routes", to: "auth" },
+    { from: "auth", to: "layers" },
+  ]}
+/>
 
 ## Define the routes
 

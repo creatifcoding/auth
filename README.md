@@ -12,7 +12,7 @@ against another backend. The auth API stays the same when you change storage.
 Core has only Effect as a runtime peer; companion packages supply database,
 cryptography, and protocol adapters.
 
-Start with [Auth in an Effect application](docs/src/content/docs/guide/effect.md)
+Start with [Auth in an Effect application](docs/src/content/docs/guide/effect.mdx)
 or compare [database and backend choices](docs/src/content/docs/guide/storage.mdx).
 The [four account apps](docs/src/content/docs/guide/examples.md#run-an-account-app)
 show managed Drizzle, custom Drizzle, Effect SQL, and non-SQL persistence.
@@ -67,7 +67,7 @@ export const AuthRoutes = Http.layer(AppAuth, { origin: "https://app.example.com
 
 Supply your persistence and account Layers to `AuthRoutes`, then merge it with
 your router. For application routes that call auth, use the middleware shown in the
-[router composition](docs/src/content/docs/guide/http-and-client.md#configure-the-server).
+[router composition](docs/src/content/docs/guide/http-and-client.mdx#configure-the-server).
 Inside an existing Effect handler, call the service directly:
 
 <!-- prettier-ignore -->
@@ -120,14 +120,14 @@ export const memberName = auth.runtime.atom(
 
 Fetch is configured by default. To customize transport, compose `AppClient.layer`
 with your HttpClient Layer and pass `{ layer: ClientLive }` to `AuthAtom.make`. See the
-[client guide](docs/src/content/docs/guide/client.md)
+[client guide](docs/src/content/docs/guide/client.mdx)
 for React, shared invalidation, and standalone Effect calls.
 
 Add [passwords](docs/src/content/docs/guide/passwords.md),
 [passkeys](docs/src/content/docs/guide/passkeys.md),
 [email](docs/src/content/docs/guide/codes.md) or [phone codes](docs/src/content/docs/guide/phone.md),
-[two-factor authentication](docs/src/content/docs/guide/totp.md), and
-[OAuth](docs/src/content/docs/guide/oauth.md) through strategies and their required Layers.
+[two-factor authentication](docs/src/content/docs/guide/totp.mdx), and
+[OAuth](docs/src/content/docs/guide/oauth.mdx) through strategies and their required Layers.
 OAuth can also retain encrypted provider grants for calling APIs after sign-in.
 
 Start with the [documentation](https://yielded.dev/auth/) and

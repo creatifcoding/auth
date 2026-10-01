@@ -3,6 +3,8 @@ title: Two-factor authentication
 description: Enroll an authenticator and complete sign-in with a second factor.
 ---
 
+import { Trace } from "@yielded/starlight-theme/components";
+
 Add `Totp` alongside a primary method. It supports authenticator codes and
 single-use recovery codes. The local calls below belong inside existing Effect
 request handlers, with `AppAuth` and the HTTP request boundary provided.
@@ -55,7 +57,7 @@ pending proof instead of failing when a second factor is required.
 
 ## Begin enrollment
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const result = yield* auth.beginEnrollment("totp", { commandId, accountName, actionProof });
@@ -69,7 +71,7 @@ a temporary `totp-enrollment` reveal for your QR-code screen.
 
 ## Confirm the first code
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const result = yield* auth.confirmEnrollment("totp", {
@@ -88,19 +90,28 @@ reveals out of ordinary query caches, logs, and persisted UI state.
 For this local method, `pendingCredential` is the private proof issued by the
 primary method. The shared action below injects it from the request cookie.
 
-<!-- prettier-ignore -->
+{/* prettier-ignore */}
 ```ts
 const auth = yield* AppAuth;
 const result = yield* auth.verifyPending("totp", { pendingCredential, code });
 ```
 
-```text
-password accepted
-  → pending proof cookie (not a session)
-  → authenticator code
-  → verifyPending
-  → consume pending proof + issue session
-```
+<Trace
+  steps={[
+    {
+      lane: "library",
+      title: "Accept the password",
+      detail: "The primary method issues a pending proof cookie, not a session.",
+    },
+    { lane: "browser", title: "Enter the authenticator code" },
+    {
+      lane: "library",
+      title: "Verify the pending proof",
+      code: 'verifyPending("totp", { pendingCredential, code })',
+    },
+    { lane: "library", title: "Consume the proof and issue the session" },
+  ]}
+/>
 
 Use `auth.recoverPending("totp", { pendingCredential, code })` for a recovery
 code. Each code is consumed once. A replay or exhausted attempt budget fails closed.

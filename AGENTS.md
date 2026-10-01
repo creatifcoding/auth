@@ -75,8 +75,9 @@ concepts succinctly: what a feature does, how it fits, and how to use it.
 - Edit the page as a whole. Do not append feature inventories, change histories,
   or long defensive explanations to an otherwise focused guide.
 - Use `bun add` for consumer package installation examples.
-- Use fenced `mermaid` blocks for flow diagrams, with `accTitle` and `accDescr`.
-  The shared Starlight theme owns rendering and colors.
+- Draw architecture flows with `FlowMap` and request sequences with `Trace` from
+  `@yielded/starlight-theme/components`, in an `.mdx` page. Give each `FlowMap` a
+  `title` and `description`; the shared theme owns layout, ownership colors, and theming.
 - Never hardcode Effect's current version in documentation, including READMEs,
   guides, reference pages, contributor docs, and installation commands. Use plain
   `effect` without a version or release tag in install examples. Package manifests
