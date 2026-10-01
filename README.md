@@ -30,6 +30,11 @@ Prefer named namespace imports from `@yielded/auth`. Direct module paths such as
 
 ## One API, server and client
 
+Want a working app first? [Download the starter](https://yielded.dev/auth/auth-starter.tar.gz)
+and follow the [getting-started guide](docs/src/content/docs/guide/getting-started.md).
+It includes registration, password and passkey sign-in, email verification, recovery,
+and SQLite storage. Local email delivery needs no provider credentials.
+
 Define the shared contract in `auth-contract.ts`:
 
 <!-- #region auth-contract -->

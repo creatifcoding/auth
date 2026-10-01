@@ -3,7 +3,9 @@ title: Examples
 description: Run a complete account app or explore focused authentication and client examples.
 ---
 
-Start with a complete account app, then use the focused source references for
+For the fastest start, [run the downloadable starter](./getting-started#run-the-starter).
+It includes local email delivery and persistent SQLite storage. The account apps
+below show each storage level, and the source references after them cover
 individual features. All examples use the package's public API.
 
 ## Run an account app
@@ -19,9 +21,9 @@ three [storage levels](./storage): managed tables, your schema, and your service
 | [Effect&nbsp;SQL](https://github.com/yielded-dev/auth/tree/main/examples/persistence-sql)                  | Every table and migration, written in Effect SQL.                       | SQLite or PostgreSQL |
 | [Custom&nbsp;services](https://github.com/yielded-dev/auth/tree/main/examples/persistence-custom)          | The storage and sign-in services, here a single-writer file store.      | Local file           |
 
-Clone the repository and install dependencies with `vp install`. Follow the
-chosen example's README to configure Cloudflare email delivery, then run its
-`start` task from the repository root. For example:
+Clone the repository, install dependencies with `vp install`, and run an app's
+`start` task from the repository root. Managed Drizzle delivers email to local
+files; the other apps send through Cloudflare, configured as their READMEs describe:
 
 ```sh
 vp -C examples/persistence-drizzle-managed run start
@@ -55,15 +57,11 @@ shows provider and application wiring.
 
 ## Database adapters
 
-| Source                                                                                                 | Integration                |
-| ------------------------------------------------------------------------------------------------------ | -------------------------- |
-| [SQLite on Bun](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-sqlite-bun.ts) | Drizzle and SQLite on Bun. |
-| [SQLite WASM](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-sqlite-wasm.ts)  | Drizzle and SQLite WASM.   |
-
-The [Node SQLite](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-sqlite-node.ts)
-and [libSQL](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-libsql.ts)
-files provide additional composition references. See [adapters and persistence](../reference/adapters)
-for transaction and retry requirements.
+The [runnable persistence apps](../reference/adapters#runnable-examples) share the
+same account workflows with managed Drizzle, application-owned Drizzle, raw SQL,
+or custom services. Start with the managed Drizzle app for local SQLite setup.
+The [adapter reference](../reference/adapters) lists the supported drivers and
+explains transaction and retry requirements.
 
 ## HTTP and browser clients
 

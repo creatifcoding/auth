@@ -1,6 +1,5 @@
 import { requireStandalone as standalone } from "@yielded/auth-persistence/Adapter";
 import { EmailUnavailable } from "@yielded/auth/Email";
-import { AuthStoreError } from "@yielded/auth/Errors";
 import { PasswordUnavailable } from "@yielded/auth/Password";
 import { ProofUnavailable } from "@yielded/auth/Proofs";
 import { SessionUnavailable } from "@yielded/auth/Sessions";
@@ -10,28 +9,10 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect } from "effect";
 
 import type {
-  AuthStoreTables,
-  AuthTables,
   ExternalIdentityTables,
   IdentityTables,
-  OAuthStateTables,
   SubjectProvisioningTables,
 } from "./drizzle/model";
-import {
-  coordinateSqliteAuthStoreTransaction,
-  coordinateSqliteAuthTransaction,
-  coordinateSqliteOAuthStateTransaction,
-  makeSqliteAuthServices,
-  makeSqliteAuthStoreServices,
-  makeSqliteOAuthStateServices,
-} from "./drizzle/sqlite";
-
-export {
-  coordinateSqliteAuthStoreTransaction as coordinateAuthStoreTransaction,
-  coordinateSqliteAuthTransaction as coordinateAuthTransaction,
-  coordinateSqliteOAuthStateTransaction as coordinateOAuthStateTransaction,
-};
-
 import { makeSqliteEmailTarget, sqliteEmailConfiguration } from "./drizzle/sqlite-emails";
 import {
   makeSqliteExternalIdentityServices,
@@ -41,12 +22,6 @@ import {
 import { makeSqlitePasswordTarget, sqlitePasswordConfiguration } from "./drizzle/sqlite-passwords";
 import { makeSqliteProofTarget, sqliteProofConfiguration } from "./drizzle/sqlite-proofs";
 import { makeSqliteSessionTarget, sqliteSessionConfiguration } from "./drizzle/sqlite-sessions";
-
-const requireStandalone = standalone(() =>
-  AuthStoreError.make({
-    message: "Use the decision consume API inside an outer database transaction",
-  }),
-);
 
 const requireStandaloneSession = standalone(() => SessionUnavailable.make({}));
 const requireStandaloneProof = standalone(() => ProofUnavailable.make({}));
@@ -100,25 +75,6 @@ export const {
 } = sessionTarget;
 
 export const commitMode = "interactive" as const;
-
-export const makeAuthStoreServices = <C extends AnySQLiteTable, R extends AnySQLiteTable>(
-  database: EffectLibsqlDatabase<AnyRelations>,
-  mapping: AuthStoreTables<C, R>,
-) => makeSqliteAuthStoreServices(database, mapping, requireStandalone);
-
-export const makeOAuthStateServices = <S extends AnySQLiteTable>(
-  database: EffectLibsqlDatabase<AnyRelations>,
-  mapping: OAuthStateTables<S>,
-) => makeSqliteOAuthStateServices(database, mapping, requireStandalone);
-
-export const makeAuthServices = <
-  C extends AnySQLiteTable,
-  R extends AnySQLiteTable,
-  S extends AnySQLiteTable,
->(
-  database: EffectLibsqlDatabase<AnyRelations>,
-  mapping: AuthTables<C, R, S>,
-) => makeSqliteAuthServices(database, mapping, requireStandalone);
 
 export const makeIdentityServices = <
   Subject extends AnySQLiteTable,

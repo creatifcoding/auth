@@ -4,8 +4,8 @@ import { Effect, FileSystem, Layer, Path } from "effect";
 import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http";
 
 import { AppAuth } from "../../shared/account/auth";
-import { DeliveryLive } from "../../shared/account/delivery";
 import { DatabaseLive, KeysLive } from "./data";
+import { DeliveryLive } from "./delivery";
 import { AuthLive } from "./live";
 import { ScreeningLive } from "./screening";
 

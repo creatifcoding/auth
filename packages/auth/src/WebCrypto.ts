@@ -2,7 +2,7 @@ import { Context, Crypto, Effect, Encoding, Layer, PlatformError, Result } from 
 
 /**
  * The platform's low-level WebCrypto interface, as a service so consumers
- * (key derivation in `PasswordHasher`, HMAC in `AuthTokenCodec`) never reach
+ * (session signing and proof protection) never reach
  * for `globalThis` themselves. `Crypto.Crypto` deliberately does not expose
  * `SubtleCrypto`, so this is the seam for the primitives it lacks.
  */

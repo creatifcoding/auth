@@ -2,15 +2,7 @@ import type { AnyRelations } from "drizzle-orm";
 import type { EffectMysql2Database } from "drizzle-orm/effect-mysql2";
 import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
 
-import type { AuthTables, IdentityTables } from "./drizzle/model";
-import {
-  coordinateMysqlAuthStoreTransaction,
-  coordinateMysqlAuthTransaction,
-  coordinateMysqlOAuthStateTransaction,
-  makeMysqlAuthServices,
-  makeMysqlAuthStoreServices,
-  makeMysqlOAuthStateServices,
-} from "./drizzle/mysql";
+import type { IdentityTables } from "./drizzle/model";
 import {
   makeMysqlExternalIdentityServices,
   makeMysqlIdentityServices,
@@ -49,25 +41,11 @@ export {
 } from "./drizzle/mysql-emails";
 
 export {
-  coordinateMysqlAuthStoreTransaction as coordinateAuthStoreTransaction,
-  coordinateMysqlAuthTransaction as coordinateAuthTransaction,
-  coordinateMysqlOAuthStateTransaction as coordinateOAuthStateTransaction,
-  makeMysqlAuthStoreServices as makeAuthStoreServices,
   makeMysqlExternalIdentityServices as makeExternalIdentityServices,
-  makeMysqlOAuthStateServices as makeOAuthStateServices,
   makeMysqlSubjectProvisioningServices as makeSubjectProvisioningServices,
 };
 
 export const commitMode = "interactive" as const;
-
-export const makeAuthServices = <
-  C extends AnyMySqlTable,
-  R extends AnyMySqlTable,
-  S extends AnyMySqlTable,
->(
-  database: EffectMysql2Database<AnyRelations>,
-  mapping: AuthTables<C, R, S>,
-) => makeMysqlAuthServices(database, mapping);
 
 export const makeIdentityServices = <
   Subject extends AnyMySqlTable,

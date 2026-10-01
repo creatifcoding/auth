@@ -73,6 +73,10 @@ You don't need to memorize this list. `AppAuth.layer` names every missing servic
 in its type, and each method you install adds its own.
 [Getting started](/auth/guide/getting-started/) wires these Layers.
 
+Start with `Auth.make` and the strategies. For lower-level composition,
+`Password.makeModule`, `Email.makeModule`, and `Sessions.make` expose the same
+implementations.
+
 ## Other methods, same path
 
 Every method follows the same route through your code. Multi-step methods

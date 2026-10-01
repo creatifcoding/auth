@@ -164,6 +164,10 @@ export default defineConfig({
       scripts: true,
     },
     tasks: {
+      "starter:build": {
+        cache: false,
+        command: "bun scripts/build-starter.ts",
+      },
       "docs:deploy": {
         cache: false,
         command: "alchemy deploy",

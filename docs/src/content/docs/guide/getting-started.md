@@ -1,7 +1,64 @@
 ---
 title: Getting started
-description: Define your authentication service and call it from your application.
+description: Run a complete local account app, then connect authentication to your application.
 ---
+
+Start with a working account app, then adapt its shared contract, account model,
+and services to your application. Yielded Auth is currently in beta.
+
+## Run the starter
+
+Install [Bun](https://bun.sh/), then [download the starter](/auth/auth-starter.tar.gz).
+The archive contains a standalone app with published npm dependencies; no repository
+checkout, database server, or email-provider credentials are needed.
+
+```sh
+tar -xzf auth-starter.tar.gz
+cd yielded-auth-starter
+bun install
+bunx vp run start
+```
+
+Open `http://localhost:4181`. Choose **Create account**, enter a name, an email
+such as `you@example.com`, and a unique password. Registration signs you in.
+Sign out and sign back in to try the complete login flow. Accounts and sessions
+survive restarting the server.
+
+The app creates its SQLite database, applies the included migrations, and generates
+private keys under `.data/`. Password screening uses Pwned Passwords over HTTPS,
+so an internet connection is required; it needs no API key and sends only a hash prefix.
+
+### Verify an email and recover an account
+
+In local mode, email is delivered to private JSON files in **`.data/mail/`**.
+Open the newest message for your address and enter its `code` in the app. This
+simulates access to an inbox; it does not establish ownership of a real email address.
+The app never serves these files over HTTP or prints codes to its logs.
+
+After verification, sign out and choose **Forgot password?**. Request a code,
+read the new local message, and choose a new password. You can also choose
+**Add passkey** while signed in, then use it for your next sign-in.
+
+Use `localhost:4181` consistently for passkeys. Stop the server before deleting
+`.data/` to reset this starter's accounts, sessions, messages, and keys.
+
+### Make it your app
+
+| File                                               | What to change                                                              |
+| -------------------------------------------------- | --------------------------------------------------------------------------- |
+| `src/account/contract.ts`                          | Session claims and the actions exposed to your client.                      |
+| `src/account/auth.ts`                              | Authentication methods and session policy.                                  |
+| `src/schema.ts`, `src/live.ts`, `src/policy.ts`    | Your accounts, provisioning, claims, and authorization.                     |
+| `src/delivery.ts`                                  | Email delivery; `.env.example` shows the optional Cloudflare configuration. |
+| `src/account/client.ts`, `src/account/browser.tsx` | Effect Atom workflows and React forms.                                      |
+
+This starter binds to loopback and uses development cookies. Before deployment,
+configure your HTTPS origin, Secure cookies and passkey relying party, replace local
+email delivery, and protect the persistent database and keys. The
+[HTTP guide](./http-and-client#configure-the-server), [passkey guide](./passkeys#install-the-server-verifier),
+and [persistence reference](../reference/adapters) explain those boundaries.
+
+## Add auth to an existing app
 
 Define a shared contract, choose your server methods, and call them from your
 application. The contract also supplies your HTTP endpoints and browser client.
@@ -15,7 +72,7 @@ services. [Choose how much you own](./storage) before connecting persistence.
 bun add @yielded/auth@beta effect
 ```
 
-Yielded Auth is currently in beta. Install additional peer dependencies only for
+Install additional peer dependencies only for
 the [adapters](../reference/adapters) you use.
 
 ## Define the shared contract

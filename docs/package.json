@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "dev": "vp run yielded-auth-monorepo#starter:build && astro dev",
+    "build": "vp run yielded-auth-monorepo#starter:build && astro build",
     "preview": "astro preview"
   },
   "dependencies": {

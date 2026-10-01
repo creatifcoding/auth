@@ -13,9 +13,9 @@ import {
   Schema,
 } from "effect";
 
-class AppData extends Context.Service<AppData, string>()("customers/AppData") {}
+export class AppData extends Context.Service<AppData, string>()("customers/AppData") {}
 
-const DataLive = Layer.effect(
+export const DataLive = Layer.effect(
   AppData,
   Effect.gen(function* () {
     const directory = yield* Config.String("AUTH_DATA_DIR").pipe(
