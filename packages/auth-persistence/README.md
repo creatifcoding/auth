@@ -7,11 +7,6 @@ Drizzle integrations live in `@yielded/auth-persistence-drizzle`; this package h
 no Drizzle dependency or exports. Core workflows and replaceable service contracts
 remain in `@yielded/auth`.
 
-`OAuthAppPersistence` separately supplies the single-table store for
-[`OAuthApp`](../../docs/src/content/docs/guide/oauth.md#sign-in-and-connect-provider-access).
-It has no dependency on the broader auth schema or a session repository. Apply its
-exported migration with the application's runner and provide an Effect SQL client.
-
 `OAuthServerPersistence` supplies independent, single-table consent and grant
 storage for [MCP authorization](../../docs/src/content/docs/guide/oauth.md#authorize-mcp-clients).
 Its conditional writes and monotonic revocation require standalone commits.

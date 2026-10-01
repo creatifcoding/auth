@@ -21,6 +21,20 @@ fixtures that exercise private implementation helpers live under the library’s
 GitHub with shared sessions, HTTP, and Atom workflows. Google is optional.
 See the [OAuth guide](../../docs/src/content/docs/guide/oauth.md) for setup.
 
+`example:github`, `example:strava`, and `example:strava-mcp` build their Atom browser
+client and run a single-owner OAuth application. `oauth-application.ts` composes
+`Auth.make` with `OAuth.make({ access: profile })`; `oauth-storage.ts` owns the
+explicit libSQL schema and allowlisted account provisioning. Provider grants use
+the same connected storage and refresh engine as authenticated account connections.
+Open `/login` and configure the provider callback at `/auth/{provider}/callback`.
+See [OAuth setup](../../docs/src/content/docs/reference/oauth.md#runnable-examples)
+for environment variables and the development-state reset.
+
+The examples allow sign-in and current-owner grant metadata/use. Management requires
+an application-owned exact-action verifier and is denied until one is installed.
+Run cohort revocation maintenance through an application-owned scheduler if enabling
+management for a provider that supports remote revocation.
+
 For a later clean-start cutover, reset old accounts, auth/session/proof state,
 per-account trips/conversations/settings/encrypted API keys, and browser caches.
 Retire associated generated sites and build/address records. Allocate new subjects

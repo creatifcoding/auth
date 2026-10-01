@@ -1,5 +1,4 @@
 export { AuthPersistence } from "./internal/sql-persistence";
-export { OAuthAppPersistence } from "./internal/oauth-app";
 export { OAuthServerPersistence } from "./internal/oauth-server";
 export { PersistenceConfigurationError } from "./internal/configuration";
 export { PersistenceMappingError } from "./internal/mapping-error";

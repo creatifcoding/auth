@@ -367,6 +367,13 @@ for the table definitions and mappings.
 provider grants, refresh attempts, and revocation. Keep the durable grant identity
 and refresh claim so another worker cannot repeat an uncertain refresh.
 
+For `OAuth.make({ access: profile })`, use those same connected services alongside
+`makeOAuthSignInServices`. Map `signIn.credential` and `signIn.flow` to the shared
+sign-in tables and provide `flow.encodeSignIn`; the connected flow’s subject column
+must allow NULL until identity resolution. The
+[OAuth storage example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/oauth-storage.ts)
+shows the application-owned schema and authority.
+
 <details>
 <summary>D1 and Durable Object transaction boundaries</summary>
 

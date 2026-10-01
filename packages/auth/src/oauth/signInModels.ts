@@ -3,7 +3,8 @@ import { Schema } from "effect";
 import { RequestBindingCredential, RequestBindingFlowId } from "../operations/requestBinding";
 import { SubjectId, TokenDigest } from "../Schema";
 import { SecurityRevision } from "../sessions/models";
-import { OAuthProviderKey } from "./schema";
+import { OAuthConnectedProfile } from "./permissionProfile";
+import { OAuthGeneration, OAuthProviderKey } from "./schema";
 
 const label = (maximum: number) =>
   Schema.String.check(Schema.isPattern(new RegExp(`^[A-Za-z0-9._:/-]{1,${maximum}}$`)));
@@ -16,9 +17,7 @@ export const OAuthClaimId = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]
   Schema.brand("effect-auth/OAuthClaimId"),
 );
 
-export const OAuthGeneration = Schema.Int.check(
-  Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-);
+export { OAuthGeneration } from "./schema";
 
 export const OAuthInstant = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
@@ -64,6 +63,8 @@ export const OAuthSignInTransactionContext = Schema.Struct({
   flowId: RequestBindingFlowId,
   commandId: OAuthCommandId,
   ...OAuthProtocolConfiguration.fields,
+  /** Captured permission/retention policy; part of the encrypted transaction context. */
+  access: Schema.optionalKey(OAuthConnectedProfile),
   returnTarget: OAuthReturnTarget,
   stateDigest: TokenDigest.check(Schema.isMaxLength(43), Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
   requestBindingVerifier: TokenDigest.check(

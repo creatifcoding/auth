@@ -13,10 +13,10 @@ Use generated auth tables and migrations, bring your own schema, or replace
 individual services. [Choose how much you own](docs/src/content/docs/guide/storage.mdx); four [runnable account apps](docs/src/content/docs/guide/examples.md#run-an-account-app)
 show how much control you can take.
 
-For an app using GitHub, [managed OAuth](docs/src/content/docs/guide/oauth.md#sign-in-and-connect-provider-access)
-handles sign-in, encrypted provider tokens, refresh, and stateless session cookies
-without a session repository. Supply your provider configuration, account policy,
-keys, and SQL connection; see the [runnable example](examples/auth/src/github-app.ts).
+For an app using GitHub, [`OAuth.make({ access })`](docs/src/content/docs/guide/oauth.md#sign-in-and-retain-provider-access)
+signs users in and retains encrypted provider grants with refresh, through the same
+sessions as your other methods. Supply your provider configuration, account policy,
+keys, and storage; see the [runnable example](examples/auth/src/github-app.ts).
 
 Install the beta release with Effect:
 

@@ -1,126 +1,103 @@
 ---
 title: OAuth
-description: Understand OAuth sign-in, application sessions, and provider API access.
+description: Sign in with a provider and optionally retain access to its API.
 ---
 
-OAuth lets a user authorize your app through a provider such as GitHub or Google.
-Two things can come from that authorization: an **app session** identifies the
-signed-in user; a **provider grant** lets your app call the provider's API.
+An **app session** identifies your signed-in user. A **provider grant** lets your
+server call a provider's API. Configure both through an OAuth strategy in `Auth.make`.
+Your app owns accounts, claims, and permission policy.
 
-| Your app needs                                                | Start with                              |
-| ------------------------------------------------------------- | --------------------------------------- |
-| Provider sign-in, retained API access, and stateless sessions | `OAuthApp`                              |
-| OAuth alongside passwords, email, or other sign-in methods    | `OAuth` inside `Auth.make`              |
-| Let an MCP client access your application                     | `OAuthServer` with Effect's `McpServer` |
+| Your app needs                                             | Strategy                                                       |
+| ---------------------------------------------------------- | -------------------------------------------------------------- |
+| Sign in with an existing account link                      | `OAuth.make()`                                                 |
+| Sign in and retain provider API access in the same consent | `OAuth.make({ access: profile })`                              |
+| Create an account after provider verification              | `OAuth.makeRegistration({ registration, registrationPolicy })` |
+| Link another login method                                  | `OAuth.makeAccounts({ policy })`                               |
+| Connect an API to an already authenticated account         | `OAuth.makeConnected({ policy })`                              |
 
-## Sign in and connect provider access
+## Sign in and retain provider access
 
-`OAuthApp` manages the redirect, callback, session cookie, and provider tokens.
-Your account policy decides who may sign in and which claims belong in the session.
+```ts title="auth.ts"
+import { Auth, Sessions } from "@yielded/auth";
+import { OAuth } from "@yielded/auth/strategies";
+import * as GitHub from "@yielded/auth-openid-client/GitHub";
+import { AuthApi } from "./auth-contract";
+import { clientId } from "./config";
+
+const profile = GitHub.accessProfile({ clientId, scopes: ["read:user"] });
+
+export const AppAuth = Auth.make(AuthApi, {
+  sessions: Sessions.stateful(),
+  strategies: { social: OAuth.make({ access: profile }) },
+  defaultStrategy: "social",
+});
+```
+
+Omit `access` to discard provider tokens after verifying identity. With `access`,
+the strategy encrypts and saves the grant before completing authentication through
+the same session authority used by passwords, passkeys, and email. Choose stateful,
+stateless, or state-assisted sessions independently.
 
 ```mermaid
 sequenceDiagram
-  accTitle: OAuth sign-in
-  accDescr: Provider consent reaches the OAuthApp callback and your account policy. OAuthApp stores an encrypted grant in SQL and returns a signed session to the browser.
+  accTitle: Sign-in with retained API access
+  accDescr: One provider code exchange resolves an existing account, saves an encrypted provider grant, and completes shared authentication.
   participant Browser
   participant Provider
-  participant App as OAuthApp
-  participant Policy as Account policy
-  participant SQL
+  participant OAuth as OAuth strategy
+  participant Storage as App storage
+  participant Auth as Shared authentication
   Browser->>Provider: Sign in and consent
-  Provider->>App: Callback
-  App->>Policy: Resolve account
-  Policy-->>App: Subject and claims
-  App->>SQL: Encrypted grant
-  App-->>Browser: Signed session
+  Provider->>OAuth: Callback
+  OAuth->>Provider: Exchange code once
+  OAuth->>Storage: Resolve existing identity and retain encrypted grant
+  OAuth->>Auth: Complete authentication
+  Auth-->>Browser: Session or additional authentication required
 ```
 
-Your app or background jobs use the retained grant to call the provider API:
+Declare the [OAuth actions](../reference/oauth#shared-auth-setup), then configure
+`Http.make` with `GitHub.provider({ clientId, clientSecret, access: [profile] })`.
+The HTTP adapter owns callback routing and private cookie delivery. Supply shared
+sign-in and connected persistence, account claims, and separate transaction/token
+keyrings through Layers. The [runnable composition](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/oauth-application.ts)
+shows the full setup; [GitHub](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/github-app.ts)
+and [Strava](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/strava-app.ts)
+provide concrete configuration and a single-account allowlist.
 
-```mermaid
-flowchart LR
-  accTitle: Provider API access
-  accDescr: Your app or jobs call OAuthApp, which reads the provider grant from SQL and calls the provider API.
-  Jobs[Your app / jobs] --> App[OAuthApp]
-  App --> API[Provider API]
-  App <-->|Provider grant| SQL[(SQL)]
-```
-
-Sessions verify without a database lookup. Pending flows and provider grants live
-in one auth table; provider tokens refresh when your app needs them.
-
-```ts title="auth.ts"
-import { OAuthAppPersistence } from "@yielded/auth-persistence";
-import { OAuthApp, WebCrypto } from "@yielded/auth";
-import * as GitHub from "@yielded/auth-openid-client/GitHub";
-import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
-import { Layer, Schema } from "effect";
-import { config, keys, resolveAccount, DatabaseLive } from "./app-services";
-
-export const app = OAuthApp.make("github", {
-  claims: Schema.Struct({ role: Schema.Literals(["owner", "member"]) }),
-  returnTargets: ["/account"],
-});
-
-const live = app
-  .layer({
-    origin: config.origin,
-    sessionKeys: keys.session,
-    provider: GitHub.appProvider({
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
-      scopes: ["read:user"],
-    }),
-  })
-  .pipe(
-    Layer.provide(OAuthCrypto.transactionLayer(keys.transaction)),
-    Layer.provide(OAuthCrypto.connectedTokenLayer(keys.token)),
-    Layer.provide(WebCrypto.layerWebCrypto),
-    Layer.provide(Layer.succeed(app.Accounts, { resolve: resolveAccount })),
-    Layer.provide(OAuthAppPersistence.layer),
-    Layer.provide(DatabaseLive),
-  );
-
-export const AuthRoutes = app.routes.pipe(Layer.provide(live));
-```
-
-`app-services` is your application code: `resolveAccount` maps a verified provider
-identity to `{ subjectId, claims }`; `keys` supplies distinct `session`,
-`transaction`, and `token` keyrings; `DatabaseLive` supplies a migrated SQL
-connection. The
-[runnable GitHub example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/github-app.ts)
-shows that setup, including an account allowlist.
-
-Install `@yielded/auth-openid-client`, `@yielded/auth-crypto`, and `openid-client`.
-Mount `AuthRoutes` and register `/auth/github/callback` at your app's
-origin in your GitHub OAuth App. Link to `/auth/github/sign-in`. Successful sign-in redirects to `/account`.
-See the [setup reference](../reference/oauth#managed-app-setup) for keys, storage,
-and callback tracing.
+Retained sign-in currently requires an existing local account link. For new users,
+use registration first, then connect provider access after authentication.
 
 ### Use the session and provider access
 
-Inside a server Effect, verify the session cookie and use its connection:
+Under the HTTP middleware, use the regular Auth API:
 
-<!-- prettier-ignore -->
 ```ts
-const sessions = yield* app.Sessions;
-const session = yield* sessions.verify(credential); // Redacted cookie value
-const oauth = yield* app.Service;
-yield* oauth.withAccessToken(session, readProfile); // receives a Redacted token
+const auth = yield * AppAuth;
+const session = yield * auth.requireSession();
+const connections = yield * auth.listAccountConnections({ limit: 20 });
 ```
 
-For background jobs, save `{ subjectId, grantId }` from a verified session in your
-application's storage. The library refreshes tokens before calling your function
-and never retries its work.
+The server-side connected service handles refresh and token use:
 
-These sessions have a fixed expiry. Sign-out clears the cookie; it does not revoke
-an already issued session. Disconnect stops local provider access. See
-[session and connection behavior](../reference/oauth#sessions-and-connections).
+```ts
+const access = yield * AppAuth.strategies.social.access.ConnectedAccess;
+yield * access.withAccessToken(invocation, { grantId, profileKey: profile.key }, readProfile);
+```
+
+Provide `AppAuth.strategies.social.access.accessLayer` with the same connected
+services. `invocation` must come from a verified session or a trusted job authority;
+the service rechecks the subject, grant, and application permission. `readProfile`
+receives a redacted token and is never retried by the library. Refresh does not
+upgrade session assurance. Provider tokens never enter browser results or sessions.
+
+`auth.disconnectAccount` uses the same connected-grant authority. Provider revocation
+depends on the profile; cohort revocation needs the shared maintenance worker.
+See [retained access](../reference/oauth#retained-access) for dependencies and recovery.
 
 ## Authorize MCP clients
 
 `OAuthServer` lets a signed-in user grant a registered MCP client access to your
-application. `OAuthApp` can supply the login session; it continues to own any
+application. `Auth` supplies the application session; the OAuth strategy owns retained
 upstream provider credentials. The two grants stay separate:
 
 ```text
@@ -130,7 +107,7 @@ Browser → Application login → OAuthServer consent → MCP client
                                                       ↓ Authenticated subject
                                              Your handler and policy
                                                       ↓ Optional provider access
-                                             OAuthApp → Provider API
+                                             OAuth strategy → Provider API
 ```
 
 Define supported scopes, supply an identity service that verifies your existing
@@ -163,7 +140,7 @@ The value contains the authenticated `subjectId`, `clientId`, resource, scopes,
 and grant ID. Your application still decides which accounts and operations that
 subject may access. Your application owns the subject-to-provider connection
 mapping. Resolve that connection from trusted storage, then call `withAccessToken`
-on the service obtained from `app.Service`; MCP clients never receive provider tokens.
+on the strategy’s `access.ConnectedAccess` service; MCP clients never receive provider tokens.
 
 This initial server supports explicitly registered public clients. Clients must
 support supplying their registered client ID; there is no dynamic registration
@@ -171,48 +148,15 @@ or Client ID Metadata Document endpoint. See the
 [authorization server reference](../reference/oauth#authorization-server) for
 the setup and token lifecycle.
 
-## OAuth in a shared auth service
-
-Add an OAuth strategy when users share sessions across several sign-in methods:
-
-```ts title="auth.ts"
-import { Auth, OAuth, Sessions } from "@yielded/auth";
-import { AuthApi } from "./auth-contract";
-
-export const AppAuth = Auth.make(AuthApi, {
-  sessions: Sessions.stateful(),
-  strategies: { social: OAuth.make() },
-  defaultStrategy: "social",
-});
-```
-
-Declare the [OAuth actions and services](../reference/oauth#shared-auth-setup),
-then configure [GitHub](./github) or [Google](./google). `Http.layer` mounts their
-callbacks and delivers session cookies. `OAuth.make` uses existing account links;
-`OAuth.makeRegistration` adds account creation.
-
-### Email and social login
-
-The [combined login example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/login-server.ts)
-shares sessions across email, GitHub, and Google. Your app collects any signup
-data needed when OAuth returns `RegistrationRequired`.
-
 ## Other providers
 
-For shared auth, `OpenIdClient.provider` supports OIDC discovery and plain OAuth
-endpoints. For a managed app, implement `OAuthApp.Provider` to return verified
-identity and provider tokens. See [provider configuration](../reference/oauth#providers).
+`OpenIdClient.provider` supports OIDC discovery and plain OAuth endpoints.
+Its optional `access` settings declare permission profiles and the provider's
+refresh/resource/revocation contract. A custom `ProviderDefinition.configure`
+returns the sign-in protocol and optionally a `connected` protocol. Configuration,
+secrets, and required services remain in the provider Layer.
+See [provider configuration](../reference/oauth#providers).
 
-## Accounts and API access
-
-| Task in shared auth        | API                      |
-| -------------------------- | ------------------------ |
-| Sign in                    | `OAuth.make`             |
-| Create an account          | `OAuth.makeRegistration` |
-| Link a login method        | `OAuth.makeAccounts`     |
-| Retain provider API access | `OAuth.makeConnected`    |
-
-Your app owns account identity and permissions. Provider profiles supply display
-metadata; an email match is never permission to link accounts. The
-[GitHub API example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/github-oauth-app.ts)
-shows connected grants with shared auth.
+The [combined login example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/login-server.ts)
+shares sessions across email, GitHub, and Google. Provider display metadata never
+authorizes linking accounts by matching email addresses.

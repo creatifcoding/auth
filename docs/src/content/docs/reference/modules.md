@@ -126,9 +126,8 @@ Storage implements the strategy ports in `Password`, `Email`, `Proofs`, and
 Application account services provide identity authority and session claims.
 `SmsDelivery` and `Proofs.EmailProofDelivery` own private delivery.
 
-`OAuthApp` offers a managed provider flow with encrypted connected tokens and
-stateless sessions. Its persistence and expiry-based invalidation contract differs
-from the general strategy composition; see [managed OAuth](../guide/oauth#sign-in-and-connect-provider-access).
+`OAuth.make({ access: profile })` combines provider sign-in and retained API access
+with shared Auth sessions. `OAuth.make()` discards provider tokens after sign-in.
 
 API comments and signatures live beside the
 [public source modules](https://github.com/yielded-dev/auth/tree/main/packages/auth/src).

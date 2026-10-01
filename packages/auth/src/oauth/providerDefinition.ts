@@ -1,5 +1,6 @@
 import type { Effect } from "effect";
 
+import type { OAuthConnectedProtocol } from "./OAuthConnectedProtocol";
 import type { OAuthProtocol } from "./OAuthProtocol";
 import type { OAuthProviderKey } from "./schema";
 import type { OAuthCallbackId, OAuthRedirectUri } from "./signInModels";
@@ -14,5 +15,9 @@ export interface ProviderDefinition<E = never, R = never> {
       readonly callbackId: typeof OAuthCallbackId.Type;
       readonly redirectUri: typeof OAuthRedirectUri.Type;
     }>;
-  }) => Effect.Effect<OAuthProtocol["Service"], E, R>;
+  }) => Effect.Effect<
+    OAuthProtocol["Service"] & { readonly connected?: OAuthConnectedProtocol["Service"] },
+    E,
+    R
+  >;
 }

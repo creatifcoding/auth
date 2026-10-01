@@ -173,13 +173,25 @@ const policyData = (input: OAuthConnectedPolicyInput<any>): OAuthConnectedPolicy
     ...input,
     subjectId: nativeCopy(input.subjectId),
     revision: snapshotOAuthSync(M.OAuthConnectedUseAuthorization.fields.revision, input.revision),
-    authorization:
-      input.kind === "action"
-        ? snapshotOAuthSync(M.OAuthConnectedActionAuthorization, input.authorization)
-        : snapshotOAuthSync(M.OAuthConnectedUseAuthorization, input.authorization),
-    ...(input.kind === "action"
-      ? { configuration: snapshotOAuthSync(M.OAuthConnectedConfiguration, input.configuration) }
-      : {}),
+    ...(input.kind === "sign-in"
+      ? {
+          credential: snapshotOAuthSync(M.OAuthCredentialSnapshot, input.credential),
+          configuration: snapshotOAuthSync(M.OAuthConnectedConfiguration, input.configuration),
+        }
+      : {
+          authorization:
+            input.kind === "action"
+              ? snapshotOAuthSync(M.OAuthConnectedActionAuthorization, input.authorization)
+              : snapshotOAuthSync(M.OAuthConnectedUseAuthorization, input.authorization),
+          ...(input.kind === "action"
+            ? {
+                configuration: snapshotOAuthSync(
+                  M.OAuthConnectedConfiguration,
+                  input.configuration,
+                ),
+              }
+            : {}),
+        }),
     ...(input.grant === undefined
       ? {}
       : { grant: snapshotOAuthSync(M.OAuthConnectedTokenContext, input.grant) }),

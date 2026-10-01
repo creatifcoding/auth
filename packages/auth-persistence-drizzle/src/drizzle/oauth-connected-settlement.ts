@@ -7,7 +7,7 @@ import * as C from "./oauth-connected-custody";
 import * as F from "./oauth-connected-flow";
 import * as S from "./oauth-connected-state";
 import { both, col, equal, CurrentOAuthTransaction } from "./oauth-owner";
-import { invariant, sameIdentity } from "./oauth-state";
+import { invariant, sameIdentity, oauthIdentityKey } from "./oauth-state";
 
 export const validMetadata = (context: M.OAuthConnectedTokenContext, now: number) => {
   const m = context.metadata,
@@ -34,6 +34,67 @@ export const validMetadata = (context: M.OAuthConnectedTokenContext, now: number
           m.refreshUseUntilMillis <= m.refreshExpiresAtMillis)))
   );
 };
+
+/** The only writer that activates or replaces a confirmed connected grant. */
+export const activateGrant = Effect.fn("oauthConnected.activateGrant")(function* (
+  mapping: S.Mapping,
+  grant: M.OAuthConnectedStoredGrant,
+  native: unknown,
+  now: number,
+  replacing: boolean,
+) {
+  const owner = yield* CurrentOAuthTransaction;
+  const token = grant.context;
+  const g = mapping.grant;
+  const identityKey = oauthIdentityKey(token.identity);
+  const clientKey = S.clientKey(token.configuration);
+  const cohortKey = S.cohortKey(clientKey, identityKey);
+
+  const values = {
+    ...g.encodeInsert({
+      grant: snapshotOAuthSync(M.OAuthConnectedStoredGrant, grant),
+      subjectId: S.nativeCopy(native),
+    }),
+    [g.moduleId]: token.moduleId,
+    [g.grantId]: token.grantId,
+    [g.subjectId]: native,
+    [g.identityKey]: identityKey,
+    [g.activeIdentityKey]: identityKey,
+    [g.clientKey]: clientKey,
+    [g.cohortKey]: cohortKey,
+    [g.profileKey]: token.configuration.profile.key,
+    [g.grantVersion]: token.grantVersion,
+    [g.tokenVersion]: token.tokenVersion,
+    [g.cohortGeneration]: token.cohortGeneration,
+    [g.state]: "Active",
+    [g.version]: owner.marker,
+    [g.context]: S.tokenContextStorage.encode(token),
+    [g.sealed]: S.sealedStorage.encode(grant.sealed),
+    [g.summary]: S.summaryStorage.encode(C.summary(token)),
+    [g.revocationJobId]: null,
+    [g.refreshWork]: "None",
+    [g.refreshClaim]: null,
+    [g.refreshClaimExpiresAt]: null,
+    [g.retentionUntil]: mapping.clock.encodeInstant(
+      S.retainedUntil(
+        mapping,
+        Math.max(now, token.metadata.useUntilMillis, token.metadata.refreshUseUntilMillis ?? 0),
+      ),
+    ),
+  };
+
+  if (!replacing) {
+    yield* owner.insert(g.table, values, {
+      [g.moduleId]: token.moduleId,
+      [g.grantId]: token.grantId,
+    });
+  } else
+    yield* owner.update(
+      g.table,
+      { [g.moduleId]: token.moduleId, [g.grantId]: token.grantId },
+      values,
+    );
+});
 
 export const settle = Effect.fn("oauthConnected.settle")(function* (
   mapping: S.Mapping,
@@ -123,7 +184,8 @@ export const settle = Effect.fn("oauthConnected.settle")(function* (
 
   if (claimed === undefined) return { _tag: "Rejected" } as const;
   invariant(
-    validMetadata(token, claimed.now) &&
+    token.exchangeOrder === input.claim.order &&
+      validMetadata(token, claimed.now) &&
       token.metadata.obtainedAtMillis >= input.claim.claimedAtMillis,
   );
   const reconnect = c.reconnect;
@@ -177,46 +239,7 @@ export const settle = Effect.fn("oauthConnected.settle")(function* (
   if (tuple.row[t.state] === "Unowned")
     yield* F.acquireTuple(mapping.ownership, token.identity, tuple.key, S.nativeCopy(native));
 
-  const values = {
-    ...g.encodeInsert({
-      grant: snapshotOAuthSync(M.OAuthConnectedStoredGrant, grant),
-      subjectId: S.nativeCopy(native),
-    }),
-    [g.moduleId]: c.moduleId,
-    [g.grantId]: c.grantId,
-    [g.subjectId]: native,
-    [g.identityKey]: tuple.key,
-    [g.activeIdentityKey]: tuple.key,
-    [g.clientKey]: cl.id,
-    [g.cohortKey]: co.id,
-    [g.profileKey]: c.profile.key,
-    [g.grantVersion]: token.grantVersion,
-    [g.tokenVersion]: token.tokenVersion,
-    [g.cohortGeneration]: token.cohortGeneration,
-    [g.state]: "Active",
-    [g.version]: owner.marker,
-    [g.context]: S.tokenContextStorage.encode(token),
-    [g.sealed]: S.sealedStorage.encode(grant.sealed),
-    [g.summary]: S.summaryStorage.encode(C.summary(token)),
-    [g.revocationJobId]: null,
-    [g.refreshWork]: "None",
-    [g.refreshClaim]: null,
-    [g.refreshClaimExpiresAt]: null,
-    [g.retentionUntil]: mapping.clock.encodeInstant(
-      S.retainedUntil(
-        mapping,
-        Math.max(
-          claimed.now,
-          token.metadata.useUntilMillis,
-          token.metadata.refreshUseUntilMillis ?? 0,
-        ),
-      ),
-    ),
-  };
-
-  if (original === undefined) {
-    yield* owner.insert(g.table, values, { [g.moduleId]: c.moduleId, [g.grantId]: c.grantId });
-  } else yield* owner.update(g.table, { [g.moduleId]: c.moduleId, [g.grantId]: c.grantId }, values);
+  yield* activateGrant(mapping, grant, native, claimed.now, original !== undefined);
   yield* F.terminal(mapping, input.claim, "Connected", "Resolved", { cohort: co.id });
   owner.postconditions.push(
     sql`${mapping.clock.engineNowMillis} >= ${claimed.now} and ${mapping.clock.engineNowMillis} < ${Math.min(input.claim.claimExpiresAtMillis, token.metadata.useUntilMillis)}`,

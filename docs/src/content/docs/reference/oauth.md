@@ -32,8 +32,8 @@ and the same subject that saw the page. Switching accounts invalidates previousl
 rendered consent forms. Pending authorization survives the login
 redirect in the cookie; do not put it into a login URL.
 
-With `OAuthApp`, put `oauth.paths.authorize` first in `returnTargets` and use the
-app's sign-in route as `loginPath`. Keep provider grants and MCP grants separate.
+Allow `oauth.paths.authorize` in `OAuthReturnTargets` and have your login page
+request that return target. Set `loginPath` to that page. Keep provider and MCP grants separate.
 
 | Route (ID `mcp`, resource `/mcp`)               | Behavior                                                                  |
 | ----------------------------------------------- | ------------------------------------------------------------------------- |
@@ -92,98 +92,72 @@ variables plus `MCP_SIGNING_KEY`, `MCP_CLIENT_ID`, and `MCP_REDIRECT_URI`. Confi
 that exact client ID and redirect URI in your MCP client. The example listens on
 port 3000 and owns `strava-mcp.sqlite`; use HTTPS outside loopback development.
 
-## Managed app setup
+## Retained access
 
-`OAuthApp.make(id, options)` defines an app's services and routes.
+`OAuth.make({ access: profile })` retains the provider grant during normal sign-in.
+Without `access`, verified sign-in discards all provider tokens. The profile selects
+provider/client registration, scopes/resources, token retention, refresh limits,
+and revocation support. It does not provision accounts or select a session mode.
 
-| Option                  | Default    | Purpose                                                 |
-| ----------------------- | ---------- | ------------------------------------------------------- |
-| `claims`                | Required   | Schema for public session claims                        |
-| `returnTargets`         | Required   | Allowed relative destinations; the first is the default |
-| `sessionLifetimeMillis` | 30 days    | Fixed session lifetime; 1 second–30 days                |
-| `flowLifetimeMillis`    | 5 minutes  | Time to complete authorization; 1 second–15 minutes     |
-| `exchangeTimeoutMillis` | 30 seconds | Dependency timeout; 1–120 seconds                       |
+| Service/configuration                                        | Purpose                                                              |
+| ------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `OAuthSignInPersistence`                                     | Existing account links and single-use sign-in flows                  |
+| `OAuthConnectedPersistence`                                  | Grant retention, refresh, disconnect, and durable operation ordering |
+| `OAuthConnectedProtocol`                                     | The single code exchange plus refresh and revocation                 |
+| `OAuthTransactionProtector`                                  | Encrypted sign-in transaction secrets                                |
+| `OAuthConnectedTransactionProtector`                         | Connected-operation transaction secrets                              |
+| `OAuthConnectedTokenProtector`                               | Encrypted provider tokens and cleanup jobs                           |
+| `OAuthConnectedUseAuthority`, `OAuthConnectedActionEvidence` | Current permission for token use and disconnect                      |
+| `ClaimsForOAuth`, shared session services                    | Application claims and authentication completion                     |
 
-Provide these to `app.layer`:
+The Drizzle connected mapping must include `signIn: { credential, flow }` pointing
+to the same tables as sign-in persistence, plus `flow.encodeSignIn`. Connected-flow
+`subjectId` must allow NULL while identity is unknown. Keep every required unique
+constraint and use the database engine's wall clock. See the
+[example storage](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/oauth-storage.ts).
 
-| Dependency                                                  | Application supplies                                                                         |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `origin`, `provider`                                        | Trusted app origin and configured provider                                                   |
-| `sessionKeys`                                               | Session signing keyring                                                                      |
-| `OAuthTransactionProtector`, `OAuthConnectedTokenProtector` | Explicit Layers from `@yielded/auth-crypto/OAuth`, each with a distinct keyring              |
-| `app.Accounts`                                              | `resolve(verified)` → Effect of `{ subjectId, claims }`                                      |
-| `OAuthApp.Persistence`                                      | Durable flow and encrypted grant storage                                                     |
-| Provider services                                           | GitHub: `openid-client`; Strava: an Effect `HttpClient` without retry or redirect middleware |
+The bound strategy exposes `access.ConnectedAccess`, `access.accessLayer`, and
+`access.maintenanceLayer`. Install the maintenance service and run its bounded
+passes through an application-owned scheduler when profiles support remote
+revocation. `Auth` exposes `listAccountConnections` and `disconnectAccount`; public
+completion results may include `{ connection: { grantId, profileKey } }`.
 
-`Accounts.resolve` checks invitations/status and owns provisioning. Reject with
-`OAuthRejected`; map infrastructure failures to `OAuthUnavailable`.
+Confirmed retention precedes session delivery. A lost commit response releases no
+session and never permits repeating the code. Refresh claims are single-use even
+after their deadline; unknown external outcomes remain unresolved. Retain the
+associated identities and receipts. Known losing exchanges use cohort cleanup jobs
+when supported, or discard their tokens locally when revocation is unsupported.
+Unresolved exchanges with unknown identity can block cohort cleanup for that client
+registration and require application-owned reconciliation; expiry alone is not proof
+that the provider operation did not happen.
 
-A keyring is `{ activeKeyId, keys: [{ id, material }] }`. Each `material` is a
-redacted base64url encoding of 32 random bytes. Keep old keys while sessions,
-pending flows, or retained grants still reference them.
+### Runnable examples
 
-`OAuthAppPersistence.layer` accepts an Effect SQL client for SQLite, D1, or
-PostgreSQL. Apply `OAuthAppPersistence.migration` with your migration runner;
-it creates the independent `yielded_oauth_app` table. The adapter rejects ambient
-transactions. A custom store implements the
-[Persistence contract](https://github.com/yielded-dev/auth/blob/main/packages/auth/src/oauth/app/models.ts).
+Run `vp run @yielded/example-auth#example:github` with `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET`, `GITHUB_USER_ID`, `SESSION_KEY`, `OAUTH_TRANSACTION_KEY`,
+and `OAUTH_TOKEN_KEY`. Open `/login`; the Atom client starts sign-in through the shared
+POST action. Register `http://localhost:3000/auth/github/callback` with the provider.
+`APP_ORIGIN` overrides the origin; HTTPS is required outside loopback development.
 
-Exclude callback queries, tokens, and cookies from telemetry. Effect's server
-tracer records query strings; the
-[GitHub example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/github-app.ts)
-uses `HttpMiddleware.TracerDisabledWhen` on the outer server Layer to omit callback
-spans. Application mutations need their own CSRF protection.
+A keyring is `{ activeKeyId, keys: [{ id, material }] }`, where each material is a
+redacted base64url encoding of 32 random bytes. Use distinct keys for sessions,
+transactions, and provider tokens. Retain old keys while records reference them.
+The examples disable request logs and traces that could include callback credentials.
 
-Run the GitHub example with `vp run @yielded/example-auth#example:github`. Set
-`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_USER_ID`, `SESSION_KEY`,
-`OAUTH_TRANSACTION_KEY`, and `OAUTH_TOKEN_KEY`. It listens at `http://localhost:3000`
-and owns `github-auth.sqlite`; `APP_ORIGIN` overrides the origin.
+The Strava task is `example:strava`; use `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`,
+and `STRAVA_ATHLETE_ID` instead, and register `/auth/strava/callback`. The examples own
+new `github-auth-v2.sqlite`, `strava-auth-v2.sqlite`, and `strava-mcp-auth-v2.sqlite`
+files. The allowlisted provider tuple is explicitly provisioned by the application;
+other identities cannot sign in. The example denies connected management actions
+until an application supplies independent exact-action evidence; ordinary session
+metadata is not treated as a fresh proof.
 
-## Managed routes
-
-Mount `app.routes`, or pass native requests to the provided service's `handle`.
-Paths below use the app ID `github`.
-
-| Request                                      | Behavior                                                                         |
-| -------------------------------------------- | -------------------------------------------------------------------------------- |
-| `GET /auth/github/sign-in?returnTo=/account` | Sets a browser binding and redirects to the provider; `returnTo` must be allowed |
-| `GET /auth/github/callback`                  | Completes authorization, sets the session cookie, and redirects                  |
-| `GET /auth/github/session`                   | Returns public session data; 401 for missing/invalid credentials                 |
-| `POST /auth/github/sign-out`                 | Requires the same Origin; clears the cookie and returns 204                      |
-
-Rejected flows return 400; unavailable dependencies return 503. Responses use
-`Cache-Control: no-store`. Cookies are HttpOnly, SameSite=Lax, and Secure on HTTPS.
-Session credentials never appear in redirect URLs.
-
-## Sessions and connections
-
-`app.sessionLayer({ origin, sessionKeys })` provides `app.Sessions` independently
-of storage and providers. `verify(redactedCredential)` returns the typed session
-or `SessionInvalid` / `OAuthUnavailable`.
-
-Sessions use Yielded's signed envelope, not JWT serialization. Claims are readable
-and fixed at sign-in. Sessions have no renewal or individual revocation: sign-out,
-role changes, invitation removal, and provider disconnect do not invalidate an
-issued credential. Choose a lifetime that fits your authorization policy.
-
-| Service method                                 | Behavior                                                                                     |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `withAccessToken({ subjectId, grantId }, use)` | Refreshes and saves provider tokens before calling `use(redactedToken)`; never retries `use` |
-| `disconnect({ subjectId, grantId })`           | Disables local provider access; does not revoke tokens at the provider                       |
-
-These methods are server capabilities. Obtain the connection reference from a
-verified session or trusted storage. Disconnect cannot cancel work that already
-obtained a token. An omitted refresh token preserves the existing token and its provider expiry.
-
-| Failure                                 | Recovery                                                  |
-| --------------------------------------- | --------------------------------------------------------- |
-| `OAuthConnectedBusy`                    | Another operation is in progress; retry acquisition later |
-| `OAuthConnectedReauthorizationRequired` | Start a fresh authorization                               |
-| Uncertain code exchange or refresh      | Start a fresh authorization; never repeat the exchange    |
-
-Refresh-claim expiry does not permit credential reuse. Retain grant identities,
-including disconnected grants; do not clear claims to recover access. Expired flow
-records may be pruned, and flow IDs must never be reused.
+The former OAuthApp cookie, flow, and grant format is removed. For development,
+clear its cookies and reset its flow/grant table before using shared Auth storage.
+Existing connected token envelopes also need resetting because they now bind the
+exchange order. Preserve account subject IDs, identity tuples, and any receipts or
+revocation work needed to reconcile real external credentials; the library performs
+no automatic deletion or migration.
 
 ## Shared auth setup
 
@@ -264,30 +238,24 @@ mapping. See the [registration example](https://github.com/yielded-dev/auth/blob
 
 ## Providers
 
-| Integration                  | Configure                                                                            |
-| ---------------------------- | ------------------------------------------------------------------------------------ |
-| Managed GitHub app           | `GitHub.appProvider({ clientId, clientSecret, scopes })`                             |
-| Managed Strava app           | `Strava.provider({ clientId, clientSecret, scopes })`                                |
-| Other managed provider       | Implement `OAuthApp.Provider.configure(callbackUrl)`                                 |
-| Shared auth with GitHub      | [`GitHub.provider`](../guide/github)                                                 |
-| Shared auth with OIDC        | [`OpenIdClient.provider`](../guide/google) with issuer and credentials               |
-| Shared auth with plain OAuth | `OpenIdClient.provider` with `protocol: "oauth"`, endpoints, and an identity decoder |
+| Integration             | Configure                                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| GitHub sign-in          | [`GitHub.provider`](../guide/github)                                                                              |
+| GitHub with API access  | `GitHub.accessProfile({ clientId, scopes })` and `GitHub.provider({ clientId, clientSecret, access: [profile] })` |
+| Strava sign-in / access | `Strava.provider({ clientId, clientSecret, access: profile })`; omit `access` for sign-in only                    |
+| OIDC                    | [`OpenIdClient.provider`](../guide/google) with issuer and credentials                                            |
+| Plain OAuth             | `OpenIdClient.provider` with endpoints and an identity decoder                                                    |
 
-A managed provider returns a permission profile and `OAuthConnectedProtocol` service.
-It owns response verification, accepted permissions, identity checks, and token exchange.
-Keep required services and configuration failures in the configure Effect's types.
+`GitHub.accessProfile` defaults to `read:user`, rotating refresh tokens, cohort
+revocation, and thirty days of local refresh retention. `Strava.accessProfile`
+requires scopes and declares unsupported remote revocation. Its adapter rechecks
+athlete identity on refresh. Custom Effect HTTP clients must reject redirects and
+must not retry token exchanges.
 
-`GitHub.appProvider` uses a GitHub.com OAuth App, defaults to `read:user`, and requests
-`offline_access` for rotating tokens. Local refresh retention defaults to thirty days;
-set `maximumRefreshLifetimeMillis` to shorten it. Install `openid-client`.
-See [GitHub's OAuth flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps).
-
-The Strava adapter uses confidential-client authorization without PKCE. It checks
-accepted scopes from the token response or bound callback and rechecks athlete
-identity on refresh. Its refresh retention is thirty days from the last successful
-exchange; this is library policy, not provider expiry. Use one managed owner per
-client registration. Fetch redirects are disabled; custom HTTP clients must also reject redirects.
-See [Strava's contract](https://developers.strava.com/docs/authentication/).
+For generic providers, registration `access` supplies `clientRegistrationId`,
+`profiles`, `resourceIndicators`, `refreshExpiry`, `revocation`, and optional
+`refreshParameters`. Those are explicit provider contracts; no refresh or revocation
+behavior is inferred from the sign-in scopes.
 
 For plain OAuth with `OpenIdClient`, provide `authorizationEndpoint`, `tokenEndpoint`,
 `identitySource.url`, and `identitySource.decodeIdentity`. The decoder returns an
@@ -315,7 +283,9 @@ Load secrets with `Config.redacted`. Invalid settings fail Layer construction wi
 For shared auth, use `provider({ registrations: [...] })` to retain older entries
 with `issuance: "retired"` while flows or connected grants reference them. Assign
 a new `configurationGeneration` when settings change and keep one active generation.
-Retain old callback paths until their flows expire.
+Retain old callback paths until their flows expire. When moving a retained permission
+profile to another client registration, increase its profile `generation` too; client
+exchange counters are independent, and an older profile cannot replace a newer grant.
 
 Earlier GitHub adapters used the issuer `https://github.com`; the current identity
 uses `https://github.com/login/oauth`. Old bindings are not reused automatically.
@@ -333,7 +303,6 @@ untrusted input.
 | ----------------------------- | ---------------------------------------------- |
 | Returning shared-auth sign-in | `ClaimsForOAuth.resolve(credential, verified)` |
 | Shared-auth registration      | Server-side `OAuthRegistrationIntent.profile`  |
-| Managed app account policy    | `app.Accounts.resolve(verified)`               |
 
 `GitHubUserProfile` and `OidcUserProfile` schemas decode the adapters' provider data.
 Missing fields remain absent; GitHub nullable values remain null. GitHub's `/user`

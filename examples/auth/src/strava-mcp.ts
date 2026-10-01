@@ -1,31 +1,16 @@
-import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
+import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
-import {
-  OAuth,
-  OAuthApp,
-  OAuthServer,
-  Schema as AuthSchema,
-  Strava,
-  WebCrypto,
-} from "@yielded/auth";
-import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
-import { OAuthAppPersistence, OAuthServerPersistence } from "@yielded/auth-persistence";
+import { OAuthServerPersistence } from "@yielded/auth-persistence";
+import * as OAuthServer from "@yielded/auth/OAuthServer";
+import * as Strava from "@yielded/auth/Strava";
 import { Config, Effect, Layer, Redacted, Schema } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
-import {
-  FetchHttpClient,
-  HttpMiddleware,
-  HttpRouter,
-  HttpServerRequest,
-} from "effect/unstable/http";
+import { HttpMiddleware, HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 
-const oauth = OAuthServer.make("mcp", { scopes: ["athlete:read"] });
+import { makeExample } from "./oauth-application";
 
-const app = OAuthApp.make("strava", {
-  claims: Schema.Struct({}),
-  returnTargets: [oauth.paths.authorize],
-});
+const oauth = OAuthServer.make("mcp", { scopes: ["athlete:read"] });
 
 const toolkit = Toolkit.make(
   Tool.make("connected_athlete", {
@@ -42,7 +27,7 @@ const handlers = toolkit.toLayer({
     if (access === undefined) return yield* OAuthServer.InvalidToken.make({});
 
     // Applications resolve this subject's permitted connection from trusted storage
-    // before calling the app service's withAccessToken. Never take a grant ID from tool input.
+    // before using the connected access service. Never take a grant ID from tool input.
     return { subjectId: access.subjectId };
   }),
 });
@@ -73,51 +58,47 @@ const runtime = Layer.unwrap(
         const sql = yield* SqlClient.SqlClient;
 
         // The example owns this file. Production applications apply each migration once.
-        for (const migration of [OAuthAppPersistence.migration, OAuthServerPersistence.migration]) {
+        for (const migration of [OAuthServerPersistence.migration]) {
           yield* sql.unsafe(migration.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS"));
         }
       }),
     ).pipe(Layer.provideMerge(SqliteClient.layer({ filename: "strava-mcp.sqlite" })));
 
-    const login = app
-      .layer({
-        origin,
-        sessionKeys: keyring(sessionKey),
+    const profile = Strava.accessProfile({ clientId, scopes: ["activity:read_all"] });
 
-        provider: Strava.provider({ clientId, clientSecret, scopes: ["activity:read_all"] }),
-      })
-      .pipe(
-        Layer.provide(OAuthCrypto.transactionLayer(keyring(transactionKey))),
-        Layer.provide(OAuthCrypto.connectedTokenLayer(keyring(tokenKey))),
-        Layer.provide(WebCrypto.layerWebCrypto),
-        Layer.provide(
-          Layer.succeed(app.Accounts, {
-            resolve: ({ identity }) =>
-              identity.subject === athleteId
-                ? Effect.succeed({
-                    subjectId: AuthSchema.SubjectId.make(`strava:${athleteId}`),
-                    claims: {},
-                  })
-                : Effect.fail(OAuth.OAuthRejected.make({})),
-          }),
-        ),
-        Layer.provide(OAuthAppPersistence.layer.pipe(Layer.provide(database))),
-        Layer.provide(FetchHttpClient.layer),
-      );
+    const login = makeExample({
+      origin,
+      profile,
+      provider: Strava.provider({ clientId, clientSecret, access: profile }),
+      issuer: "https://www.strava.com",
+      externalSubject: athleteId,
+      subjectId: `strava:${athleteId}`,
+      filename: "strava-mcp-auth-v2.sqlite",
+      sessionKeys: keyring(sessionKey),
+      transactionKeys: keyring(transactionKey),
+      tokenKeys: keyring(tokenKey),
+      returnTarget: oauth.paths.authorize,
+    });
 
     const identity = Layer.effect(
       oauth.Identity,
       Effect.gen(function* () {
-        const sessions = yield* app.Sessions;
+        const auth = yield* login.AppAuth;
 
         return oauth.Identity.of({
           current: Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest;
-            const cookie = request.cookies[app.cookieName];
+
+            const cookie =
+              request.cookies[
+                new URL(origin).protocol === "https:"
+                  ? "__Host-effect-auth-session"
+                  : "effect-auth-session"
+              ];
 
             if (cookie === undefined) return undefined;
 
-            return yield* sessions.verify(Redacted.make(cookie)).pipe(
+            return yield* auth.verifySession(Redacted.make(cookie)).pipe(
               Effect.map((session) => session.subjectId),
               Effect.catchTag("SessionInvalid", () => Effect.succeed(undefined)),
               Effect.mapError(() => OAuthServer.Unavailable.make({})),
@@ -125,13 +106,13 @@ const runtime = Layer.unwrap(
           }),
         });
       }),
-    ).pipe(Layer.provide(login));
+    ).pipe(Layer.provide(login.live));
 
     const authorization = oauth
       .layer({
         origin,
         resource: `${origin}/mcp`,
-        loginPath: app.paths.signIn,
+        loginPath: "/login",
         keys: keyring(issuerKey),
         clients: [{ clientId: mcpClientId, name: "My MCP client", redirectUris: [mcpRedirectUri] }],
       })
@@ -154,7 +135,7 @@ const runtime = Layer.unwrap(
       Layer.provide(oauth.middleware(["athlete:read"]).layer),
     );
 
-    return Layer.mergeAll(mcp, oauth.routes, app.routes.pipe(Layer.provide(login))).pipe(
+    return Layer.mergeAll(mcp, oauth.routes, login.routes).pipe(
       Layer.provide(authorization),
       Layer.provide(
         HttpRouter.middleware(
@@ -173,6 +154,7 @@ const runtime = Layer.unwrap(
 HttpRouter.serve(runtime, { disableLogger: true }).pipe(
   Layer.provide(BunHttpServer.layer({ port: 3000 })),
   Layer.provide(Layer.succeed(HttpMiddleware.TracerDisabledWhen, () => true)),
+  Layer.provide(BunServices.layer),
   Layer.launch,
   BunRuntime.runMain,
 );

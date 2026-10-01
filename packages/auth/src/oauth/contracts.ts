@@ -2,6 +2,7 @@ import { Schema } from "effect";
 
 import { HookDenied } from "../hooks/models";
 import { action } from "../operations/actions";
+import { OAuthGrantId, OAuthPermissionProfileKey } from "./permissionProfile";
 import { OAuthRegistrationRequired } from "./registrationModels";
 import { OAuthMethodUnsupported, OAuthRejected, OAuthUnavailable } from "./signInErrors";
 import {
@@ -15,7 +16,13 @@ const Failure = Schema.Union([OAuthRejected, OAuthUnavailable, OAuthMethodUnsupp
 
 export const completionResult = <S extends Schema.Top>(schema: S) =>
   Schema.Union([
-    Schema.Struct({ completion: schema, returnTarget: OAuthReturnTarget }),
+    Schema.Struct({
+      completion: schema,
+      returnTarget: OAuthReturnTarget,
+      connection: Schema.optionalKey(
+        Schema.Struct({ grantId: OAuthGrantId, profileKey: OAuthPermissionProfileKey }),
+      ),
+    }),
     Schema.TaggedStruct("Cancelled", { returnTarget: OAuthReturnTarget }),
     OAuthRegistrationRequired,
   ]);
