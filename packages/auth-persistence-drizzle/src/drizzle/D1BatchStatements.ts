@@ -1,5 +1,5 @@
 import { Context, type Effect } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 /** Appends application statements to the current coordinator's single atomic batch. */
 export class D1BatchStatements extends Context.Service<

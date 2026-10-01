@@ -7,7 +7,7 @@ import {
 import { ProofUnavailable, ProofPersistence } from "@yielded/auth/Proofs";
 /* oxlint-disable no-explicit-any -- public driver entrypoints restore concrete Drizzle types. */
 import { Effect, Layer } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
+import type * as SqlError from "effect/sql/SqlError";
 
 import {
   makeSqlProofPersistence,

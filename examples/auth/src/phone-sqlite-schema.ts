@@ -10,7 +10,7 @@ import {
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { Effect, Schema } from "effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/sql/SqlClient";
 
 export const customer = sqliteTable("phone_customer", {
   customerNo: integer().primaryKey(),

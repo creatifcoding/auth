@@ -2,9 +2,9 @@ import { type CommitJournal, type PreparedCommit } from "@yielded/auth/Hooks";
 import { reportAuthFailure } from "@yielded/auth/Persistence";
 /* oxlint-disable no-explicit-any -- existing storage kernels erase foreign table shapes; domain errors remain typed. */
 import { Cause, Effect } from "effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type * as SqlClient from "effect/sql/SqlClient";
+import type { SqlError } from "effect/sql/SqlError";
+import type { Statement } from "effect/sql/Statement";
 
 import type {
   SqlExpression as SQL,

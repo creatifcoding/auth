@@ -12,7 +12,7 @@ import * as M from "@yielded/auth/Passkey";
 import { SubjectId } from "@yielded/auth/Schema";
 import { SessionInvalidationWindow } from "@yielded/auth/Sessions";
 import { Effect, Layer, Schema } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import type { PasskeyMappingSource } from "../models/passkey-model";
 import type {

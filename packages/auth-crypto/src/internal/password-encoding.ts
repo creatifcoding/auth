@@ -1,5 +1,6 @@
 import { type PasswordHashingConfig, PasswordVerifierInvalid } from "@yielded/auth/Password";
-import { Effect, Encoding, Result, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
+import { Base64 as Base64Encoding, Base64Url as Base64UrlEncoding } from "effect/encoding";
 
 const Decimal = Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,7}$/)).pipe(
   Schema.decodeTo(Schema.FiniteFromString),
@@ -57,7 +58,7 @@ export type ParsedPasswordHash =
       readonly expected: Uint8Array;
     };
 
-export const phcBase64 = (bytes: Uint8Array) => Encoding.encodeBase64(bytes).replace(/=+$/u, "");
+export const phcBase64 = (bytes: Uint8Array) => Base64Encoding.encode(bytes).replace(/=+$/u, "");
 
 const decodeBytes = Effect.fn("PasswordHash.decodeBytes")(function* (
   input: string,
@@ -67,15 +68,15 @@ const decodeBytes = Effect.fn("PasswordHash.decodeBytes")(function* (
 ) {
   const decoded = Result.getOrUndefined(
     url
-      ? Encoding.decodeBase64Url(input)
-      : Encoding.decodeBase64(input.padEnd(Math.ceil(input.length / 4) * 4, "=")),
+      ? Base64UrlEncoding.decode(input)
+      : Base64Encoding.decode(input.padEnd(Math.ceil(input.length / 4) * 4, "=")),
   );
 
   if (decoded === undefined) return yield* PasswordVerifierInvalid.make({ reason: "malformed" });
   if (
     decoded.length < minimum ||
     decoded.length > maximum ||
-    (url ? Encoding.encodeBase64Url(decoded) : phcBase64(decoded)) !== input
+    (url ? Base64UrlEncoding.encode(decoded) : phcBase64(decoded)) !== input
   )
     return yield* PasswordVerifierInvalid.make({ reason: "malformed" });
 

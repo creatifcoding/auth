@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from "effect";
-import { Cookies } from "effect/unstable/http";
+import { Cookies } from "effect/http";
 
 import { origin } from "../internal/origin";
 import type { CredentialSlot } from "../operations/credentials";
@@ -14,7 +14,7 @@ export class OperationHttpServerConfig extends Context.Service<
 
 const cookie = Schema.Struct({
   name: Schema.NonEmptyString,
-  path: Schema.String.check(Schema.isStartsWith("/")),
+  path: Schema.String.check(Schema.isStartingWith("/")),
   secure: Schema.Boolean,
   sameSite: Schema.Literals(["lax", "strict", "none"]),
   domain: Schema.optionalKey(Schema.String),

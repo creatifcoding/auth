@@ -1,8 +1,9 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Hooks, Operations, Schema as AuthSchema, Sessions, WebCrypto } from "@yielded/auth";
-import { DateTime, Effect, Encoding, Layer, Redacted, Schema } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
+import { HttpRouter } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 
 import {
   exampleAuthority,
@@ -17,7 +18,7 @@ const keyring = {
   keys: [
     {
       id: "current",
-      material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(42))),
+      material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(42))),
     },
   ],
 };

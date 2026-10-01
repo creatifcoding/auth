@@ -54,7 +54,7 @@ import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Cause, DateTime, Effect, Option, Predicate, Redacted, Schema, Context } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import { balancedD1And } from "./d1-generated-statement";
 import { CurrentD1PlanningDatabase, makeD1Owner } from "./d1-planning";
@@ -2624,9 +2624,7 @@ const executeStandalone = <A, E, R>(
   retries = 2,
 ): Effect.Effect<
   A,
-  | E
-  | import("@yielded/auth/Hooks").HookConfigurationError
-  | import("effect/unstable/sql/SqlError").SqlError,
+  E | import("@yielded/auth/Hooks").HookConfigurationError | import("effect/sql/SqlError").SqlError,
   Exclude<R, CurrentCommitJournal> | CurrentD1PlanningDatabase | LifecycleHooks
 > =>
   Effect.suspend(() => {

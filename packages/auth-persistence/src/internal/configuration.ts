@@ -25,7 +25,7 @@ import type {
   make as makeSessions,
 } from "@yielded/auth/Sessions";
 import { type Context, type Effect, type Layer, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 
 import type { PersistenceMappingError } from "./mapping-error";
 import type { StorageRole } from "./storage-tables";

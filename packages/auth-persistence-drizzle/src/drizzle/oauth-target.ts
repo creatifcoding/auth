@@ -28,7 +28,7 @@ import type { SecurityRevision } from "@yielded/auth/Sessions";
 /* oxlint-disable no-explicit-any -- concrete driver entry points restore table/database generics. */
 import { eq, sql } from "drizzle-orm";
 import { type Context, Effect, Layer } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import type { PersistenceMappingError } from "./model";
 import {

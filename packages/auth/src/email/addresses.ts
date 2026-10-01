@@ -1,4 +1,5 @@
-import { Context, Crypto, DateTime, Effect, Encoding, Layer, Schema } from "effect";
+import { Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope, type PreparedCommit } from "../hooks/commit";
 import { LifecycleHooks } from "../hooks/LifecycleHooks";
@@ -176,9 +177,7 @@ export const makeEmailAddresses = <
           const message = yield* Schema.encodeEffect(tuple)(parts);
 
           return TokenDigest.make(
-            Encoding.encodeBase64Url(
-              yield* crypto.digest("SHA-256", new TextEncoder().encode(message)),
-            ),
+            Base64Url.encode(yield* crypto.digest("SHA-256", new TextEncoder().encode(message))),
           );
         },
         Effect.mapError(() => EmailUnavailable.make({})),
@@ -448,7 +447,7 @@ export const makeEmailAddresses = <
               .pipe(Effect.mapError(() => EmailUnavailable.make({})));
 
             const event = lifecycleEvent({
-              id: LifecycleEventId.make(Encoding.encodeBase64Url(bytes)),
+              id: LifecycleEventId.make(Base64Url.encode(bytes)),
               occurredAtMillis: DateTime.toEpochMillis(yield* DateTime.now),
               snapshot,
             });

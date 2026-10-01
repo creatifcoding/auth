@@ -1,5 +1,5 @@
 import { Cause, Effect, Layer, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest } from "effect/http";
 
 import type { ProofDeliveryOutcome } from "../proofs/models";
 import { SmsDelivery, type SmsMessage } from "./SmsDelivery";

@@ -37,7 +37,7 @@ HTTP status metadata for expected failures.
 
 ```ts
 import { Schema } from "effect";
-import { HttpApiSchema } from "effect/unstable/httpapi";
+import { HttpApiSchema } from "effect/http-api";
 
 export const ProjectId = Schema.String.pipe(Schema.brand("ProjectId"));
 export type ProjectId = typeof ProjectId.Type;
@@ -69,7 +69,7 @@ DTO into shared models only when multiple contracts reuse the same concept.
 An endpoint declares the complete request and response contract inline.
 
 ```ts
-import { HttpApiEndpoint } from "effect/unstable/httpapi";
+import { HttpApiEndpoint } from "effect/http-api";
 import { ProjectDto, ProjectId, ProjectNotFound } from "../../models";
 import { RequestHeaders } from "../headers";
 
@@ -92,7 +92,7 @@ instance in a test so this contract stays explicit.
 ## Compose groups and the root
 
 ```ts
-import { HttpApi, HttpApiGroup } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiGroup } from "effect/http-api";
 import { GetProjectEndpoint, UpdateProjectEndpoint } from "./endpoints";
 
 export const ProjectsApi = HttpApiGroup.make("projects")

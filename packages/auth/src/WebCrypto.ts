@@ -1,4 +1,5 @@
-import { Context, Crypto, Effect, Encoding, Layer, PlatformError, Result } from "effect";
+import { Context, Crypto, Effect, Layer, PlatformError, Result } from "effect";
+import { Base64 } from "effect/encoding";
 
 /**
  * The platform's low-level WebCrypto interface, as a service so consumers
@@ -27,7 +28,7 @@ export class SubtleCrypto extends Context.Service<SubtleCrypto, globalThis.Subtl
 /** Decode a PEM body's base64 payload into its DER bytes. */
 export const decodePem = (pem: string): Uint8Array | undefined =>
   Result.getOrUndefined(
-    Encoding.decodeBase64(
+    Base64.decode(
       pem
         .replace(/\\r\\n|\\n/g, "\n")
         .replace(/-----[A-Z ]+-----/g, "")

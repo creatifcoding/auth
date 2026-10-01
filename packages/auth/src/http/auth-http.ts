@@ -10,13 +10,8 @@ import {
   Redacted,
   Scope,
 } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import {
-  HttpApi,
-  HttpApiBuilder,
-  type HttpApiGroup,
-  type HttpApiEndpoint,
-} from "effect/unstable/httpapi";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpApi, HttpApiBuilder, type HttpApiGroup, type HttpApiEndpoint } from "effect/http-api";
 
 import { AuthRequest } from "../auth/AuthRequest";
 import type { SessionApi, SessionApiError } from "../auth/session";

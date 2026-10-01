@@ -1,6 +1,6 @@
 import { SessionContract } from "@yielded/auth";
 import { Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 
 // Shared browser/server contracts contain no keys, storage or server implementation.
 export const Claims = Schema.Struct({ displayName: Schema.String });

@@ -1,4 +1,5 @@
-import { Context, Crypto, DateTime, Effect, Encoding, Layer, Schema } from "effect";
+import { Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { LifecycleHooks } from "../hooks/LifecycleHooks";
 import { LifecycleEventId, lifecycleEvent, lifecycleSnapshot } from "../hooks/models";
@@ -178,7 +179,7 @@ export const makePasskeyManagement = <
           value,
         ).pipe(
           Effect.flatMap((encoded) => crypto.digest("SHA-256", new TextEncoder().encode(encoded))),
-          Effect.map((bytes) => TokenDigest.make(Encoding.encodeBase64Url(bytes))),
+          Effect.map((bytes) => TokenDigest.make(Base64Url.encode(bytes))),
           Effect.mapError(() => PasskeyUnavailable.make({})),
         );
 

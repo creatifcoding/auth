@@ -16,7 +16,7 @@ import { ProofBinding } from "@yielded/auth/Proofs";
 import { sql, type Table } from "drizzle-orm";
 /* oxlint-disable no-explicit-any -- shared native implementation; driver entrypoints retain exact database and table types. */
 import { Context, Effect, Schema } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import { CurrentD1PlanningDatabase } from "./d1-planning";
 import { compileD1ProofCompletionPlan } from "./d1-proofs";

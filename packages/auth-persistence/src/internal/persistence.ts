@@ -8,7 +8,7 @@ import { PhoneAdmission, PhoneSignInTargets, PhoneOtpUnavailable } from "@yielde
 import { ProofPersistence, ProofUnavailable } from "@yielded/auth/Proofs";
 import { AuthenticationAuthority, SessionUnavailable } from "@yielded/auth/Sessions";
 import { Context, Effect, Layer, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 
 import {
   PersistenceConfigurationError,

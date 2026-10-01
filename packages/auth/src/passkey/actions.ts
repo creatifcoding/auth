@@ -1,15 +1,5 @@
-import {
-  Cause,
-  Context,
-  Crypto,
-  DateTime,
-  Effect,
-  Encoding,
-  Fiber,
-  Layer,
-  Redacted,
-  Schema,
-} from "effect";
+import { Cause, Context, Crypto, DateTime, Effect, Fiber, Layer, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope, type PreparedCommit } from "../hooks/commit";
 import { LifecycleHooks } from "../hooks/LifecycleHooks";
@@ -162,7 +152,7 @@ export const makePasskeyCeremony = <const Id extends string, const Purpose exten
 
     const random = () =>
       crypto.randomBytes(32).pipe(
-        Effect.map(Encoding.encodeBase64Url),
+        Effect.map(Base64Url.encode),
         Effect.mapError(() => PasskeyUnavailable.make({})),
       );
 

@@ -9,7 +9,7 @@ runtime and service APIs.
 
 ```ts
 import { Context, Effect, Layer, Schema, String } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export class ToolError extends Schema.TaggedError<ToolError>()("ToolError", {
   command: Schema.String,

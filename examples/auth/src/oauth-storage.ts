@@ -7,8 +7,9 @@ import * as Sessions from "@yielded/auth/Sessions";
 import { and, eq, sql } from "drizzle-orm";
 import * as Drizzle from "drizzle-orm/effect-libsql";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { Context, DateTime, Effect, Encoding, Layer, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
+import { SqlClient } from "effect/sql";
 
 export interface StorageOptions {
   readonly moduleId: string;
@@ -628,7 +629,7 @@ const identityKey = Effect.fn("OAuthStorage.identityKey")(function* (
       }),
   });
 
-  return "v1:" + Encoding.encodeBase64Url(new Uint8Array(digest));
+  return "v1:" + Base64Url.encode(new Uint8Array(digest));
 });
 
 /** App-owned allowlist and explicit Drizzle storage for OAuth sign-in and grants.

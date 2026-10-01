@@ -2,7 +2,7 @@ import type { LifecycleHooks, HookConfigurationError } from "@yielded/auth/Hooks
 import type { PasswordUnavailable, PasswordPreparedPersistence } from "@yielded/auth/Password";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect, Context } from "effect";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlError } from "effect/sql/SqlError";
 
 import type {
   PasswordPreparedPersistenceMapping,

@@ -9,7 +9,7 @@ import {
   Semaphore,
   Stream,
 } from "effect";
-import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 
 import type { AuthCredentialCommand, CredentialSlot } from "../operations/credentials";
 import { snapshotRevealCommands, type AuthRevealCommandCollector } from "../operations/reveals";

@@ -4,9 +4,9 @@ import { OAuthServerPersistence } from "@yielded/auth-persistence";
 import * as OAuthServer from "@yielded/auth/OAuthServer";
 import * as Strava from "@yielded/auth/Strava";
 import { Config, Effect, Layer, Redacted, Schema } from "effect";
-import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
-import { HttpMiddleware, HttpRouter, HttpServerRequest } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
+import { HttpMiddleware, HttpRouter, HttpServerRequest } from "effect/http";
+import { SqlClient } from "effect/sql";
 
 import { makeExample } from "./oauth-application";
 

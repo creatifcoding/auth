@@ -1,6 +1,6 @@
 import { Context, type Schema, type Types } from "effect";
-import type { HttpRouter } from "effect/unstable/http";
-import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
+import type { HttpRouter } from "effect/http";
+import { HttpApiMiddleware, HttpApiSecurity } from "effect/http-api";
 
 import type { AuthRequest } from "../auth/AuthRequest";
 import { HookDenied } from "../hooks/models";

@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema, Scope } from "effect";
-import { AsyncResult, Atom, AtomRegistry, Reactivity } from "effect/unstable/reactivity";
+import { AsyncResult, Atom, AtomRegistry, Reactivity } from "effect/reactivity";
 
 import {
   type ActionDecodeServices,

@@ -2,10 +2,10 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { TokenDigest } from "@yielded/auth/Schema";
-import { Encoding } from "effect";
+import { Base64Url } from "effect/encoding";
 const encoder = new TextEncoder();
 
-export const randomId = () => Encoding.encodeBase64Url(randomBytes(32));
+export const randomId = () => Base64Url.encode(randomBytes(32));
 
 export const digest = (value: string) =>
-  TokenDigest.make(Encoding.encodeBase64Url(sha256(encoder.encode(value))));
+  TokenDigest.make(Base64Url.encode(sha256(encoder.encode(value))));

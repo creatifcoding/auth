@@ -22,7 +22,7 @@ import {
   ProofUnavailable,
 } from "@yielded/auth/Proofs";
 import { Cause, Context, DateTime, Effect, Option, Schema } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
+import type * as SqlError from "effect/sql/SqlError";
 
 import { PersistenceMappingError } from "./mapping-error";
 import {

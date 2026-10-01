@@ -1,7 +1,7 @@
 import { Atom as AuthAtom, Client } from "@yielded/auth";
 import type { PasskeyBrowser } from "@yielded/auth-simplewebauthn/Browser";
 import type { Layer } from "effect";
-import type { KeyValueStore } from "effect/unstable/persistence";
+import type { KeyValueStore } from "effect/persistence";
 
 import { makeAccountClient } from "./client";
 import { AuthApi, emailProofPolicy } from "./contract";

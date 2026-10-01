@@ -146,7 +146,7 @@ export const TotpMutation = Schema.Struct({
     Schema.TaggedStruct("Confirm", {
       enrollmentId: TotpId,
       matchedStep: Schema.NullOr(Schema.Natural),
-      recoveryDigests: Schema.Array(TokenDigest).check(Schema.isLengthBetween(10, 10)),
+      recoveryDigests: Schema.Array(TokenDigest).check(Schema.isBetweenLength(10, 10)),
     }),
     Schema.TaggedStruct("Verify", { matchedStep: Schema.NullOr(Schema.Natural) }),
     Schema.TaggedStruct("Recovery", {
@@ -156,7 +156,7 @@ export const TotpMutation = Schema.Struct({
     }),
     Schema.TaggedStruct("Disable", {}),
     Schema.TaggedStruct("Regenerate", {
-      recoveryDigests: Schema.Array(TokenDigest).check(Schema.isLengthBetween(10, 10)),
+      recoveryDigests: Schema.Array(TokenDigest).check(Schema.isBetweenLength(10, 10)),
     }),
   ]),
 });

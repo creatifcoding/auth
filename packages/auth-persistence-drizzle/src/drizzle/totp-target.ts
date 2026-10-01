@@ -10,7 +10,7 @@ import {
 import type { Table } from "drizzle-orm";
 /* oxlint-disable no-explicit-any -- shared native implementation; driver entrypoints retain exact database and table types. */
 import { Context, Effect, Schema } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import type { PersistenceMappingError } from "./model";
 import type { SuppliedService } from "./SuppliedService";

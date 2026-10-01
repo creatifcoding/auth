@@ -1,17 +1,18 @@
 import { PasskeyProtocolCredentialId, PasskeyUserHandle } from "@yielded/auth/Passkey";
-import { Encoding, Schema } from "effect";
+import { Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 const bytes = (minimum: number, maximum: number) =>
   Schema.String.check(
     Schema.isMaxLength(Math.ceil((maximum * 4) / 3)),
     Schema.makeFilter((value) => {
-      const decoded = Encoding.decodeBase64Url(value);
+      const decoded = Base64Url.decode(value);
 
       return (
         decoded._tag === "Success" &&
         decoded.success.length >= minimum &&
         decoded.success.length <= maximum &&
-        Encoding.encodeBase64Url(decoded.success) === value
+        Base64Url.encode(decoded.success) === value
       );
     }),
   );

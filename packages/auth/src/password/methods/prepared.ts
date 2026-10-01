@@ -3,7 +3,6 @@ import {
   Crypto,
   DateTime,
   Effect,
-  Encoding,
   Layer,
   Option,
   Predicate,
@@ -11,6 +10,7 @@ import {
   Schema,
   type Types,
 } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import type { PreparedCommit } from "../../hooks/commit";
 import { LifecycleHooks } from "../../hooks/LifecycleHooks";
@@ -351,7 +351,7 @@ export const makePasswordPrepared = <
 
       const nonce = () =>
         passwordUnexpected(crypto.randomBytes(32)).pipe(
-          Effect.map((bytes) => Encoding.encodeBase64Url(bytes)),
+          Effect.map((bytes) => Base64Url.encode(bytes)),
         );
 
       const digestCredential = Effect.fn("PasswordPrepared.digestCredential")(function* (

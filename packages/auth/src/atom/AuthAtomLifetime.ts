@@ -1,5 +1,5 @@
 import { Context, Effect, Scope, Semaphore, SubscriptionRef } from "effect";
-import { Atom, AtomRegistry } from "effect/unstable/reactivity";
+import { Atom, AtomRegistry } from "effect/reactivity";
 
 import {
   makeAuthenticationCompletion,

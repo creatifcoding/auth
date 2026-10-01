@@ -1,7 +1,8 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Auth, Email, Hooks, Operations, Proofs, WebCrypto } from "@yielded/auth";
-import { Effect, Encoding, Layer, Redacted } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { Effect, Layer, Redacted } from "effect";
+import { Base64Url } from "effect/encoding";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 
 import { emailAuth, makeEmailConsumer, sessions, sessionPolicy } from "./email-methods-consumer";
 
@@ -36,7 +37,7 @@ const program = Effect.gen(function* () {
           keys: [
             {
               id: "binding",
-              material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(31))),
+              material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(31))),
             },
           ],
         },
@@ -48,7 +49,7 @@ const program = Effect.gen(function* () {
           keys: [
             {
               id: "session",
-              material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(42))),
+              material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(42))),
             },
           ],
         })

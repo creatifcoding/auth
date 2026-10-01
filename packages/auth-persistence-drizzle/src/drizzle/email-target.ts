@@ -7,7 +7,7 @@ import {
 } from "@yielded/auth/Hooks";
 /* oxlint-disable no-explicit-any -- public driver wrappers restore concrete Drizzle generics. */
 import { type Context, Effect, Layer } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
+import type * as SqlError from "effect/sql/SqlError";
 
 import {
   makeSqlEmailRegistrationAuthority,

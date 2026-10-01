@@ -5,7 +5,7 @@ shared parent flags, focused subcommands, and Effect handlers.
 
 ```ts
 import { Effect } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 
 const workspace = Flag.string("workspace").pipe(
   Flag.withAlias("w"),

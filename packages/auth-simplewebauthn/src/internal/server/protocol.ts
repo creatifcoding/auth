@@ -37,7 +37,8 @@ import {
 } from "@yielded/auth/Passkey";
 import { reportAuthFailure } from "@yielded/auth/Persistence";
 import type { Context } from "effect";
-import { Cause, DateTime, Effect, Encoding, Layer, Redacted, Schema } from "effect";
+import { Cause, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { captureSimpleWebAuthnProfiles } from "./configuration";
 import type { SimpleWebAuthnPasskeyProtocolOptions } from "./models";
@@ -86,19 +87,19 @@ const binary = (minimum: number, maximum: number) =>
   Schema.String.check(
     Schema.isMaxLength(Math.ceil((maximum * 4) / 3)),
     Schema.makeFilter((value) => {
-      const result = Encoding.decodeBase64Url(value);
+      const result = Base64Url.decode(value);
 
       return (
         result._tag === "Success" &&
         result.success.length >= minimum &&
         result.success.length <= maximum &&
-        Encoding.encodeBase64Url(result.success) === value
+        Base64Url.encode(result.success) === value
       );
     }),
   );
 
 const bytes = Effect.fn("simpleWebAuthnBytes")(function* (value: string) {
-  const result = Encoding.decodeBase64Url(value);
+  const result = Base64Url.decode(value);
 
   if (result._tag === "Failure") return yield* rejected();
 
@@ -357,8 +358,8 @@ const checkKey = Effect.fn("simpleWebAuthnPublicKey")(function* (
     jwk = {
       kty: "EC",
       crv: "P-256",
-      x: Encoding.encodeBase64Url(x),
-      y: Encoding.encodeBase64Url(y),
+      x: Base64Url.encode(x),
+      y: Base64Url.encode(y),
       ext: false,
     };
     algorithm = { name: "ECDSA", namedCurve: "P-256" };
@@ -380,8 +381,8 @@ const checkKey = Effect.fn("simpleWebAuthnPublicKey")(function* (
     jwk = {
       kty: "RSA",
       alg: "RS256",
-      n: Encoding.encodeBase64Url(n),
-      e: Encoding.encodeBase64Url(e),
+      n: Base64Url.encode(n),
+      e: Base64Url.encode(e),
       ext: false,
     };
     algorithm = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
@@ -554,7 +555,7 @@ export const makeSimpleWebAuthnPasskeyProtocol = Effect.fn("makeSimpleWebAuthnPa
         const id = yield* decode(byteValue(1, 1023), auth.credentialID);
         const key = yield* decode(byteValue(1, 8192), auth.credentialPublicKey);
 
-        if (Encoding.encodeBase64Url(id) !== wire.id) return yield* rejected();
+        if (Base64Url.encode(id) !== wire.id) return yield* rejected();
         const algorithm = yield* checkKey(key, profile.algorithms);
 
         const result = yield* maintained(() =>
@@ -591,7 +592,7 @@ export const makeSimpleWebAuthnPasskeyProtocol = Effect.fn("makeSimpleWebAuthnPa
           PasskeyRegistrationVerified,
           yield* decode(PasskeyRegistrationVerified, {
             protocolCredentialId: info.credential.id,
-            publicKey: Encoding.encodeBase64Url(info.credential.publicKey),
+            publicKey: Base64Url.encode(info.credential.publicKey),
             algorithm,
             counter: info.credential.counter,
             userVerified: info.userVerified,

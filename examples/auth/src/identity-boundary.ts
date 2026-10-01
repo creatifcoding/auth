@@ -1,8 +1,8 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Identity, Operations } from "@yielded/auth";
 import { DateTime, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 
 import { shopperIdentity, staffIdentity } from "./identity-consumers";
 

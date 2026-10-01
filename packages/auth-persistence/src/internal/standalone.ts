@@ -1,5 +1,5 @@
 import { type Context, Effect } from "effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/sql/SqlClient";
 
 /** Standalone operations must observe their own durable commit. */
 export const requireStandalone = <Failure>(

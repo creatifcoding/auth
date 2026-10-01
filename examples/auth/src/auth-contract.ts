@@ -1,6 +1,6 @@
 import { AuthContract } from "@yielded/auth";
 import { Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 
 // Shared with the browser: schemas and selected actions only.
 export const AuthApi = AuthContract.make("example/shared-auth", {

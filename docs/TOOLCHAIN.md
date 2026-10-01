@@ -21,6 +21,13 @@ which keeps Effect's test integration on that Vitest despite its Vitest 5 peer r
 matching Effect Agent; keep the catalog `vitest` pin equal to the bundled version. The `preferTypedSchemaDecoder` diagnostic follows the reference repository's disabled
 setting until the upstream TypeScript-Go panic is resolved.
 
+The root `patchedDependencies` carries a temporary Effect compatibility patch for
+the pinned Drizzle, Alchemy, and Distilled packages. It forwards their retired
+imports and schema helper to the installed implementations, keeping one Effect
+runtime. Repository code and documentation use the current APIs. Remove the patch
+when those dependencies publish compatible releases; rerun `vp run ready` and
+`vp run docs:plan --help` to verify both consumers and the deployment CLI.
+
 Library code lives in `packages/*`; public consumer examples are leaf workspaces
 under `examples/*`. Internal adapter fixtures belong to the package's `test/fixtures`.
 Every workspace and repository script is typechecked. Add, retain, and remove

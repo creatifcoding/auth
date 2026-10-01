@@ -1,8 +1,8 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Console, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
-import { Command as CliCommand, Flag } from "effect/unstable/cli";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { ChildProcess } from "effect/unstable/process";
+import { Command as CliCommand, Flag } from "effect/cli";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
+import { ChildProcess } from "effect/process";
 
 // Changesets owns final registry checks, publishing, prerelease tags, and Git tags.
 // npm needs resolved Bun dependency ranges and built exports in its input manifests.

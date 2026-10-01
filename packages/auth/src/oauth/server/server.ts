@@ -5,14 +5,14 @@ import {
   DateTime,
   Duration,
   Effect,
-  Encoding,
   Layer,
   Redacted,
   Schema,
   Stream,
 } from "effect";
-import { Cookies, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { HttpApiBuilder, HttpApiSecurity } from "effect/unstable/httpapi";
+import { Base64Url } from "effect/encoding";
+import { Cookies, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpApiBuilder, HttpApiSecurity } from "effect/http-api";
 
 import { cryptoLayer } from "../../auth/defaults";
 import { reportAuthFailure } from "../../internal/diagnostics";
@@ -298,7 +298,7 @@ export const make = <const Id extends string>(
         );
 
         const random = crypto.randomBytes(32).pipe(
-          Effect.map(Encoding.encodeBase64Url),
+          Effect.map(Base64Url.encode),
           Effect.mapError(() => Unavailable.make({})),
         );
 
@@ -623,7 +623,7 @@ export const make = <const Id extends string>(
                 const digest = yield* crypto
                   .digest("SHA-256", new TextEncoder().encode(query.code_verifier))
                   .pipe(
-                    Effect.map(Encoding.encodeBase64Url),
+                    Effect.map(Base64Url.encode),
                     Effect.mapError(() => Unavailable.make({})),
                   );
 

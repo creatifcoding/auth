@@ -10,7 +10,8 @@ import {
   snapshotOAuthSync,
 } from "@yielded/auth/OAuth";
 import type { AuthenticationRequirement } from "@yielded/auth/Sessions";
-import { DateTime, Effect, Encoding, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -21,8 +22,8 @@ export const invariant: (value: unknown) => asserts value = (value) => {
   if (!value) throw unavailable();
 };
 
-export const nonce = () => Encoding.encodeBase64Url(randomBytes(32));
-export const digest = (value: string) => Encoding.encodeBase64Url(sha256(encoder.encode(value)));
+export const nonce = () => Base64Url.encode(randomBytes(32));
+export const digest = (value: string) => Base64Url.encode(sha256(encoder.encode(value)));
 
 /** Capture configuration/callback references while preserving Drizzle table, SQL
  * and Effect objects. Never freeze or mutate the consumer's original graph. */
@@ -84,7 +85,7 @@ export const oauthIdentityKey = (input: typeof OAuthExternalIdentity.Type): stri
     offset += 4 + value.length;
   }
 
-  return "v1:" + Encoding.encodeBase64Url(sha256(packed));
+  return "v1:" + Base64Url.encode(sha256(packed));
 };
 
 export const sameIdentity = (

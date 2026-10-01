@@ -1,4 +1,4 @@
-Review this Effect v4 framework for concrete defects, not style.
+Review this Effect framework for concrete defects, not style.
 
 - Public asynchronous operations return `Effect` or `Stream`; expected failures stay typed in `E`, requirements stay visible in `R`, and resources belong to `Scope`.
 - Effect `Schema` owns persisted and transported values. Decode untrusted data at the boundary; do not cross it with assertions.

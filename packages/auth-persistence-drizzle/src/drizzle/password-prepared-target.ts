@@ -13,7 +13,7 @@ import {
 import { PasswordUnavailable, type PasswordPreparedPersistence } from "@yielded/auth/Password";
 /* oxlint-disable no-explicit-any -- concrete driver modules restore native table/database types. */
 import { type Context, Cause, Effect, Layer } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
+import type * as SqlError from "effect/sql/SqlError";
 
 import { makeSqlPasswordPreparedPersistence } from "./password-prepared-sql";
 import type { PasswordSqlDatabase } from "./password-sql";

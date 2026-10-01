@@ -1,7 +1,7 @@
 import type { Scope } from "effect";
 import { Effect } from "effect";
-import type { Atom } from "effect/unstable/reactivity";
-import { AtomRegistry, Reactivity } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
+import { AtomRegistry, Reactivity } from "effect/reactivity";
 
 import type { OperationFetchClient } from "../http-operation/client";
 import type { AnyRoute, RouteInput, RouteSuccess } from "../http-operation/contract";

@@ -121,7 +121,7 @@ Auth mutations refresh auth queries automatically. To also refresh application
 queries, replace the `AuthAtom.make` call with a shared runtime and reactivity keys:
 
 ```ts
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 
 export const appRuntime = Atom.context();
 export const auth = AuthAtom.make(AppClient, {
@@ -191,7 +191,7 @@ For example, configure Effect's Fetch transport with browser credentials:
 
 ```ts title="apps/web/http-client.ts"
 import { Layer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 export const ApplicationHttpClient = FetchHttpClient.layer.pipe(
   Layer.provide(

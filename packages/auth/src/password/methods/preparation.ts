@@ -1,5 +1,6 @@
 import type { Redacted } from "effect";
-import { Crypto, DateTime, Effect, Encoding } from "effect";
+import { Crypto, DateTime, Effect } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { LifecycleHooks } from "../../hooks/LifecycleHooks";
 import { LifecycleEventId, lifecycleEvent, lifecycleSnapshot } from "../../hooks/models";
@@ -63,7 +64,7 @@ export const makePasswordPreparation = ({
     const idBytes = yield* unexpected(crypto.randomBytes(32));
 
     return lifecycleEvent({
-      id: LifecycleEventId.make(Encoding.encodeBase64Url(idBytes)),
+      id: LifecycleEventId.make(Base64Url.encode(idBytes)),
       occurredAtMillis: DateTime.toEpochMillis(yield* DateTime.now),
       snapshot,
     });

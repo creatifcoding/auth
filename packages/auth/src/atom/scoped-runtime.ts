@@ -1,5 +1,5 @@
 import { Cause, type Context } from "effect";
-import { AsyncResult, Atom, type AtomRegistry } from "effect/unstable/reactivity";
+import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 
 import type { AuthAtomLifetime, AuthSubjectLifetime } from "./AuthAtomLifetime";
 

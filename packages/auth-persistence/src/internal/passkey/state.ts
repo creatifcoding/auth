@@ -15,7 +15,8 @@ import {
   PasskeyMethodPolicy,
   snapshotPasskeySync,
 } from "@yielded/auth/Passkey";
-import { Context, Effect, Encoding, Schema } from "effect";
+import { Context, Effect, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import {
   requiredPasskeyCredentialConstraints,
@@ -47,7 +48,7 @@ export const makePasskeyStateKernel = (
 
   const { col, equal, copiedRow, matchesNativeRow } = makeTransactionRows(unavailable);
 
-  const nonce = () => Encoding.encodeBase64Url(randomBytes(32));
+  const nonce = () => Base64Url.encode(randomBytes(32));
 
   const encoder = new TextEncoder();
 

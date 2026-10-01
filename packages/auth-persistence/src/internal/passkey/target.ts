@@ -28,7 +28,7 @@ import {
 } from "@yielded/auth/Passkey";
 import { SubjectId } from "@yielded/auth/Schema";
 import { Effect, Schema } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import type { PersistenceMappingError } from "../mapping-error";
 import type {

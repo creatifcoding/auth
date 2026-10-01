@@ -1,4 +1,4 @@
-import type { RpcGroup } from "effect/unstable/rpc";
+import type { RpcGroup } from "effect/rpc";
 
 import { type AnyOperation, operationGroup } from "../operations/operation";
 import { type AnyHookContribution, composeHooks } from "./LifecycleHooks";

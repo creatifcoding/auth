@@ -15,7 +15,7 @@ import {
   type PgTable,
 } from "drizzle-orm/pg-core";
 import type { Effect } from "effect";
-import type { SqlClient } from "effect/unstable/sql/SqlClient";
+import type { SqlClient } from "effect/sql/SqlClient";
 
 import { drizzleQueryOperations } from "../drizzle/query-operations";
 

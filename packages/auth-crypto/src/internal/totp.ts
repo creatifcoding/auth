@@ -15,7 +15,8 @@ import {
   TotpSecretEnvelope,
   TotpSecretKeys,
 } from "@yielded/auth/Totp";
-import { Effect, Encoding, Layer, Redacted, Schema } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { digest, randomId } from "./primitives";
 
@@ -92,8 +93,8 @@ export const encryptSecret = Effect.fn("Totp.encryptSecret")(function* (
       return TotpSecretEnvelope.make({
         keyId: selected.keyId,
         revision: binding.revision,
-        nonce: Encoding.encodeBase64Url(nonce),
-        ciphertext: Encoding.encodeBase64Url(gcm(key, nonce, aad).encrypt(secret)),
+        nonce: Base64Url.encode(nonce),
+        ciphertext: Base64Url.encode(gcm(key, nonce, aad).encrypt(secret)),
       });
     },
     catch: fail,
@@ -107,11 +108,11 @@ export const decryptSecret = Effect.fn("Totp.decryptSecret")(function* (
   const keys = yield* TotpSecretKeys,
     wrapped = yield* keys.get(envelope.keyId);
 
-  const nonce = yield* Effect.fromResult(Encoding.decodeBase64Url(envelope.nonce)).pipe(
+  const nonce = yield* Effect.fromResult(Base64Url.decode(envelope.nonce)).pipe(
     Effect.mapError(fail),
   );
 
-  const ciphertext = yield* Effect.fromResult(Encoding.decodeBase64Url(envelope.ciphertext)).pipe(
+  const ciphertext = yield* Effect.fromResult(Base64Url.decode(envelope.ciphertext)).pipe(
     Effect.mapError(fail),
   );
 

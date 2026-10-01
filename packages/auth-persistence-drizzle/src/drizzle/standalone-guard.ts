@@ -1,6 +1,6 @@
 import { requireStandalone } from "@yielded/auth-persistence/Adapter";
 import { Context, Effect, Predicate } from "effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/sql/SqlClient";
 
 type TransactionService = Context.Key<
   SqlClient.TransactionConnection,

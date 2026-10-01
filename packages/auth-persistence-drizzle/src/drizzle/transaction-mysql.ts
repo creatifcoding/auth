@@ -1,7 +1,7 @@
 /* oxlint-disable no-explicit-any -- this private acquisition preserves the installed native transaction; public wrappers retain its exact type. */
 import { EffectMysql2Transaction } from "drizzle-orm/effect-mysql2";
 import { Effect } from "effect";
-import { makeWithTransaction, type SqlClient } from "effect/unstable/sql/SqlClient";
+import { makeWithTransaction, type SqlClient } from "effect/sql/SqlClient";
 
 /** Locking discovery and later SQL policy predicates must see the same current
  * authority. MySQL's default repeatable-read snapshot is unsuitable after a

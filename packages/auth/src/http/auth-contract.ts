@@ -1,5 +1,5 @@
 import { Context, Option, Schema, SchemaAST } from "effect";
-import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 
 import { OperationHttpConfigurationError } from "../http-operation/errors";
 import { RevealWire } from "../http-operation/private";

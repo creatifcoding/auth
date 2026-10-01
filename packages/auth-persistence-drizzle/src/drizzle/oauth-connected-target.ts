@@ -10,7 +10,7 @@ import {
 } from "@yielded/auth/OAuth";
 /* oxlint-disable no-explicit-any -- concrete adapters retain the native database, table and ID types. */
 import { Effect, Layer, Schema } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import type { PersistenceMappingError } from "./model";
 import * as A from "./oauth-connected-access";

@@ -1,4 +1,5 @@
-import { Crypto, DateTime, Effect, Encoding } from "effect";
+import { Crypto, DateTime, Effect } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { SecurityRevision } from "../sessions/models";
 import {
@@ -61,7 +62,7 @@ const make = Effect.fnUntraced(function* (
   const random = crypto.randomBytes(32).pipe(
     Effect.mapError(() => OAuthUnavailable.make({})),
     Effect.map((bytes) => {
-      const value = Encoding.encodeBase64Url(bytes);
+      const value = Base64Url.encode(bytes);
 
       bytes.fill(0);
 

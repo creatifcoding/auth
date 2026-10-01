@@ -9,8 +9,8 @@ versions.
 ```ts
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Layer } from "effect";
-import { HttpRouter, HttpServer } from "effect/unstable/http";
-import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
+import { HttpRouter, HttpServer } from "effect/http";
+import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import { createServer } from "node:http";
 import { ApplicationApi } from "@app/domain/http";
 

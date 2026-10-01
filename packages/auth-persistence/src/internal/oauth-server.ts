@@ -1,6 +1,6 @@
 import { Persistence, Record, Unavailable } from "@yielded/auth/OAuthServer";
 import { Effect, Layer, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 
 import { requireStandalone } from "./standalone";
 

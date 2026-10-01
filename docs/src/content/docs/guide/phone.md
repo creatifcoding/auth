@@ -111,7 +111,7 @@ Wire those Layers with a sending policy and session claims:
 import { Config, Effect, Layer } from "effect";
 import { PhoneOtp } from "@yielded/auth";
 import * as Twilio from "@yielded/auth/adapters/Twilio";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 import { AppAuth } from "./auth";
 import { AuthDependencies } from "./auth-dependencies";

@@ -1,7 +1,8 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Auth, Hooks, Operations, Password, Proofs, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";
-import { DateTime, Effect, Encoding, Layer, Redacted } from "effect";
+import { DateTime, Effect, Layer, Redacted } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import {
   makePasswordConsumer,
@@ -46,7 +47,7 @@ const program = Effect.gen(function* () {
       keys: [
         {
           id: "example",
-          material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(42))),
+          material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(42))),
         },
       ],
     })

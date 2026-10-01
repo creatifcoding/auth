@@ -1,6 +1,7 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Hooks, Operations, Proofs, WebCrypto } from "@yielded/auth";
-import { Effect, Encoding, Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { makeExampleProofAuthority } from "./proof-consumer";
 
@@ -33,7 +34,7 @@ const base = Layer.mergeAll(
     keys: [
       {
         id: "current",
-        material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(23))),
+        material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(23))),
       },
     ],
   }),

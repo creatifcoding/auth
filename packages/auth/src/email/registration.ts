@@ -1,4 +1,5 @@
-import { Context, Crypto, DateTime, Effect, Encoding, Layer, Schema, type Types } from "effect";
+import { Context, Crypto, DateTime, Effect, Layer, Schema, type Types } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope, type PreparedCommit } from "../hooks/commit";
 import { LifecycleHooks } from "../hooks/LifecycleHooks";
@@ -217,7 +218,7 @@ export const makeEmailRegistration = <
           _tag: "Identifier",
           identifier,
           flowId: input.flowId,
-          contextDigest: TokenDigest.make(Encoding.encodeBase64Url(digest)),
+          contextDigest: TokenDigest.make(Base64Url.encode(digest)),
         };
 
         return { data, identifier, fingerprint, eligible: inspected.eligible, binding };
@@ -293,7 +294,7 @@ export const makeEmailRegistration = <
             .pipe(Effect.mapError(() => EmailUnavailable.make({})));
 
           const event = lifecycleEvent({
-            id: LifecycleEventId.make(Encoding.encodeBase64Url(bytes)),
+            id: LifecycleEventId.make(Base64Url.encode(bytes)),
             occurredAtMillis: DateTime.toEpochMillis(yield* DateTime.now),
             snapshot,
           });

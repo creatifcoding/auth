@@ -1,7 +1,7 @@
 import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import { Http } from "@yielded/auth";
 import { Effect, FileSystem, Layer, Path } from "effect";
-import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/http";
 
 import { AppAuth } from "../../shared/account/auth";
 import { DeliveryLive } from "../../shared/account/delivery";

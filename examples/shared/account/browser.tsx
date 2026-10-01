@@ -8,7 +8,7 @@ import {
   PasskeyBrowserBusy,
 } from "@yielded/auth-simplewebauthn/Browser";
 import { Cause, Schema } from "effect";
-import type { AsyncResult } from "effect/unstable/reactivity";
+import type { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 

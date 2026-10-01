@@ -8,7 +8,7 @@ import type { EffectSQLiteNodeDatabase } from "drizzle-orm/effect-sqlite-node";
 import type { EffectSQLiteWasmDatabase } from "drizzle-orm/effect-sqlite-wasm";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect, Context } from "effect";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlError } from "effect/sql/SqlError";
 
 import type { ProofPersistenceMapping } from "./proof-model";
 import {

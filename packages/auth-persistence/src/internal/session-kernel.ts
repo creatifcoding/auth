@@ -36,7 +36,7 @@ import {
   type SessionStepUpPersistence,
 } from "@yielded/auth/Sessions";
 import { Cause, Context, DateTime, Effect, Option, Schema } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
+import type * as SqlError from "effect/sql/SqlError";
 
 import { PersistenceMappingError, isMappedConstraintConflict } from "./mapping-error";
 import type {
