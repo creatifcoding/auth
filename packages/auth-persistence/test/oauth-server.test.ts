@@ -2,10 +2,11 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { it } from "@effect/vitest";
 import * as OAuthServer from "@yielded/auth/OAuthServer";
 import { SubjectId } from "@yielded/auth/Schema";
-import { Clock, Effect, Encoding, Exit, Layer, Redacted, Schema } from "effect";
-import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
-import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { Clock, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
+import { Base64Url } from "effect/encoding";
+import { HttpRouter, HttpServerRequest } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { expect } from "vite-plus/test";
 
 import { OAuthServerPersistence } from "../src/internal/oauth-server";
@@ -24,9 +25,7 @@ const config: OAuthServer.Options = {
   clients: [{ clientId: "client", name: "Example <client>", redirectUris: [redirectUri] }],
   keys: {
     activeKeyId: "v1",
-    keys: [
-      { id: "v1", material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(9))) },
-    ],
+    keys: [{ id: "v1", material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(9))) }],
   },
 };
 

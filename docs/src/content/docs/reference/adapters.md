@@ -254,12 +254,29 @@ secret keys. Adapters provide implementations; they are not installed automatica
 Install the selected driver's Effect SQL and Drizzle peers. Import it directly to
 avoid loading unrelated adapters. Shared mapping types live in `@yielded/auth-persistence-drizzle`.
 
-Use the Effect SQL peer ranges declared by your selected adapter package. The
-native PostgreSQL driver accepts one
+Use the Effect SQL peer ranges declared by the adapter package and keep the driver
+aligned with `effect`. The native PostgreSQL driver accepts one
 statement per query, decodes `int8` as `bigint`, timestamps as `Date`, and `bytea`
 as `Uint8Array`. Match application-owned column codecs to these values; use
 `sql.json` for JSON parameters. Set `prepare: false` for poolers that cannot retain
 prepared statements between queries.
+
+Drizzle RC4's Effect integration still uses APIs removed from the current stable
+Effect release. Until Drizzle ships a compatible release, apply this temporary
+patch to use it with Yielded Auth. In a Bun app, install your dependencies and run
+this from the workspace that depends on Drizzle:
+
+```sh
+bun add drizzle-orm@1.0.0-rc.4
+bunx @yielded/drizzle-effect-v4-patch@beta patch
+```
+
+The CLI updates Drizzle's declarations, error classes, and schema helper, then runs `bun install`.
+Commit the generated patch, root manifest, and lockfile. It accepts only the
+released Drizzle RC4 version, which the adapter supports. See the
+[patch package](https://github.com/yielded-dev/auth/tree/main/packages/drizzle-effect-v4-patch)
+for the exact supported build. Run the same command with `unpatch` before upgrading
+to a compatible upstream release. No lifecycle hook is required.
 
 Standalone libSQL operations reject any ambient libSQL transaction, including one
 belonging to another client. Use the explicit transaction coordinators when

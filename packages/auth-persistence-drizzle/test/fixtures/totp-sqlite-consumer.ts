@@ -27,7 +27,7 @@ import {
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { DateTime, Effect, Redacted } from "effect";
-import type { SqlClient } from "effect/unstable/sql/SqlClient";
+import type { SqlClient } from "effect/sql/SqlClient";
 
 import { requiredTotpConstraints, type TotpMapping } from "../../src/drizzle/totp-model";
 

@@ -9,7 +9,7 @@ import {
   SchemaGetter,
   type Types,
 } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import { reportAuthFailure } from "../internal/diagnostics";
 import type { AuthInvocation } from "./context";

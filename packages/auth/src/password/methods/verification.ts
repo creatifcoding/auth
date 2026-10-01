@@ -1,4 +1,5 @@
-import { Cause, Crypto, DateTime, Effect, Encoding, Redacted, Schema } from "effect";
+import { Cause, Crypto, DateTime, Effect, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope, type PreparedCommit } from "../../hooks/commit";
 import { HookDenied } from "../../hooks/models";
@@ -98,7 +99,7 @@ export const makePasswordVerification = ({
       crypto.digest("SHA-256", encoder.encode(Schema.encodeSync(tuple)(parts))),
     );
 
-    return TokenDigest.make(Encoding.encodeBase64Url(bytes));
+    return TokenDigest.make(Base64Url.encode(bytes));
   });
 
   const identifier = (email: Email) => LoginIdentifier.make({ namespace: "email", value: email });

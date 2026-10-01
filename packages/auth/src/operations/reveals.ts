@@ -29,7 +29,7 @@ const recoveryCode = Schema.String.check(
 );
 
 const recovery = Schema.Array(recoveryCode).check(
-  Schema.isLengthBetween(10, 10),
+  Schema.isBetweenLength(10, 10),
   Schema.makeFilter((codes) => new Set(codes).size === codes.length),
 );
 

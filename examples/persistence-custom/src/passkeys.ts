@@ -1,5 +1,6 @@
 import { Passkey, Schema as AuthSchema, Sessions } from "@yielded/auth";
-import { Context, Crypto, Effect, Encoding, Layer, Schema } from "effect";
+import { Context, Crypto, Effect, Layer, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { requirement, sessionRequirement } from "../../shared/account/auth";
 import {
@@ -139,9 +140,7 @@ export const PasskeysLive = Layer.effectContext(
       )(value);
 
       return AuthSchema.TokenDigest.make(
-        Encoding.encodeBase64Url(
-          yield* crypto.digest("SHA-256", new TextEncoder().encode(encoded)),
-        ),
+        Base64Url.encode(yield* crypto.digest("SHA-256", new TextEncoder().encode(encoded))),
       );
     });
 

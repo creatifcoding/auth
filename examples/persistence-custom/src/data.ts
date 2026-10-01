@@ -1,5 +1,6 @@
 import { Auth, Proofs, WebCrypto } from "@yielded/auth";
-import { Crypto, Effect, Encoding, FileSystem, Layer, Path, Redacted, Schema } from "effect";
+import { Crypto, Effect, FileSystem, Layer, Path, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { DataDirectory } from "./store";
 
@@ -22,8 +23,8 @@ export const KeysLive = Layer.unwrap(
 
     if (!(yield* fs.exists(filename))) {
       const keys = {
-        proof: Redacted.make(Encoding.encodeBase64Url(yield* crypto.randomBytes(32))),
-        binding: Redacted.make(Encoding.encodeBase64Url(yield* crypto.randomBytes(32))),
+        proof: Redacted.make(Base64Url.encode(yield* crypto.randomBytes(32))),
+        binding: Redacted.make(Base64Url.encode(yield* crypto.randomBytes(32))),
       };
 
       yield* fs

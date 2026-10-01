@@ -34,7 +34,7 @@ import {
   type SecurityRevision,
 } from "@yielded/auth/Sessions";
 import { Cause, Context, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
+import type * as SqlError from "effect/sql/SqlError";
 
 import { PersistenceMappingError } from "./mapping-error";
 import {

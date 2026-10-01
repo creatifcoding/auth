@@ -1,7 +1,7 @@
 import { Passkey, Password, Schema as AuthSchema, Sessions, WebCrypto } from "@yielded/auth";
 import { layer as layerSimpleWebAuthnPasskeyProtocol } from "@yielded/auth-simplewebauthn/Server";
 import { Crypto, Effect, Layer, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 
 import { AppAuth } from "../../shared/account/auth";
 import { Claims, minimumPasswordLength } from "../../shared/account/contract";

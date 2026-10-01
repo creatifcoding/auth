@@ -1,10 +1,6 @@
-import { Crypto, DateTime, Effect, Encoding, Redacted, Schema } from "effect";
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http";
+import { Crypto, DateTime, Effect, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import { selectCallback } from "./callback";
 import { wipeConnectedMaterial } from "./connectedAccess";
@@ -182,7 +178,7 @@ const configure = Effect.fn("Strava.configure")(function* (
         .randomBytes(32)
         .pipe(Effect.mapError(() => OAuthUnavailable.make({})));
 
-      const state = Encoding.encodeBase64Url(bytes);
+      const state = Base64Url.encode(bytes);
 
       bytes.fill(0);
       const url = new URL("https://www.strava.com/oauth/authorize");

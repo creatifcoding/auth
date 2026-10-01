@@ -1,14 +1,5 @@
-import {
-  Cause,
-  Context,
-  Crypto,
-  DateTime,
-  Effect,
-  Encoding,
-  Layer,
-  Schema,
-  type Types,
-} from "effect";
+import { Cause, Context, Crypto, DateTime, Effect, Layer, Schema, type Types } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope, type PreparedCommit } from "../hooks/commit";
 import { LifecycleHooks } from "../hooks/LifecycleHooks";
@@ -290,7 +281,7 @@ export const makeOAuthRegistration = <
             );
 
             const event = lifecycleEvent({
-              id: LifecycleEventId.make(Encoding.encodeBase64Url(eventBytes)),
+              id: LifecycleEventId.make(Base64Url.encode(eventBytes)),
               occurredAtMillis: DateTime.toEpochMillis(yield* DateTime.now),
               snapshot,
             });

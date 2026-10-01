@@ -4,7 +4,7 @@ import type { AnyRelations } from "drizzle-orm";
 import type { EffectMysql2Database } from "drizzle-orm/effect-mysql2";
 import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
 import { Effect, Context } from "effect";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlError } from "effect/sql/SqlError";
 
 import { updateValues } from "./model";
 import type { ProofPersistenceMapping } from "./proof-model";

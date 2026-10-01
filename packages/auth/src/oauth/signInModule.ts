@@ -4,7 +4,6 @@ import {
   Crypto,
   DateTime,
   Effect,
-  Encoding,
   Exit,
   Fiber,
   Layer,
@@ -13,6 +12,7 @@ import {
   Schema,
   type Types,
 } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { makeAuthStrategy } from "../auth/AuthStrategy";
 import { cryptoLayer, defaultLayer, hooksLayer } from "../auth/defaults";
@@ -219,7 +219,7 @@ export const makeOAuthMethod = <
             Effect.mapError(() => OAuthUnavailable.make({})),
           );
 
-          return TokenDigest.make(Encoding.encodeBase64Url(result));
+          return TokenDigest.make(Base64Url.encode(result));
         });
 
         const stateDigest = Effect.fn("OAuth.stateDigest")(function* (
@@ -231,13 +231,9 @@ export const makeOAuthMethod = <
 
           if (!Schema.is(Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)))(raw))
             return yield* OAuthRejected.make({});
-          const bytes = Result.getOrUndefined(Encoding.decodeBase64Url(raw));
+          const bytes = Result.getOrUndefined(Base64Url.decode(raw));
 
-          if (
-            bytes === undefined ||
-            bytes.length !== 32 ||
-            Encoding.encodeBase64Url(bytes) !== raw
-          ) {
+          if (bytes === undefined || bytes.length !== 32 || Base64Url.encode(bytes) !== raw) {
             bytes?.fill(0);
 
             return yield* OAuthRejected.make({});
@@ -434,7 +430,7 @@ export const makeOAuthMethod = <
               Effect.mapError(() => OAuthUnavailable.make({})),
             );
 
-            const claimId = OAuthClaimId.make(Encoding.encodeBase64Url(random));
+            const claimId = OAuthClaimId.make(Base64Url.encode(random));
 
             random.fill(0);
 

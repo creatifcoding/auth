@@ -1,4 +1,5 @@
-import { Context, Crypto, Effect, Encoding, Layer, Redacted, Result, Schema } from "effect";
+import { Context, Crypto, Effect, Layer, Redacted, Result, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { TokenDigest } from "../Schema";
 import { SubtleCrypto } from "../WebCrypto";
@@ -172,9 +173,7 @@ export const makeProofCrypto = Effect.fn("makeProofCrypto")(function* (
     );
 
     for (const entry of keyring.keys) {
-      const material = Result.getOrUndefined(
-        Encoding.decodeBase64Url(Redacted.value(entry.material)),
-      );
+      const material = Result.getOrUndefined(Base64Url.decode(Redacted.value(entry.material)));
 
       if (
         entry.id === "token" ||
@@ -204,7 +203,7 @@ export const makeProofCrypto = Effect.fn("makeProofCrypto")(function* (
 
   const generateOpaque = Effect.fn("ProofCrypto.generateOpaque")(function* () {
     return Redacted.make(
-      Encoding.encodeBase64Url(
+      Base64Url.encode(
         yield* crypto.randomBytes(32).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
       ),
     );
@@ -269,7 +268,7 @@ export const makeProofCrypto = Effect.fn("makeProofCrypto")(function* (
             }),
           );
 
-    return { keyId, digest: TokenDigest.make(Encoding.encodeBase64Url(bytes)) };
+    return { keyId, digest: TokenDigest.make(Base64Url.encode(bytes)) };
   });
 
   const continuationDigest = Effect.fn("ProofCrypto.continuationDigest")(function* (
@@ -293,7 +292,7 @@ export const makeProofCrypto = Effect.fn("makeProofCrypto")(function* (
     if (encoder.encode(message).byteLength > 16384) return yield* ProofUnavailable.make({});
 
     return TokenDigest.make(
-      Encoding.encodeBase64Url(
+      Base64Url.encode(
         yield* crypto
           .digest("SHA-256", encoder.encode(message))
           .pipe(Effect.mapError(() => ProofUnavailable.make({}))),
@@ -328,7 +327,7 @@ export const makeProofCrypto = Effect.fn("makeProofCrypto")(function* (
     if (encoder.encode(message).byteLength > 16384) return yield* ProofUnavailable.make({});
 
     return TokenDigest.make(
-      Encoding.encodeBase64Url(
+      Base64Url.encode(
         yield* crypto
           .digest("SHA-256", encoder.encode(message))
           .pipe(Effect.mapError(() => ProofUnavailable.make({}))),

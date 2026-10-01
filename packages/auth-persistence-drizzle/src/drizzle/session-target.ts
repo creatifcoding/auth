@@ -15,7 +15,7 @@ import {
 } from "@yielded/auth/Sessions";
 /* oxlint-disable no-explicit-any -- target entrypoints restore each concrete Drizzle database/table type. */
 import { type Context, Effect, Layer } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
+import type * as SqlError from "effect/sql/SqlError";
 
 import {
   makeSqlAuthenticationAuthority,

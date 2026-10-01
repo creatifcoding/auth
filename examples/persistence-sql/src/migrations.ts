@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import { Migrator, SqlClient } from "effect/unstable/sql";
+import { Migrator, SqlClient } from "effect/sql";
 
 // This application owns these migrations and their version history.
 const initial = Effect.gen(function* () {

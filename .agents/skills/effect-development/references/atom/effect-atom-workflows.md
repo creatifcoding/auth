@@ -3,7 +3,7 @@
 Multi-step client actions are Effects composing atoms. Components dispatch
 them and render `AsyncResult` state; no orchestration crosses the React
 boundary. Confirm exact signatures against the installed
-`effect/unstable/reactivity` declarations before copying.
+`effect/reactivity` declarations before copying.
 
 - [Define workflow atoms with Atom.fn](#define-workflow-atoms-with-atomfn)
 - [Compose atoms through the fn context](#compose-atoms-through-the-fn-context)
@@ -23,7 +23,7 @@ services or invalidation, create it through a runtime factory —
 
 ```ts
 import { Effect } from "effect";
-import { Atom, Reactivity } from "effect/unstable/reactivity";
+import { Atom, Reactivity } from "effect/reactivity";
 
 export const updateProject = ApiClient.runtime.fn(
   Effect.fnUntraced(function* (input: { readonly projectId: ProjectId; readonly patch: Patch }) {
@@ -115,7 +115,7 @@ When the optimistic value is the query's own value rather than a sidecar list,
 wrap the query with `Atom.optimistic` and drive it with `Atom.optimisticFn`:
 
 ```ts
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 
 export const timelineAtom = Atom.family((projectId: ProjectId) =>
   Atom.optimistic(timelineQuery(projectId)),

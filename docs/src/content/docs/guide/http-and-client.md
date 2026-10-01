@@ -115,7 +115,7 @@ Add the native auth group beside your application groups in the shared API:
 
 ```ts title="packages/domain/api.ts"
 import { AuthContract } from "@yielded/auth";
-import { HttpApi } from "effect/unstable/httpapi";
+import { HttpApi } from "effect/http-api";
 
 import { AuthApi } from "./auth-contract";
 import { Projects } from "./projects-contract";
@@ -125,7 +125,7 @@ export const Api = HttpApi.make("app").add(Projects, AuthContract.httpGroup(Auth
 
 ```ts title="apps/server/api-server.ts"
 import { Layer } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 
 import { Api } from "@app/domain/api";
 import { http } from "./auth-http";
@@ -171,7 +171,7 @@ Declare the session requirement in your shared API:
 
 ```ts title="packages/domain/profile-api.ts"
 import { SessionContract } from "@yielded/auth";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 
 import { AuthApi } from "./auth-contract";
 
@@ -193,7 +193,7 @@ On the server, supply the middleware and read `CurrentSession` in the handler:
 ```ts title="apps/server/profile-routes.ts"
 import { Http } from "@yielded/auth";
 import { Effect, Layer } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 
 import { ProfileApi, SessionHttp } from "@app/domain/profile-api";
 import { AppAuth } from "./auth";

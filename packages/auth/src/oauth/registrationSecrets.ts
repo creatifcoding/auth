@@ -1,4 +1,5 @@
-import { Crypto, DateTime, Effect, Encoding, Redacted, Result, Schema } from "effect";
+import { Crypto, DateTime, Effect, Redacted, Result, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { TokenDigest } from "../Schema";
 import {
@@ -31,13 +32,13 @@ export const credentialDigest = Effect.fn("OAuthRegistration.credentialDigest")(
 
   if (!Schema.is(Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)))(raw))
     return yield* OAuthRejected.make({});
-  const bytes = Result.getOrUndefined(Encoding.decodeBase64Url(raw));
+  const bytes = Result.getOrUndefined(Base64Url.decode(raw));
 
   if (
     raw.length !== 43 ||
     bytes === undefined ||
     bytes.length !== 32 ||
-    Encoding.encodeBase64Url(bytes) !== raw
+    Base64Url.encode(bytes) !== raw
   ) {
     bytes?.fill(0);
 
@@ -57,7 +58,7 @@ export const credentialDigest = Effect.fn("OAuthRegistration.credentialDigest")(
     Effect.mapError(() => OAuthUnavailable.make({})),
   );
 
-  return TokenDigest.make(Encoding.encodeBase64Url(value));
+  return TokenDigest.make(Base64Url.encode(value));
 });
 
 export const prepare = Effect.fn("OAuthRegistration.prepareIntent")(function* (
@@ -81,7 +82,7 @@ export const prepare = Effect.fn("OAuthRegistration.prepareIntent")(function* (
     Effect.mapError(() => OAuthUnavailable.make({})),
   );
 
-  const reference = OAuthRegistrationReference.make(Encoding.encodeBase64Url(referenceBytes));
+  const reference = OAuthRegistrationReference.make(Base64Url.encode(referenceBytes));
 
   referenceBytes.fill(0);
 
@@ -89,7 +90,7 @@ export const prepare = Effect.fn("OAuthRegistration.prepareIntent")(function* (
     Effect.mapError(() => OAuthUnavailable.make({})),
   );
 
-  const credential = Redacted.make(Encoding.encodeBase64Url(credentialBytes));
+  const credential = Redacted.make(Base64Url.encode(credentialBytes));
 
   credentialBytes.fill(0);
 

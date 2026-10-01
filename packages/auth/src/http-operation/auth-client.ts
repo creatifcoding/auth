@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Option, Scope, Semaphore } from "effect";
-import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, type HttpClient } from "effect/http";
 
 import type { AnyAuthAction, AuthActions } from "../operations/actions";
 import {

@@ -11,7 +11,8 @@ import {
   snapshotOAuthSync,
   type OAuthConnectedTokenKeyring,
 } from "@yielded/auth/OAuth";
-import { Crypto, Effect, Encoding, Layer, Redacted, Result, Schema } from "effect";
+import { Crypto, Effect, Layer, Redacted, Result, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 const keyringSchema = Schema.Struct({
   activeKeyId: OAuthEncryptionKeyId,
@@ -43,13 +44,13 @@ const decode = (value: string, maximum: number, exact?: number) => {
     !/^[A-Za-z0-9_-]+$/.test(value)
   )
     throw OAuthUnavailable.make({});
-  const bytes = Result.getOrUndefined(Encoding.decodeBase64Url(value));
+  const bytes = Result.getOrUndefined(Base64Url.decode(value));
 
   if (
     !bytes ||
     bytes.length > maximum ||
     (exact !== undefined && bytes.length !== exact) ||
-    Encoding.encodeBase64Url(bytes) !== value
+    Base64Url.encode(bytes) !== value
   ) {
     bytes?.fill(0);
     throw OAuthUnavailable.make({});
@@ -161,8 +162,8 @@ const make = (keyring: OAuthConnectedTokenKeyring) => {
               return snapshotOAuthSync(OAuthConnectedSealedTokens, {
                 format: "oauth-connected-xchacha20poly1305-v1",
                 keyId: configuration.activeKeyId,
-                nonce: Encoding.encodeBase64Url(nonce),
-                ciphertext: Redacted.make(Encoding.encodeBase64Url(ciphertext)),
+                nonce: Base64Url.encode(nonce),
+                ciphertext: Redacted.make(Base64Url.encode(ciphertext)),
               });
             } finally {
               plaintext?.fill(0);

@@ -1,4 +1,5 @@
-import { Encoding, Schema } from "effect";
+import { Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { RequestBindingCredential, RequestBindingFlowId } from "../operations/requestBindingModels";
 import { SubjectId, TokenDigest } from "../Schema";
@@ -34,13 +35,13 @@ const bytes = (minimum: number, maximum: number) =>
   Schema.String.check(
     Schema.isMaxLength(Math.ceil((maximum * 4) / 3)),
     Schema.makeFilter((value) => {
-      const result = Encoding.decodeBase64Url(value);
+      const result = Base64Url.decode(value);
 
       return (
         result._tag === "Success" &&
         result.success.length >= minimum &&
         result.success.length <= maximum &&
-        Encoding.encodeBase64Url(result.success) === value
+        Base64Url.encode(result.success) === value
       );
     }),
   );

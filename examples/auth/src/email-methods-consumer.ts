@@ -7,7 +7,8 @@ import {
   Schema as AuthSchema,
   Sessions,
 } from "@yielded/auth";
-import { Crypto, DateTime, Effect, Encoding, Layer, Option, Schema, Redacted } from "effect";
+import { Crypto, DateTime, Effect, Layer, Option, Schema, Redacted } from "effect";
+import { Base64Url } from "effect/encoding";
 
 export const Claims = Schema.Struct({ team: Schema.String, number: Schema.FiniteFromString });
 const budget = { limit: 30, windowMillis: 60_000 };
@@ -36,7 +37,7 @@ const proofKeys = {
   keys: [
     {
       id: "example",
-      material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(24))),
+      material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(24))),
     },
   ],
 };
@@ -623,7 +624,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
         .pipe(Effect.mapError(() => Email.EmailUnavailable.make({})));
 
       return {
-        fingerprint: AuthSchema.TokenDigest.make(Encoding.encodeBase64Url(digest)),
+        fingerprint: AuthSchema.TokenDigest.make(Base64Url.encode(digest)),
         eligible: !state.identifiers.has(input.identifier.value),
       };
     }),

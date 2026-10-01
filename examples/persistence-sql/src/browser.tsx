@@ -1,4 +1,4 @@
-import { KeyValueStore } from "effect/unstable/persistence";
+import { KeyValueStore } from "effect/persistence";
 
 import { mountAccountApp } from "../../shared/account/browser";
 import { minimumPasswordLength } from "../../shared/account/contract";

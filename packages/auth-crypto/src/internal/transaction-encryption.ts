@@ -9,7 +9,8 @@ import {
   OAuthTransactionSecrets,
   snapshotOAuthSync,
 } from "@yielded/auth/OAuth";
-import { Crypto, Effect, Encoding, Redacted, Result, Schema } from "effect";
+import { Crypto, Effect, Redacted, Result, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 const keyringSchema = Schema.Struct({
   activeKeyId: OAuthEncryptionKeyId,
@@ -32,13 +33,13 @@ const decodeBase64 = (value: string, maximum: number, exact?: number) => {
   ) {
     throw OAuthUnavailable.make({});
   }
-  const bytes = Result.getOrUndefined(Encoding.decodeBase64Url(value));
+  const bytes = Result.getOrUndefined(Base64Url.decode(value));
 
   if (
     !bytes ||
     bytes.length > maximum ||
     (exact !== undefined && bytes.length !== exact) ||
-    Encoding.encodeBase64Url(bytes) !== value
+    Base64Url.encode(bytes) !== value
   ) {
     bytes?.fill(0);
     throw OAuthUnavailable.make({});
@@ -136,8 +137,8 @@ export const transactionEncryption = <C extends { readonly protocol: "oidc" | "o
               return snapshotOAuthSync(OAuthSealedTransaction, {
                 format: "oauth-xchacha20poly1305-v1",
                 keyId: configuration.activeKeyId,
-                nonce: Encoding.encodeBase64Url(nonce),
-                ciphertext: Redacted.make(Encoding.encodeBase64Url(ciphertext)),
+                nonce: Base64Url.encode(nonce),
+                ciphertext: Redacted.make(Base64Url.encode(ciphertext)),
               });
             } finally {
               plaintext?.fill(0);

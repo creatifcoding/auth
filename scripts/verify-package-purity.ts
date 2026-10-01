@@ -9,6 +9,7 @@ const PackageManifest = Schema.StructWithRest(
     name: Schema.NonEmptyString,
     private: Schema.optionalKey(Schema.Boolean),
     exports: Schema.Record(Schema.String, Schema.String),
+    bin: Schema.optionalKey(DependencyMap),
     dependencies: Schema.optionalKey(DependencyMap),
     optionalDependencies: Schema.optionalKey(DependencyMap),
     peerDependencies: Schema.optionalKey(DependencyMap),
@@ -173,6 +174,15 @@ const readProductionEntryPoints = Effect.fn("packagePurity.readProductionEntryPo
       }
     }
 
+    for (const [name, binary] of Object.entries(manifest.bin ?? {})) {
+      entries.push({
+        displayName: `${manifest.name} binary ${name}`,
+        sourcePath: path.join(
+          relativeDirectory,
+          binary.replace("./dist/", "./src/").replace(/\.mjs$/, ".ts"),
+        ),
+      });
+    }
     for (const [exportPath, sourcePath] of Object.entries(manifest.exports).sort(
       ([left], [right]) => left.localeCompare(right),
     )) {

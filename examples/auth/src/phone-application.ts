@@ -1,5 +1,6 @@
 import { Auth, PhoneOtp } from "@yielded/auth";
-import { Encoding, Redacted, Schema } from "effect";
+import { Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { lifecyclePolicy } from "./phone-sqlite-schema";
 const budget = { limit: 30, windowMillis: 60_000 };
@@ -29,7 +30,7 @@ export const keyring = {
   keys: [
     {
       id: "example",
-      material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(91))),
+      material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(91))),
     },
   ],
 };

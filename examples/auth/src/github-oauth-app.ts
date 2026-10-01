@@ -9,8 +9,8 @@ import {
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
 import { Context, Effect, Layer, Schema, Stream } from "effect";
-import type { HttpClientResponse } from "effect/unstable/http";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import type { HttpClientResponse } from "effect/http";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
 // Application authority is local. Neither registration data nor Claims needs email.
 const Claims = Schema.Struct({ role: Schema.Literal("member"), displayName: Schema.String });

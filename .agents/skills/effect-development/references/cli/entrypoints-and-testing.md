@@ -16,7 +16,7 @@ export const command = root.pipe(Command.withSubcommands([deploy, status]));
 // src/bin/acme.ts
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { command } from "../cli/command";
 
 const program = Command.run(command, { version: VERSION }).pipe(

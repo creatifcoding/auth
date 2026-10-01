@@ -1,7 +1,7 @@
 import * as AuthAtom from "@yielded/auth/Atom";
 import * as Client from "@yielded/auth/Client";
 import { Effect, Redacted } from "effect";
-import { AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
+import { AtomRegistry, AsyncResult } from "effect/reactivity";
 
 import { OAuthApi } from "./oauth-contract";
 

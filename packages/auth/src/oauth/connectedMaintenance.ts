@@ -1,15 +1,5 @@
-import {
-  Context,
-  DateTime,
-  Effect,
-  Encoding,
-  Exit,
-  Layer,
-  Option,
-  Schema,
-  Crypto,
-  Cause,
-} from "effect";
+import { Context, DateTime, Effect, Exit, Layer, Option, Schema, Crypto, Cause } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope } from "../hooks/commit";
 import type { AuthInvocation } from "../operations/context";
@@ -112,7 +102,7 @@ export const makeOAuthConnectedMaintenance = <const Id extends string>(
         if (Option.isNone(revocations)) return yield* OAuthMethodUnsupported.make({});
         const { claim, settle } = revocations.value;
         const bytes = yield* randomBytes(32).pipe(Effect.mapError(() => OAuthUnavailable.make({})));
-        const claimId = OAuthClaimId.make(Encoding.encodeBase64Url(bytes));
+        const claimId = OAuthClaimId.make(Base64Url.encode(bytes));
 
         bytes.fill(0);
 

@@ -4,7 +4,6 @@ import {
   Crypto,
   DateTime,
   Effect,
-  Encoding,
   Exit,
   Fiber,
   Layer,
@@ -12,6 +11,7 @@ import {
   Result,
   Schema,
 } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope, type PreparedCommit } from "../hooks/commit";
 import { LifecycleHooks } from "../hooks/LifecycleHooks";
@@ -256,7 +256,7 @@ export const makeOAuthAccounts = <
           Effect.mapError(() => OAuthUnavailable.make({})),
         );
 
-        return TokenDigest.make(Encoding.encodeBase64Url(bytes));
+        return TokenDigest.make(Base64Url.encode(bytes));
       });
 
       const stateDigest = Effect.fn("OAuthAccounts.stateDigest")(function* (
@@ -267,9 +267,9 @@ export const makeOAuthAccounts = <
         const raw = Redacted.value(secret);
 
         if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) return yield* OAuthRejected.make({});
-        const bytes = Result.getOrUndefined(Encoding.decodeBase64Url(raw));
+        const bytes = Result.getOrUndefined(Base64Url.decode(raw));
 
-        if (bytes === undefined || bytes.length !== 32 || Encoding.encodeBase64Url(bytes) !== raw) {
+        if (bytes === undefined || bytes.length !== 32 || Base64Url.encode(bytes) !== raw) {
           bytes?.fill(0);
 
           return yield* OAuthRejected.make({});
@@ -388,7 +388,7 @@ export const makeOAuthAccounts = <
         const bytes = yield* randomBytes(32).pipe(Effect.mapError(() => OAuthUnavailable.make({})));
 
         const event = lifecycleEvent({
-          id: LifecycleEventId.make(Encoding.encodeBase64Url(bytes)),
+          id: LifecycleEventId.make(Base64Url.encode(bytes)),
           occurredAtMillis: DateTime.toEpochMillis(yield* DateTime.now),
           snapshot,
         });
@@ -618,7 +618,7 @@ export const makeOAuthAccounts = <
             Effect.mapError(() => OAuthUnavailable.make({})),
           );
 
-          const claimId = OAuthClaimId.make(Encoding.encodeBase64Url(bytes));
+          const claimId = OAuthClaimId.make(Base64Url.encode(bytes));
 
           bytes.fill(0);
 

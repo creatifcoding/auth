@@ -1,6 +1,6 @@
 import { Proofs, Schema as AuthSchema } from "@yielded/auth";
 import { Config, Effect, Layer, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 const SendResponse = Schema.Struct({
   success: Schema.Literal(true),

@@ -1,6 +1,6 @@
 import type { Effect } from "effect";
 import { Schema } from "effect";
-import type { Rpc } from "effect/unstable/rpc";
+import type { Rpc } from "effect/rpc";
 
 import type { AuthInvocation } from "../operations/context";
 import type { CredentialSlot } from "../operations/credentials";

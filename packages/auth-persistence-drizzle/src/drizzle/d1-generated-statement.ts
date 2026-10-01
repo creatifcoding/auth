@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { Schema } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 // oxlint-disable-next-line no-restricted-properties -- Statement.compile exposes untyped native SQL parameters.
 const valuesJson = Schema.encodeUnknownSync(

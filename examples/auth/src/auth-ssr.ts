@@ -1,7 +1,7 @@
 import { RegistryContext } from "@effect/atom-react";
 import { Atom as AuthAtom } from "@yielded/auth";
 import { Effect, Schema } from "effect";
-import { AtomRegistry } from "effect/unstable/reactivity";
+import { AtomRegistry } from "effect/reactivity";
 import { createElement } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";

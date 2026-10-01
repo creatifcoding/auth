@@ -9,7 +9,8 @@ import {
   OAuthRedirectUri,
   snapshotOAuthSync,
 } from "@yielded/auth/OAuth";
-import { Effect, Encoding, Layer, Predicate, Redacted, Schema } from "effect";
+import { Effect, Layer, Predicate, Redacted, Schema } from "effect";
+import { Base64 } from "effect/encoding";
 import type { CustomFetch } from "openid-client";
 
 import {
@@ -256,7 +257,7 @@ const revocationLayer = (
               headers: {
                 ...headers,
                 "Content-Type": "application/json",
-                Authorization: `Basic ${Encoding.encodeBase64(`${input.clientId}:${Redacted.value(input.authentication.secret)}`)}`,
+                Authorization: `Basic ${Base64.encode(`${input.clientId}:${Redacted.value(input.authentication.secret)}`)}`,
               },
               body: encodeRevocation({ access_token: Redacted.value(input.material.accessToken) }),
               signal,

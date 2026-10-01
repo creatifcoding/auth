@@ -1,4 +1,4 @@
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 /** Adapter-owned table metadata. No driver or ORM type enters the shared models. */
 export interface TableModel {

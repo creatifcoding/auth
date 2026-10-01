@@ -4,13 +4,13 @@ import {
   Crypto,
   DateTime,
   Effect,
-  Encoding,
   Exit,
   Layer,
   Redacted,
   Result,
   Schema,
 } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { LifecycleHooks } from "../hooks/LifecycleHooks";
 import { HookDenied, LifecycleEventId, lifecycleEvent, lifecycleSnapshot } from "../hooks/models";
@@ -163,7 +163,7 @@ export const makeOAuthConnected = <const Id extends string>(
 
       const random = Effect.fn("OAuthConnected.random")(function* () {
         const bytes = yield* randomBytes(32).pipe(Effect.mapError(() => OAuthUnavailable.make({})));
-        const value = OAuthClaimId.make(Encoding.encodeBase64Url(bytes));
+        const value = OAuthClaimId.make(Base64Url.encode(bytes));
 
         bytes.fill(0);
 
@@ -175,7 +175,7 @@ export const makeOAuthConnected = <const Id extends string>(
           Effect.mapError(() => OAuthUnavailable.make({})),
         );
 
-        return TokenDigest.make(Encoding.encodeBase64Url(bytes));
+        return TokenDigest.make(Base64Url.encode(bytes));
       });
 
       const stateDigest = Effect.fn("OAuthConnected.stateDigest")(function* (
@@ -186,9 +186,9 @@ export const makeOAuthConnected = <const Id extends string>(
         const raw = Redacted.value(secret);
 
         if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) return yield* OAuthRejected.make({});
-        const bytes = Result.getOrUndefined(Encoding.decodeBase64Url(raw));
+        const bytes = Result.getOrUndefined(Base64Url.decode(raw));
 
-        if (!bytes || bytes.length !== 32 || Encoding.encodeBase64Url(bytes) !== raw) {
+        if (!bytes || bytes.length !== 32 || Base64Url.encode(bytes) !== raw) {
           bytes?.fill(0);
 
           return yield* OAuthRejected.make({});

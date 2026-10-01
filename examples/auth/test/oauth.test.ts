@@ -29,7 +29,6 @@ import {
   Deferred,
   Duration,
   Effect,
-  Encoding,
   Exit,
   Fiber,
   Layer,
@@ -37,18 +36,17 @@ import {
   Redacted,
   Schema,
 } from "effect";
+import { Base64Url } from "effect/encoding";
+import { HttpClient, HttpClientResponse } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
 import { expect } from "vite-plus/test";
 
 import { makeStorage } from "../src/oauth-storage";
 
 const keys = (byte: number) => ({
   activeKeyId: "key",
-  keys: [
-    { id: "key", material: Redacted.make(Encoding.encodeBase64Url(new Uint8Array(32).fill(byte))) },
-  ],
+  keys: [{ id: "key", material: Redacted.make(Base64Url.encode(new Uint8Array(32).fill(byte))) }],
 });
 
 const contract = AuthContract.make("strava-test", {

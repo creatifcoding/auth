@@ -1,8 +1,8 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Console, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
-import { Command as CliCommand, Flag } from "effect/unstable/cli";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { ChildProcess } from "effect/unstable/process";
+import { Command as CliCommand, Flag } from "effect/cli";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
+import { ChildProcess } from "effect/process";
 
 // Changesets owns final registry checks, publishing, prerelease tags, and Git tags.
 // npm needs resolved Bun dependency ranges and built exports in its input manifests.
@@ -44,6 +44,7 @@ const manifestFields = {
   devDependencies: Schema.optionalKey(DependencyMap),
   optionalDependencies: Schema.optionalKey(DependencyMap),
   peerDependencies: Schema.optionalKey(DependencyMap),
+  bin: Schema.optionalKey(DependencyMap),
 };
 
 export const PublishManifest = Schema.StructWithRest(
@@ -266,6 +267,13 @@ export const withPublishManifests = <A, E, R>(
             }
           }
           mutable[section] = resolved;
+        }
+        for (const binary of Object.values(pkg.manifest.bin ?? {})) {
+          if (!(yield* fs.exists(path.join(pkg.directory, binary))))
+            return yield* ReleaseError.make({
+              package: pkg.manifest.name,
+              reason: "Missing built binary: " + binary,
+            });
         }
         const exports: Record<string, { types: string; default: string }> = {};
 

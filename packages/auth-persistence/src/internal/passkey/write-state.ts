@@ -20,7 +20,8 @@ import {
 } from "@yielded/auth/Passkey";
 import { TokenDigest, type SubjectId } from "@yielded/auth/Schema";
 import { SessionInvalidationWindow } from "@yielded/auth/Sessions";
-import { DateTime, Effect, Encoding, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import type { PersistenceMappingError } from "../mapping-error";
 import type { QueryOperations } from "../query-operations";
@@ -86,7 +87,7 @@ export const makePasskeyWriteStateKernel = (
     value: S["Type"],
   ) =>
     TokenDigest.make(
-      Encoding.encodeBase64Url(sha256(new TextEncoder().encode(jsonStorage(schema).encode(value)))),
+      Base64Url.encode(sha256(new TextEncoder().encode(jsonStorage(schema).encode(value)))),
     );
 
   const currentSubject = Effect.fn("passkey.currentWriteSubject")(function* (

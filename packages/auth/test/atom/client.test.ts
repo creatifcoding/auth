@@ -3,10 +3,10 @@ import * as AuthAtom from "@yielded/auth/Atom";
 import * as AuthContract from "@yielded/auth/AuthContract";
 import * as Client from "@yielded/auth/Client";
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
+import type { Atom } from "effect/reactivity";
+import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { TestClock } from "effect/testing";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
-import type { Atom } from "effect/unstable/reactivity";
-import { AsyncResult, AtomRegistry } from "effect/unstable/reactivity";
 import { expect, test } from "vite-plus/test";
 
 // e2ca72c admitted credential requests without a deadline; a stalled response

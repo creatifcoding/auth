@@ -3,7 +3,7 @@ import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
 import * as OpenIdClient from "@yielded/auth-openid-client";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
 import { Effect, Layer, Schema } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 
 import { LoginApi, Registration } from "./login-contract";
 

@@ -2,7 +2,7 @@
 
 Implement the shared contract with group handlers, application services, and
 layers. Confirm names against the installed Effect version; examples here use
-the Effect v4 `effect/unstable/httpapi` surface.
+the `effect/http-api` surface.
 
 - [Implement thin group handlers](#implement-thin-group-handlers)
 - [Declare security middleware in the shared contract](#declare-security-middleware-in-the-shared-contract)
@@ -17,7 +17,7 @@ identifier to one handler. Use `Effect.fn` for callbacks that return Effects.
 
 ```ts
 import { Effect } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 import { ApplicationApi } from "@app/domain/http";
 import { Projects } from "../services/Projects";
 
@@ -60,7 +60,7 @@ out of that package.
 ```ts
 // packages/domain/src/http/authorization.ts
 import { Context, Schema } from "effect";
-import { HttpApiGroup, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
+import { HttpApiGroup, HttpApiMiddleware, HttpApiSecurity } from "effect/http-api";
 
 export class CurrentActor extends Context.Service<CurrentActor, { readonly id: string }>()(
   "app/CurrentActor",

@@ -49,8 +49,8 @@ import { and, eq, getTableColumns, gt, inArray, not, or, sql, type SQL } from "d
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Cause, Context, Data, DateTime, Effect, Schema } from "effect";
-import type * as SqlError from "effect/unstable/sql/SqlError";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type * as SqlError from "effect/sql/SqlError";
+import type { Statement } from "effect/sql/Statement";
 
 import { compactD1GeneratedStatement } from "./d1-generated-statement";
 import {

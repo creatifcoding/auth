@@ -7,7 +7,7 @@ import {
   Schema as AuthSchema,
 } from "@yielded/auth";
 import { Effect, Layer, Schema } from "effect";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 
 import { staffSessions } from "./session-consumer";
 

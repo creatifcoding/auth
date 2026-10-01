@@ -1,4 +1,5 @@
-import { Context, Crypto, DateTime, Effect, Encoding, Layer, Redacted, Schema } from "effect";
+import { Context, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { TokenDigest } from "../Schema";
 import { makeSessionSigningCodec, type SessionSigningKeyring } from "../sessions/crypto";
@@ -219,7 +220,7 @@ export const makeRequestBinding = <const Id extends string, const Purpose extend
                 purpose,
                 flowId,
                 generation: policy.generation,
-                nonce: Encoding.encodeBase64Url(nonce),
+                nonce: Base64Url.encode(nonce),
                 issuedAtMillis: now,
                 expiresAtMillis,
               })
@@ -256,7 +257,7 @@ export const makeRequestBinding = <const Id extends string, const Purpose extend
             // Entry verification deadline only. Final proof/action expiry is still
             // enforced by the actual mutation owner; this is not a commit deadline.
             return Object.freeze({
-              verifier: TokenDigest.make(Encoding.encodeBase64Url(digest)),
+              verifier: TokenDigest.make(Base64Url.encode(digest)),
               expiresAtMillis: value.expiresAtMillis,
             });
           }),

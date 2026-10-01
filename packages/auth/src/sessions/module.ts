@@ -5,7 +5,6 @@ import {
   Crypto,
   DateTime,
   Effect,
-  Encoding,
   Layer,
   Option,
   Redacted,
@@ -14,6 +13,7 @@ import {
   type Scope,
   type Types,
 } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { cryptoLayer, hooksLayer } from "../auth/defaults";
 import { type PreparedCommit, hasCommitScope, coordinateCommit } from "../hooks/commit";
@@ -1507,7 +1507,7 @@ export const makeSessionModule = <
 
           registry.set(
             profile.profileId,
-            Object.freeze({ profile, digest: TokenDigest.make(Encoding.encodeBase64Url(digest)) }),
+            Object.freeze({ profile, digest: TokenDigest.make(Base64Url.encode(digest)) }),
           );
         }
 

@@ -34,7 +34,7 @@ are preserved. Supply a custom Fetch implementation when constructing the Layer:
 
 ```ts
 import { Layer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 import { AppClient } from "./auth-client";
 import { customFetch } from "./fetch";

@@ -1,6 +1,6 @@
 import { Auth, Email, Hooks, Passkey, Password, Sessions, WebCrypto } from "@yielded/auth";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 
 import {
   AppAuth,

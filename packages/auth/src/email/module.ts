@@ -1,14 +1,5 @@
-import {
-  Context,
-  Crypto,
-  DateTime,
-  Effect,
-  Encoding,
-  Layer,
-  Option,
-  Schema,
-  type Types,
-} from "effect";
+import { Context, Crypto, DateTime, Effect, Layer, Option, Schema, type Types } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { makeAuthStrategy } from "../auth/AuthStrategy";
 import { cryptoLayer, defaultLayer, hooksLayer } from "../auth/defaults";
@@ -312,7 +303,7 @@ export const makeEmailSignInModule = <
 
           const base = {
             flowId: request.flowId,
-            contextDigest: TokenDigest.make(Encoding.encodeBase64Url(bytes)),
+            contextDigest: TokenDigest.make(Base64Url.encode(bytes)),
             identifier,
           };
 

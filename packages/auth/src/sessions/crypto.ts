@@ -1,4 +1,5 @@
-import { Crypto, Effect, Encoding, Redacted, Result, Schema } from "effect";
+import { Crypto, Effect, Redacted, Result, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { TokenDigest } from "../Schema";
 import { SubtleCrypto } from "../WebCrypto";
@@ -47,7 +48,7 @@ export const makeSessionSecrets = Effect.fn("makeSessionSecrets")(function* (mod
         .randomBytes(32)
         .pipe(Effect.mapError(() => SessionUnavailable.make({})));
 
-      return Redacted.make(Encoding.encodeBase64Url(bytes));
+      return Redacted.make(Base64Url.encode(bytes));
     }),
     digest: Effect.fn("SessionSecrets.digest")(function* (
       token: Redacted.Redacted<string>,
@@ -68,7 +69,7 @@ export const makeSessionSecrets = Effect.fn("makeSessionSecrets")(function* (mod
         .digest("SHA-256", textEncoder.encode(message))
         .pipe(Effect.mapError(() => SessionUnavailable.make({})));
 
-      return TokenDigest.make(Encoding.encodeBase64Url(digest));
+      return TokenDigest.make(Base64Url.encode(digest));
     }),
   };
 });
@@ -90,9 +91,7 @@ export const makeSessionSigningCodec = Effect.fn("makeSessionSigningCodec")(func
       Effect.mapError(() => SessionConfigurationError.make({ reason: "keyring" })),
     );
 
-    const material = Result.getOrUndefined(
-      Encoding.decodeBase64Url(Redacted.value(entry.material)),
-    );
+    const material = Result.getOrUndefined(Base64Url.decode(Redacted.value(entry.material)));
 
     if (keys.has(entry.id) || material === undefined || material.length < 32) {
       return yield* SessionConfigurationError.make({ reason: "keyring" });
@@ -127,14 +126,14 @@ export const makeSessionSigningCodec = Effect.fn("makeSessionSigningCodec")(func
         Effect.mapError(() => SessionUnavailable.make({})),
       );
 
-      const message = `eas1.${activeKeyId}.${Encoding.encodeBase64Url(json)}`;
+      const message = `eas1.${activeKeyId}.${Base64Url.encode(json)}`;
 
       const signature = yield* Effect.tryPromise({
         try: () => subtle.sign("HMAC", activeKey, textEncoder.encode(message)),
         catch: () => SessionUnavailable.make({}),
       });
 
-      const token = `${message}.${Encoding.encodeBase64Url(new Uint8Array(signature))}`;
+      const token = `${message}.${Base64Url.encode(new Uint8Array(signature))}`;
 
       if (token.length > maximumTokenBytes) return yield* SessionUnavailable.make({});
 
@@ -151,7 +150,7 @@ export const makeSessionSigningCodec = Effect.fn("makeSessionSigningCodec")(func
       );
       const [version, keyId, payload, signatureText] = token.split(".");
       const key = keys.get(keyId);
-      const signature = Result.getOrUndefined(Encoding.decodeBase64Url(signatureText));
+      const signature = Result.getOrUndefined(Base64Url.decode(signatureText));
 
       if (key === undefined || signature === undefined || signature.length !== 32)
         return yield* SessionInvalid.make({});
@@ -168,7 +167,7 @@ export const makeSessionSigningCodec = Effect.fn("makeSessionSigningCodec")(func
       });
 
       if (!valid) return yield* SessionInvalid.make({});
-      const json = Result.getOrUndefined(Encoding.decodeBase64UrlString(payload));
+      const json = Result.getOrUndefined(Base64Url.decodeString(payload));
 
       if (json === undefined) return yield* SessionInvalid.make({});
 

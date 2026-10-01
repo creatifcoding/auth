@@ -1,4 +1,5 @@
-import { Effect, Encoding, Redacted, Result, Schema } from "effect";
+import { Effect, Redacted, Result, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import type { ProofDeliveryMessage } from "../proofs/delivery";
 import { ProofReference } from "../proofs/models";
@@ -46,7 +47,7 @@ export const makeMagicLinkRenderer = Effect.fn("makeMagicLinkRenderer")(function
       token: Redacted.value(message.secret),
     }).pipe(Effect.mapError(() => EmailRejected.make({})));
 
-    return Redacted.make(`${target}#eal1.${Encoding.encodeBase64Url(encoded)}`);
+    return Redacted.make(`${target}#eal1.${Base64Url.encode(encoded)}`);
   });
 });
 
@@ -62,7 +63,7 @@ export const parseMagicLinkFragment = Effect.fn("MagicLink.parseFragment")(funct
     Effect.mapError(() => EmailRejected.make({})),
   );
 
-  const json = Result.getOrUndefined(Encoding.decodeBase64UrlString(raw.slice(6)));
+  const json = Result.getOrUndefined(Base64Url.decodeString(raw.slice(6)));
 
   if (json === undefined) return yield* EmailRejected.make({});
 

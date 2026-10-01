@@ -10,7 +10,7 @@ import type { SessionSigningKeyring } from "@yielded/auth/Sessions";
 import { OAuth } from "@yielded/auth/strategies";
 import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { Effect, FileSystem, Layer } from "effect";
-import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/http";
 
 import { OAuthApi } from "./oauth-contract";
 import { makeStorage } from "./oauth-storage";

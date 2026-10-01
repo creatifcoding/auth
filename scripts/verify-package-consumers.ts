@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Path, Schema, Stream } from "effect";
-import { ChildProcess } from "effect/unstable/process";
+import { ChildProcess } from "effect/process";
 import { build } from "esbuild";
 import ts from "typescript-twoslash";
 import { build as viteBuild } from "vite-plus";

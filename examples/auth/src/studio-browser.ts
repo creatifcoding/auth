@@ -1,7 +1,7 @@
 import { Atom as AuthAtom, OperationHttpClient as Fetch } from "@yielded/auth";
 import * as PasskeyBrowser from "@yielded/auth-simplewebauthn/Browser";
 import { Effect, Layer, Redacted } from "effect";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 
 import { transport } from "./studio-transport";
 

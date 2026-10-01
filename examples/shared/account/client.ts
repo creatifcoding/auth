@@ -4,8 +4,8 @@ import {
   layer as layerSimpleWebAuthnPasskeyBrowser,
 } from "@yielded/auth-simplewebauthn/Browser";
 import { DateTime, Effect, Layer, Redacted, Schema } from "effect";
-import type { KeyValueStore } from "effect/unstable/persistence";
-import { Atom, type AsyncResult } from "effect/unstable/reactivity";
+import type { KeyValueStore } from "effect/persistence";
+import { Atom, type AsyncResult } from "effect/reactivity";
 
 import type { AuthApi, emailProofPolicy } from "./contract";
 

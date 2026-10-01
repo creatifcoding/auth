@@ -1,19 +1,9 @@
 import * as PgliteClient from "@effect/sql-pglite/PgliteClient";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import { Auth, Proofs, WebCrypto } from "@yielded/auth";
-import {
-  Config,
-  Context,
-  Crypto,
-  Effect,
-  Encoding,
-  FileSystem,
-  Layer,
-  Path,
-  Redacted,
-  Schema,
-} from "effect";
-import { type SqlClient, type SqlError } from "effect/unstable/sql";
+import { Config, Context, Crypto, Effect, FileSystem, Layer, Path, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
+import { type SqlClient, type SqlError } from "effect/sql";
 
 class AppData extends Context.Service<AppData, string>()("customers/AppData") {}
 
@@ -74,8 +64,8 @@ export const KeysLive = Layer.unwrap(
 
     if (!(yield* fs.exists(filename))) {
       const keys = {
-        proof: Redacted.make(Encoding.encodeBase64Url(yield* crypto.randomBytes(32))),
-        binding: Redacted.make(Encoding.encodeBase64Url(yield* crypto.randomBytes(32))),
+        proof: Redacted.make(Base64Url.encode(yield* crypto.randomBytes(32))),
+        binding: Redacted.make(Base64Url.encode(yield* crypto.randomBytes(32))),
       };
 
       yield* fs

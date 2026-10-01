@@ -13,7 +13,7 @@ import type { EffectPgDatabase as PgliteDatabase } from "drizzle-orm/effect-pgli
 import type { EffectPgDatabase as PostgresDatabase } from "drizzle-orm/effect-postgres";
 import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Context } from "effect";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlError } from "effect/sql/SqlError";
 
 import type {
   AuthenticationAuthorityMapping,

@@ -30,7 +30,7 @@ import { eq, is, isNotNull, lte, or, SQL, sql, type AnyRelations, type Table } f
 import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Cause, DateTime, Effect, Predicate, Redacted, Schema, Context } from "effect";
-import type { Statement } from "effect/unstable/sql/Statement";
+import type { Statement } from "effect/sql/Statement";
 
 import { balancedD1And as and, compactD1GeneratedStatement } from "./d1-generated-statement";
 import { passwordD1Kernel as kernel } from "./d1-passwords";
@@ -791,10 +791,7 @@ const makePreparedPlans = (mapping: Mapping, proofMapping?: any) => {
             Effect.catchCause(
               (
                 cause,
-              ): Effect.Effect<
-                never,
-                PasswordRejected | import("effect/unstable/sql/SqlError").SqlError
-              > =>
+              ): Effect.Effect<never, PasswordRejected | import("effect/sql/SqlError").SqlError> =>
                 everyFailureMatches(cause, (failure) =>
                   kernel.isGuardFailure(
                     failure,

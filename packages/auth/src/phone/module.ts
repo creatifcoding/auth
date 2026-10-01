@@ -1,4 +1,5 @@
-import { Crypto, DateTime, Effect, Encoding, Layer, Option, Schema } from "effect";
+import { Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { makeAuthStrategy } from "../auth/AuthStrategy";
 import { cryptoLayer, defaultLayer, hooksLayer } from "../auth/defaults";
@@ -152,7 +153,7 @@ export const makePhoneOtp = <
 
     const base = {
       flowId: request.flowId,
-      contextDigest: TokenDigest.make(Encoding.encodeBase64Url(digest)),
+      contextDigest: TokenDigest.make(Base64Url.encode(digest)),
       identifier: LoginIdentifier.make({ namespace: "phone", value: request.phoneNumber }),
     };
 

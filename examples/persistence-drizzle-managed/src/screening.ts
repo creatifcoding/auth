@@ -1,6 +1,7 @@
 import { Password, WebCrypto } from "@yielded/auth";
-import { Crypto, Effect, Encoding, Layer, Redacted, Schema } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { Crypto, Effect, Layer, Redacted, Schema } from "effect";
+import { Hex } from "effect/encoding";
+import { HttpClient } from "effect/http";
 
 const Suffixes = Schema.Array(Schema.String.check(Schema.isPattern(/^[A-F0-9]{35}:[0-9]+$/)));
 
@@ -26,7 +27,7 @@ export const ScreeningLive = Layer.effect(
           )
             return { _tag: "Rejected", reason: "contextual" } as const;
 
-          const hash = Encoding.encodeHex(
+          const hash = Hex.encode(
             yield* crypto.digest("SHA-1", new TextEncoder().encode(value)),
           ).toUpperCase();
 

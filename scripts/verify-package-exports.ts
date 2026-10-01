@@ -10,6 +10,7 @@ const Manifest = Schema.Struct({
   name: Schema.String,
   private: Schema.optionalKey(Schema.Boolean),
   exports: Dependencies,
+  bin: Schema.optionalKey(Dependencies),
   dependencies: Schema.optionalKey(Dependencies),
   optionalDependencies: Schema.optionalKey(Dependencies),
   peerDependencies: Schema.optionalKey(Dependencies),
@@ -150,7 +151,16 @@ export const verifyPackageExports = Effect.fn("verifyPackageExports")(
 
       if (!manifest.private) {
         const filenames = new Set(yield* fs.readDirectory(path.join(root, base, "src")));
-        const targets = Object.values(manifest.exports);
+        const bins = Object.values(manifest.bin ?? {});
+
+        for (const binary of bins)
+          if (!/^\.\/dist\/[A-Za-z][A-Za-z0-9_-]*\.mjs$/.test(binary))
+            report(pkg.file, `${binary} must be a flat ./dist/command.mjs binary`);
+
+        const targets = [
+          ...Object.values(manifest.exports),
+          ...bins.map((binary) => binary.replace("./dist/", "./src/").replace(/\.mjs$/, ".ts")),
+        ];
 
         for (const filename of filenames) {
           if (filename.endsWith(".ts") && !targets.includes(`./src/${filename}`)) {

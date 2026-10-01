@@ -1,5 +1,6 @@
 import { Hooks, Identity, Password, Schema as AuthSchema, Sessions } from "@yielded/auth";
-import { Crypto, DateTime, Effect, Encoding, Layer, Redacted, Schema } from "effect";
+import { Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { AppAuth } from "./auth";
 import { Username } from "./contract";
@@ -151,7 +152,7 @@ export const AccountMethodsLive = Layer.effect(
           const evidence: Sessions.AuthenticationEvidence = {
             revision: original,
             flowId,
-            bindingDigest: AuthSchema.TokenDigest.make(Encoding.encodeBase64Url(digest)),
+            bindingDigest: AuthSchema.TokenDigest.make(Base64Url.encode(digest)),
             proofs: [
               {
                 method: "password",

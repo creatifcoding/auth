@@ -2,8 +2,8 @@ import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import { Client, Http, Password, Proofs } from "@yielded/auth";
 import { ConfigProvider, Context, Effect, FileSystem, Layer } from "effect";
-import { FetchHttpClient, HttpRouter } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { FetchHttpClient, HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 
 import { AppAuth } from "../../shared/account/auth";
 import { AuthApi } from "../../shared/account/contract";

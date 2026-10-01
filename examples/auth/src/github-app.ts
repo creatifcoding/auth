@@ -2,7 +2,7 @@ import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
 import type { Redacted } from "effect";
 import { Config, Effect, Layer } from "effect";
-import { HttpMiddleware, HttpRouter } from "effect/unstable/http";
+import { HttpMiddleware, HttpRouter } from "effect/http";
 
 import { makeExample } from "./oauth-application";
 

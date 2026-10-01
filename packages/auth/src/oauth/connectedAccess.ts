@@ -4,13 +4,13 @@ import {
   Crypto,
   DateTime,
   Effect,
-  Encoding,
   Exit,
   Fiber,
   Layer,
   Redacted,
   Schema,
 } from "effect";
+import { Base64Url } from "effect/encoding";
 
 import { hasCommitScope, type PreparedCommit } from "../hooks/commit";
 import { reportAuthFailure } from "../internal/diagnostics";
@@ -319,7 +319,7 @@ export const makeOAuthConnectedAccess = <const Id extends string>(
 
       const random = Effect.fn("OAuthConnectedAccess.random")(function* () {
         const bytes = yield* randomBytes(32).pipe(Effect.mapError(() => OAuthUnavailable.make({})));
-        const result = OAuthClaimId.make(Encoding.encodeBase64Url(bytes));
+        const result = OAuthClaimId.make(Base64Url.encode(bytes));
 
         bytes.fill(0);
 
