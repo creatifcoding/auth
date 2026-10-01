@@ -44,6 +44,7 @@ const manifestFields = {
   devDependencies: Schema.optionalKey(DependencyMap),
   optionalDependencies: Schema.optionalKey(DependencyMap),
   peerDependencies: Schema.optionalKey(DependencyMap),
+  bin: Schema.optionalKey(DependencyMap),
 };
 
 export const PublishManifest = Schema.StructWithRest(
@@ -266,6 +267,13 @@ export const withPublishManifests = <A, E, R>(
             }
           }
           mutable[section] = resolved;
+        }
+        for (const binary of Object.values(pkg.manifest.bin ?? {})) {
+          if (!(yield* fs.exists(path.join(pkg.directory, binary))))
+            return yield* ReleaseError.make({
+              package: pkg.manifest.name,
+              reason: "Missing built binary: " + binary,
+            });
         }
         const exports: Record<string, { types: string; default: string }> = {};
 

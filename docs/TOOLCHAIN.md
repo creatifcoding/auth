@@ -14,19 +14,22 @@ Use `vp help` and command help for task options. Include `vp env doctor` output
 when investigating toolchain failures.
 
 Shared strict compiler settings live in `tsconfig.base.json`. Public packages
-use Effect as a peer and the exact catalog pin for development. Upgrade the
+use Effect as a peer and the exact catalog pin for development; the standalone
+patch CLI bundles its tooling dependencies. Upgrade the
 Effect family together and rerun installation and the handoff gate. Vite+ 0.3.3
 bundles Vitest 4.1.11. Root overrides pin `vitest` and `@effect/vitest` to the catalog,
 which keeps Effect's test integration on that Vitest despite its Vitest 5 peer range,
 matching Effect Agent; keep the catalog `vitest` pin equal to the bundled version. The `preferTypedSchemaDecoder` diagnostic follows the reference repository's disabled
 setting until the upstream TypeScript-Go panic is resolved.
 
-The root `patchedDependencies` carries a temporary Effect compatibility patch for
-the pinned Drizzle, Alchemy, and Distilled packages. It forwards their retired
-imports and schema helper to the installed implementations, keeping one Effect
-runtime. Repository code and documentation use the current APIs. Remove the patch
-when those dependencies publish compatible releases; rerun `vp run ready` and
-`vp run docs:plan --help` to verify both consumers and the deployment CLI.
+The root `patchedDependencies` carries a Drizzle patch from
+`@yielded/drizzle-effect-v4-patch` and an Effect compatibility patch for Alchemy
+and Distilled. The patch CLI configures the same Drizzle asset for Bun consumers;
+it bundles its own tooling dependencies
+and adds no application runtime dependency. The repository's Effect shim forwards
+retired APIs to the installed implementations. Remove these patches when their
+upstream dependencies publish compatible releases; rerun `vp run ready` and
+`vp run docs:plan --help` to verify consumers and the deployment CLI.
 
 Library code lives in `packages/*`; public consumer examples are leaf workspaces
 under `examples/*`. Internal adapter fixtures belong to the package's `test/fixtures`.
@@ -47,6 +50,10 @@ including types and services accessed through their module namespace. Keep direc
 paths for adapter entrypoints, test helpers, and examples of subpath or lazy imports.
 Internal imports go directly to their owning implementation, without routing
 through self-barrels.
+
+CLI packages declare flat `./dist/command.mjs` binaries with matching
+`src/command.ts` pack entries. They may have an empty export map. Export and purity
+checks cover these executable entries, and publishing checks the built binaries.
 
 The export check validates casing, namespace targets, build entries, and workspace
 dependencies, including relative imports through the package's own public barrels.
@@ -97,7 +104,8 @@ Before enabling automated releases:
 3. Configure npm trusted publishing for each published package, including
    `@yielded/auth`, `@yielded/auth-persistence`, `@yielded/auth-persistence-drizzle`,
    `@yielded/auth-simplewebauthn`, `@yielded/auth-react-native`,
-   `@yielded/auth-openid-client`, `@yielded/auth-cloudflare`, and `@yielded/auth-crypto`, repository
+   `@yielded/auth-openid-client`, `@yielded/auth-cloudflare`, `@yielded/auth-crypto`,
+   and `@yielded/drizzle-effect-v4-patch`, repository
    `yielded-dev/auth`, workflow `release.yml`. The first npm publication may
    require a manually authenticated owner before trusted publishing can be set.
    Enable direct `npm publish` for this trusted publisher; the release workflow

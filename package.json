@@ -118,6 +118,7 @@
     "react-native-passkey": "3.6.2"
   },
   "patchedDependencies": {
+    "drizzle-orm@1.0.0-rc.5-ab785fc": "packages/drizzle-effect-v4-patch/patches/drizzle-orm@1.0.0-rc.5-ab785fc.patch",
     "effect@4.0.0": "patches/effect@4.0.0.patch"
   }
 }

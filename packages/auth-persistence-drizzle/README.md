@@ -8,6 +8,10 @@ Import mapping helpers from the root and a driver from its explicit module, such
 as `/Postgres` or `/SqliteBun`. Install `drizzle-orm` and the corresponding Effect
 SQL driver. Each driver exposes `AuthPersistence` and the lower-level factories.
 
+The currently pinned Drizzle release needs the temporary
+[@yielded/drizzle-effect-v4-patch](../drizzle-effect-v4-patch/README.md) in Bun
+consumers.
+
 Applications own subjects, policy, claims, delivery, and database connections.
 Drizzle Kit generates migrations from managed or application-declared tables.
 Provide `AuthPersistence.migrationsLayer({ migrationsFolder })` explicitly to

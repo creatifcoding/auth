@@ -261,11 +261,19 @@ as `Uint8Array`. Match application-owned column codecs to these values; use
 `sql.json` for JSON parameters. Set `prepare: false` for poolers that cannot retain
 prepared statements between queries.
 
-The pinned Drizzle release currently needs the temporary compatibility patch
-included in the [starter](../guide/getting-started). In an existing Bun app, copy
-the repository's [`patchedDependencies` entry](https://github.com/yielded-dev/auth/blob/main/package.json)
-and its referenced file from [`patches/`](https://github.com/yielded-dev/auth/tree/main/patches)
-before installing dependencies.
+The pinned Drizzle release needs a temporary compatibility patch. In a Bun app, install your
+dependencies and run this from the workspace that depends on Drizzle:
+
+```sh
+bunx @yielded/drizzle-effect-v4-patch@beta patch
+```
+
+The CLI updates Drizzle's declarations and schema helper, then runs `bun install`.
+Commit the generated patch, root manifest, and lockfile. It accepts only the
+verified Drizzle build; RC4 is not supported. See the
+[patch package](https://github.com/yielded-dev/auth/tree/main/packages/drizzle-effect-v4-patch)
+for the exact supported build. Run the same command with `unpatch` before upgrading
+to a compatible upstream release. No lifecycle hook is required.
 
 Standalone libSQL operations reject any ambient libSQL transaction, including one
 belonging to another client. Use the explicit transaction coordinators when

@@ -368,8 +368,23 @@
         "@simplewebauthn/server",
       ],
     },
+    "packages/drizzle-effect-v4-patch": {
+      "name": "@yielded/drizzle-effect-v4-patch",
+      "version": "0.1.0-beta.0",
+      "bin": {
+        "yielded-drizzle-effect": "./dist/cli.mjs",
+      },
+      "devDependencies": {
+        "@effect/platform-node": "catalog:",
+        "@types/node": "catalog:",
+        "effect": "catalog:",
+        "typescript": "catalog:",
+        "vite-plus": "catalog:",
+      },
+    },
   },
   "patchedDependencies": {
+    "drizzle-orm@1.0.0-rc.5-ab785fc": "packages/drizzle-effect-v4-patch/patches/drizzle-orm@1.0.0-rc.5-ab785fc.patch",
     "effect@4.0.0": "patches/effect@4.0.0.patch",
   },
   "overrides": {
@@ -1516,6 +1531,8 @@
     "@yielded/auth-react-native": ["@yielded/auth-react-native@workspace:packages/auth-react-native"],
 
     "@yielded/auth-simplewebauthn": ["@yielded/auth-simplewebauthn@workspace:packages/auth-simplewebauthn"],
+
+    "@yielded/drizzle-effect-v4-patch": ["@yielded/drizzle-effect-v4-patch@workspace:packages/drizzle-effect-v4-patch"],
 
     "@yielded/example-auth": ["@yielded/example-auth@workspace:examples/auth"],
 
