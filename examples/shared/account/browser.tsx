@@ -28,10 +28,12 @@ interface AccountAppOptions {
   readonly description: string;
   readonly minimumPasswordLength: number;
   readonly username?: boolean;
+  readonly emailDeliveryHint?: string;
 }
 
 export const mountAccountApp = (client: AccountClient, options: AccountAppOptions) => {
   const minimumPasswordLength = options.minimumPasswordLength;
+  const emailDeliveryHint = options.emailDeliveryHint ?? "Check your inbox and spam folder.";
 
   const {
     auth,
@@ -282,7 +284,8 @@ export const mountAccountApp = (client: AccountClient, options: AccountAppOption
               required
             />
             <p className="hint">
-              If your account has a verified email address, we’ll send a reset code.
+              If your account has a verified email address, we’ll send a reset code.{" "}
+              {emailDeliveryHint}
             </p>
             <button className="primary" disabled={loading || requested.waiting}>
               {requested.waiting ? "Sending…" : "Send reset code"}
@@ -303,7 +306,8 @@ export const mountAccountApp = (client: AccountClient, options: AccountAppOption
             <p className="hint">
               {expired
                 ? "This code has expired. Request a new code."
-                : `Enter the code sent to ${challenge.email}, then choose a new password.`}
+                : `Enter the code sent to ${challenge.email}, then choose a new password.`}{" "}
+              {emailDeliveryHint}
             </p>
             <label htmlFor="reset-code">Email code</label>
             <input
@@ -413,7 +417,7 @@ export const mountAccountApp = (client: AccountClient, options: AccountAppOption
         </button>
         {challenge !== null && (
           <p className="hint">
-            Check your inbox and spam folder. You can refresh this page and still enter your code.
+            {emailDeliveryHint} You can refresh this page and still enter your code.
           </p>
         )}
         <Failure
@@ -632,7 +636,7 @@ export const mountAccountApp = (client: AccountClient, options: AccountAppOption
         )}
         <footer>
           <p>Yielded Auth · {options.description}</p>
-          <p>Email delivered by Cloudflare</p>
+          <p>Email verification · Password recovery</p>
         </footer>
       </main>
     );

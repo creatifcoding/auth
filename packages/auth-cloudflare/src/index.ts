@@ -1,10 +1,6 @@
 export {
-  AuthStoreObject,
-  makeAuthStoreDurableObject,
-  layerAuthStoreClient,
-  layerAuthStore,
   AuthEmail,
-  type EmailOtpContentInput,
-  type EmailOtpContent,
-  layerEmailOtpSender,
+  EmailRenderer,
+  type EmailContent,
+  layerEmailProofDelivery,
 } from "./internal/cloudflare";

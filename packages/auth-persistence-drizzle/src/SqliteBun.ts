@@ -3,30 +3,12 @@ import { type EffectSQLiteBunDatabase, makeWithDefaults } from "drizzle-orm/effe
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect } from "effect";
 
+import { sqlClientEmailStandaloneGuard } from "./drizzle/email-target";
 import type {
-  AuthStoreTables,
-  AuthTables,
   ExternalIdentityTables,
   IdentityTables,
-  OAuthStateTables,
   SubjectProvisioningTables,
 } from "./drizzle/model";
-import {
-  coordinateSqliteAuthStoreTransaction,
-  coordinateSqliteAuthTransaction,
-  coordinateSqliteOAuthStateTransaction,
-  makeSqliteAuthServices,
-  makeSqliteAuthStoreServices,
-  makeSqliteOAuthStateServices,
-} from "./drizzle/sqlite";
-
-export {
-  coordinateSqliteAuthStoreTransaction as coordinateAuthStoreTransaction,
-  coordinateSqliteAuthTransaction as coordinateAuthTransaction,
-  coordinateSqliteOAuthStateTransaction as coordinateOAuthStateTransaction,
-};
-
-import { sqlClientEmailStandaloneGuard } from "./drizzle/email-target";
 import { sqlClientPasswordStandaloneGuard } from "./drizzle/password-target";
 import { sqlClientProofStandaloneGuard } from "./drizzle/proof-target";
 import { sqlClientSessionStandaloneGuard } from "./drizzle/session-target";
@@ -95,25 +77,6 @@ export const {
 } = sessionTarget;
 
 export const commitMode = "interactive" as const;
-
-export const makeAuthStoreServices = <C extends AnySQLiteTable, R extends AnySQLiteTable>(
-  database: EffectSQLiteBunDatabase<AnyRelations>,
-  mapping: AuthStoreTables<C, R>,
-) => makeSqliteAuthStoreServices(database, mapping);
-
-export const makeOAuthStateServices = <S extends AnySQLiteTable>(
-  database: EffectSQLiteBunDatabase<AnyRelations>,
-  mapping: OAuthStateTables<S>,
-) => makeSqliteOAuthStateServices(database, mapping);
-
-export const makeAuthServices = <
-  C extends AnySQLiteTable,
-  R extends AnySQLiteTable,
-  S extends AnySQLiteTable,
->(
-  database: EffectSQLiteBunDatabase<AnyRelations>,
-  mapping: AuthTables<C, R, S>,
-) => makeSqliteAuthServices(database, mapping);
 
 export const makeIdentityServices = <
   Subject extends AnySQLiteTable,

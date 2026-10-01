@@ -1,7 +1,7 @@
 {
   "name": "@yielded/auth-cloudflare",
   "version": "0.1.0-beta.0",
-  "description": "Cloudflare Durable Object storage and email delivery for Yielded Auth.",
+  "description": "Cloudflare email delivery for Yielded Auth authentication strategies.",
   "homepage": "https://yielded.dev/auth/",
   "bugs": {
     "url": "https://github.com/yielded-dev/auth/issues"

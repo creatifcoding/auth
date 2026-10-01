@@ -3,6 +3,9 @@ title: Examples
 description: Application compositions for authentication, persistence, and HTTP clients.
 ---
 
+For a complete app, [run the downloadable starter](./getting-started#run-the-starter).
+It includes local email delivery and persistent SQLite storage.
+
 Use these source references to connect Yielded Auth to your application's accounts,
 database, and request handlers. Each composition uses the package's public API.
 
@@ -30,15 +33,11 @@ shows provider and application wiring.
 
 ## Database adapters
 
-| Source                                                                                                 | Integration                |
-| ------------------------------------------------------------------------------------------------------ | -------------------------- |
-| [SQLite on Bun](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-sqlite-bun.ts) | Drizzle and SQLite on Bun. |
-| [SQLite WASM](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-sqlite-wasm.ts)  | Drizzle and SQLite WASM.   |
-
-The [Node SQLite](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-sqlite-node.ts)
-and [libSQL](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/drizzle-libsql.ts)
-files provide additional composition references. See [adapters and persistence](../reference/adapters)
-for transaction and retry requirements.
+The [runnable persistence apps](../reference/adapters#runnable-examples) share the
+same account workflows with managed Drizzle, application-owned Drizzle, raw SQL,
+or custom services. Start with the managed Drizzle app for local SQLite setup.
+The [adapter reference](../reference/adapters) lists the supported drivers and
+explains transaction and retry requirements.
 
 ## HTTP and browser clients
 

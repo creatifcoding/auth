@@ -11,6 +11,8 @@ const client = makeClient(
 
 mountAccountApp(client, {
   number: "01",
-  description: "Managed persistence example",
+  description: "Account starter",
+  emailDeliveryHint:
+    "Local delivery saves codes in .data/mail/. Cloudflare delivery sends them to your inbox.",
   minimumPasswordLength,
 });

@@ -179,6 +179,26 @@ interval (`0` when unsupported). `AuthDependencies` supplies the shared
 [session, account, and key configuration](../reference/adapters#compose-the-application-layer).
 For database-backed lookup, use [the email adapter](../reference/adapters#email).
 
+### Cloudflare Worker delivery
+
+`@yielded/auth-cloudflare` implements `EmailProofDelivery` through an `effect-cf`
+email binding:
+
+```ts
+import { layerEmailProofDelivery } from "@yielded/auth-cloudflare";
+
+export const EmailDeliveryLive = layerEmailProofDelivery({
+  binding: "AUTH_EMAIL",
+  from: "hello@example.com",
+});
+```
+
+Provide this Layer to your auth composition and supply the Worker environment.
+The default renderer sends numeric verification and reset codes. Supply the
+adapter's `EmailRenderer` service for localized content or magic links.
+Delivery awaits provider acceptance; an uncertain send is recorded as ambiguous
+and is not automatically retried. Acceptance does not prove inbox delivery.
+
 For new accounts use `Email.makeRegistration`; for verified-address management
 use `Email.makeAddresses`. Verification alone does not sign in or link an account.
 See [email persistence](../reference/adapters#email) for those transaction boundaries.

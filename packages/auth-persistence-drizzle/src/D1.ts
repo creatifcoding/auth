@@ -52,30 +52,14 @@ export {
   makeD1EmailSignInServices as makeEmailSignInServices,
 } from "./drizzle/d1-emails";
 
-import { type AuthTables, type D1GeneratedIdentityMapping } from "./drizzle/model";
-import {
-  makeSqliteAuthServices,
-  makeSqliteAuthStoreServices,
-  makeSqliteOAuthStateServices,
-} from "./drizzle/sqlite";
+import { type D1GeneratedIdentityMapping } from "./drizzle/model";
 
 export {
   makeD1ExternalIdentityServices as makeExternalIdentityServices,
   makeD1SubjectProvisioningServices as makeSubjectProvisioningServices,
-  makeSqliteAuthStoreServices as makeAuthStoreServices,
-  makeSqliteOAuthStateServices as makeOAuthStateServices,
 };
 
 export const commitMode = "batch" as const;
-
-export const makeAuthServices = <
-  C extends AnySQLiteTable,
-  R extends AnySQLiteTable,
-  S extends AnySQLiteTable,
->(
-  database: EffectSQLiteD1Database<AnyRelations>,
-  mapping: AuthTables<C, R, S>,
-) => makeSqliteAuthServices(database, mapping);
 
 export const makeIdentityServices = <
   Subject extends AnySQLiteTable,
