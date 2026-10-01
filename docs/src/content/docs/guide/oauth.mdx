@@ -3,6 +3,8 @@ title: OAuth
 description: Sign in with a provider and optionally retain access to its API.
 ---
 
+import { FlowMap, Trace } from "@yielded/starlight-theme/components";
+
 An **app session** identifies your signed-in user. A **provider grant** lets your
 server call a provider's API. Configure both through an OAuth strategy in `Auth.make`.
 Your app owns accounts, claims, and permission policy.
@@ -38,22 +40,56 @@ the strategy encrypts and saves the grant before completing authentication throu
 the same session authority used by passwords, passkeys, and email. Choose stateful,
 stateless, or state-assisted sessions independently.
 
-```mermaid
-sequenceDiagram
-  accTitle: Sign-in with retained API access
-  accDescr: One provider code exchange resolves an existing account, saves an encrypted provider grant, and completes shared authentication.
-  participant Browser
-  participant Provider
-  participant OAuth as OAuth strategy
-  participant Storage as App storage
-  participant Auth as Shared authentication
-  Browser->>Provider: Sign in and consent
-  Provider->>OAuth: Callback
-  OAuth->>Provider: Exchange code once
-  OAuth->>Storage: Resolve existing identity and retain encrypted grant
-  OAuth->>Auth: Complete authentication
-  Auth-->>Browser: Session or additional authentication required
-```
+<Trace
+  lanes={[
+    { id: "browser", label: "Browser" },
+    { id: "provider", label: "Provider" },
+    { id: "library", label: "Yielded Auth" },
+    { id: "app", label: "Your storage" },
+  ]}
+  steps={[
+    {
+      lane: "browser",
+      title: "Start sign-in",
+      detail: "The contract's OAuth `signIn` action starts a single-use flow.",
+    },
+    {
+      lane: "provider",
+      title: "Sign in and consent",
+      detail: "The person signs in at the provider and approves the requested scopes.",
+    },
+    {
+      lane: "library",
+      title: "Receive the callback",
+      code: "/auth/{provider}/callback",
+      detail: "The HTTP adapter routes the provider's callback to the OAuth strategy.",
+    },
+    {
+      lane: "provider",
+      title: "Exchange the code",
+      detail:
+        "The strategy makes a single code exchange. An unknown outcome never permits repeating it.",
+    },
+    {
+      lane: "app",
+      title: "Retain the grant",
+      detail:
+        "Your storage resolves the existing account link and saves the encrypted provider grant.",
+    },
+    {
+      lane: "library",
+      title: "Complete authentication",
+      detail:
+        "Only after the grant is saved does shared authentication deliver the session, as it does for passwords and passkeys.",
+    },
+    {
+      lane: "browser",
+      title: "Read the result",
+      detail:
+        "The browser receives a session or a request for additional authentication. Provider tokens never enter browser results.",
+    },
+  ]}
+/>
 
 Declare the [OAuth actions](../reference/oauth#shared-auth-setup), then configure
 `Http.make` with `GitHub.provider({ clientId, clientSecret, access: [profile] })`.
@@ -71,17 +107,19 @@ use registration first, then connect provider access after authentication.
 
 Under the HTTP middleware, use the regular Auth API:
 
+{/* prettier-ignore */}
 ```ts
-const auth = yield * AppAuth;
-const session = yield * auth.requireSession();
-const connections = yield * auth.listAccountConnections({ limit: 20 });
+const auth = yield* AppAuth;
+const session = yield* auth.requireSession();
+const connections = yield* auth.listAccountConnections({ limit: 20 });
 ```
 
 The server-side connected service handles refresh and token use:
 
+{/* prettier-ignore */}
 ```ts
-const access = yield * AppAuth.strategies.social.access.ConnectedAccess;
-yield * access.withAccessToken(invocation, { grantId, profileKey: profile.key }, readProfile);
+const access = yield* AppAuth.strategies.social.access.ConnectedAccess;
+yield* access.withAccessToken(invocation, { grantId, profileKey: profile.key }, readProfile);
 ```
 
 Provide `AppAuth.strategies.social.access.accessLayer` with the same connected
@@ -100,15 +138,52 @@ See [retained access](../reference/oauth#retained-access) for dependencies and r
 application. `Auth` supplies the application session; the OAuth strategy owns retained
 upstream provider credentials. The two grants stay separate:
 
-```text
-Browser → Application login → OAuthServer consent → MCP client
-                                                      ↓ MCP token
-                                                Effect McpServer
-                                                      ↓ Authenticated subject
-                                             Your handler and policy
-                                                      ↓ Optional provider access
-                                             OAuth strategy → Provider API
-```
+<FlowMap
+  title="Separate MCP and provider grants"
+  description="The browser signs in through your login page and approves the MCP client on the OAuthServer consent page. The MCP client sends its MCP token to Effect McpServer, where the OAuthServer middleware supplies CurrentAccess to your tool handler. When the handler needs provider data, the OAuth strategy uses its provider grant to call the provider API. The MCP grant and the provider grant stay separate."
+  columns={3}
+  nodes={[
+    { id: "browser", at: [1, 1], owner: "external", title: "Browser" },
+    { id: "login", at: [1, 2], owner: "app", title: "Your login page", code: "loginPath" },
+    { id: "consent", at: [1, 3], owner: "library", title: "Consent", code: "OAuthServer.make(…)" },
+    { id: "client", at: [2, 3], owner: "external", title: "MCP client" },
+    {
+      id: "server",
+      at: [3, 3],
+      owner: "external",
+      title: "Effect McpServer",
+      code: "oauth.middleware(…)",
+    },
+    {
+      id: "handler",
+      at: [4, 3],
+      owner: "app",
+      title: "Your tool handler",
+      code: "OAuthServer.CurrentAccess",
+    },
+    {
+      id: "strategy",
+      at: [4, 2],
+      owner: "library",
+      title: "OAuth strategy",
+      note: "Optional provider access",
+    },
+    { id: "provider", at: [4, 1], owner: "external", title: "Provider API" },
+  ]}
+  edges={[
+    { from: "browser", to: "login" },
+    { from: "login", to: "consent" },
+    { from: "consent", to: "client" },
+    { from: "client", to: "server", label: "MCP token" },
+    { from: "server", to: "handler" },
+    { from: "handler", to: "strategy" },
+    { from: "strategy", to: "provider" },
+  ]}
+  groups={[
+    { label: "MCP grant", from: [1, 3], to: [3, 3] },
+    { label: "Provider grant", from: [4, 1], to: [4, 2] },
+  ]}
+/>
 
 Define supported scopes, supply an identity service that verifies your existing
 session, and mount the authorization routes beside Effect's MCP routes:

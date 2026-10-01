@@ -15,10 +15,9 @@ hero:
       variant: secondary
 ---
 
-import { Snippet } from "@yielded/starlight-theme/components";
+import { CallSites, Snippet } from "@yielded/starlight-theme/components";
 
-import CallSites from "../../components/CallSites.astro";
-import OwnershipLadder from "../../components/OwnershipLadder.astro";
+import StorageLadder from "../../components/StorageLadder.astro";
 
 ## One contract, server to client
 
@@ -70,7 +69,7 @@ Keep your customer or employee model. Use managed auth tables, map your own SQL
 schema, or supply storage services for a different backend. Changing storage
 Layers keeps the contract and client intact.
 
-<OwnershipLadder />
+<StorageLadder />
 
 The [database and backend guide](/auth/guide/storage/) explains the choices and
 the durability each implementation must provide. Four

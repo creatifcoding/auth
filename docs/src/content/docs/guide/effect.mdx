@@ -3,6 +3,8 @@ title: Auth in an Effect application
 description: Use Schema for the contract, services for application behavior, Layers for infrastructure, and Effect Atom for the client.
 ---
 
+import { FlowMap } from "@yielded/starlight-theme/components";
+
 Yielded Auth is a set of Effect services. You describe the authentication methods
 your application accepts, supply their dependencies with Layers, and call them
 alongside your other Effects. Your application keeps its accounts, database, and
@@ -14,18 +16,60 @@ authorization policy.
 `Auth.make` binds that contract to server strategies. `Client.make` gives the
 browser a service with the same named actions and typed results.
 
-```mermaid
-flowchart TB
-  accTitle: Auth inside an Effect application
-  accDescr: A shared schema contract defines the server and client. React uses Effect Atom and HttpClient to reach HTTP routes. Server handlers call Auth directly, and Layers supply account and storage services.
-  Contract[AuthContract + Schema] --> Auth[Auth service]
-  Contract --> Client[Client service]
-  React[React] --> Atom[Effect Atom] --> Client
-  Client --> Transport[Effect HttpClient] --> HTTP[HTTP boundary] --> Auth
-  Handler[Application handler] --> Auth
-  Auth --> Accounts[Your accounts and policy]
-  Auth --> Storage[Your storage Layers]
-```
+<FlowMap
+  title="Auth inside an Effect application"
+  description="React dispatches to auth atoms, which call the client service. The client sends contract actions over Effect HttpClient to the auth HTTP routes, which call the Auth service. Your handlers call the same Auth service directly. Both sides import the shared AuthApi contract, and your Layers supply accounts, policy, and storage."
+  columns={3}
+  boundary={{ row: 2, above: "Browser", below: "Server" }}
+  nodes={[
+    { id: "react", at: [1, 1], owner: "app", title: "React", note: "Renders and dispatches" },
+    {
+      id: "atoms",
+      at: [1, 2],
+      owner: "library",
+      title: "Auth atoms",
+      code: "AuthAtom.make(AppClient)",
+    },
+    {
+      id: "client",
+      at: [1, 3],
+      owner: "library",
+      title: "Client service",
+      code: "Client.make(AuthApi, …)",
+    },
+    { id: "contract", at: [2, 2], owner: "app", title: "Shared contract", code: "AuthApi" },
+    { id: "handlers", at: [3, 1], owner: "app", title: "Your handlers", code: "yield* AppAuth" },
+    {
+      id: "auth",
+      at: [3, 2],
+      owner: "library",
+      title: "Auth service",
+      code: "Auth.make(AuthApi, …)",
+    },
+    {
+      id: "routes",
+      at: [3, 3],
+      owner: "library",
+      title: "HTTP routes",
+      code: "Http.layer(AppAuth, …)",
+    },
+    {
+      id: "layers",
+      at: [4, 2],
+      owner: "app",
+      title: "Your Layers",
+      note: "Accounts, policy, storage",
+    },
+  ]}
+  edges={[
+    { from: "react", to: "atoms" },
+    { from: "atoms", to: "client" },
+    { from: "client", to: "routes", label: "Effect HttpClient" },
+    { from: "routes", to: "auth" },
+    { from: "handlers", to: "auth" },
+    { from: "auth", to: "layers" },
+  ]}
+/>
 
 The contract is safe to share with the browser: it contains schemas, not server
 keys or database connections. Adding a server strategy does not expose all its

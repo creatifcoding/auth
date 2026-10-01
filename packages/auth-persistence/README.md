@@ -8,7 +8,7 @@ no Drizzle dependency or exports. Core workflows and replaceable service contrac
 remain in `@yielded/auth`.
 
 `OAuthServerPersistence` supplies independent, single-table consent and grant
-storage for [MCP authorization](../../docs/src/content/docs/guide/oauth.md#authorize-mcp-clients).
+storage for [MCP authorization](../../docs/src/content/docs/guide/oauth.mdx#authorize-mcp-clients).
 Its conditional writes and monotonic revocation require standalone commits.
 
 Applications own subject provisioning, policy, claims, delivery, and their database
