@@ -1,4 +1,5 @@
-import { Context, Effect, Layer, Scope, Semaphore } from "effect";
+import { Context, Effect, Layer, Option, Scope, Semaphore } from "effect";
+import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 
 import type { AnyAuthAction, AuthActions } from "../operations/actions";
 import {
@@ -79,7 +80,11 @@ export type AuthClient<Actions extends AuthActions> = {
 const acquire = Effect.fn("Client.make")(function* <Actions extends AuthActions>(
   contract: { readonly actions: Actions },
   options: ClientOptions,
-): Effect.fn.Return<{ readonly auth: AuthClient<Actions> }, OperationHttpError, Scope.Scope> {
+): Effect.fn.Return<
+  { readonly auth: AuthClient<Actions> },
+  OperationHttpError,
+  Scope.Scope | HttpClient.HttpClient
+> {
   const transport = yield* makeTransport({
     ...options,
     csrfHeader: options.csrf?.header ?? "x-effect-auth-csrf",
@@ -250,14 +255,22 @@ export interface ClientDefinition<
   readonly make: Effect.Effect<
     { readonly auth: AuthClient<Actions> },
     OperationHttpError,
-    Scope.Scope
+    Scope.Scope | HttpClient.HttpClient
   >;
-  readonly layer: Layer.Layer<ClientService<Id, Actions>, OperationHttpError>;
+  readonly layer: Layer.Layer<
+    ClientService<Id, Actions>,
+    OperationHttpError,
+    HttpClient.HttpClient
+  >;
+  /** Client with Fetch transport, credential mode and redirect defaults configured.
+   * Supply Fetch/RequestInit defaults when constructing this Layer. */
+  readonly layerFetch: Layer.Layer<ClientService<Id, Actions>, OperationHttpError>;
 }
 
 /** Define a yieldable client without acquiring resources. Provide its layer once
  * in the application Scope, or yield its make Effect for direct acquisition.
- * Every instance owns its credential settlement and scoped Atom subscriptions. */
+ * Supply a non-retrying HttpClient at either boundary. Every instance owns its
+ * credential settlement and scoped Atom subscriptions. */
 export const make = <const Id extends string, Actions extends AuthActions>(
   contract: { readonly namespace: Id; readonly actions: Actions },
   options: ClientOptions,
@@ -268,6 +281,25 @@ export const make = <const Id extends string, Actions extends AuthActions>(
   >()(`${contract.namespace}/client`);
 
   const create = acquire(contract, options);
+  const layer = Layer.effect(service, create);
 
-  return Object.assign(service, { contract, make: create, layer: Layer.effect(service, create) });
+  const fetchOptions = Layer.effect(
+    FetchHttpClient.RequestInit,
+    Effect.map(
+      Effect.serviceOption(FetchHttpClient.RequestInit),
+      (defaults): globalThis.RequestInit => ({
+        ...Option.getOrUndefined(defaults),
+        credentials: options.native === undefined ? "include" : "omit",
+        redirect: "error",
+      }),
+    ),
+  );
+
+  // Fetch captures its construction context. Do not share a differently
+  // configured transport through another client's Atom memo map.
+  const layerFetch = layer.pipe(
+    Layer.provide(Layer.fresh(FetchHttpClient.layer).pipe(Layer.provide(fetchOptions))),
+  );
+
+  return Object.assign(service, { contract, make: create, layer, layerFetch });
 };

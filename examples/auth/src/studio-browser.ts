@@ -7,7 +7,7 @@ import { transport } from "./studio-transport";
 
 /** Keep this effect's scope open for the browser application. Render `current`
  * in the control registry and all account atoms in the current subject registry.
- * The host supplies the finite private reveal collector used for TOTP setup. */
+ * The host supplies an Effect HttpClient and the finite TOTP private reveal collector. */
 export const makeStudioBrowser = Effect.fn("Studio.browser")(function* (
   options: Fetch.OperationFetchOptions,
   initialSubject: string | null = null,

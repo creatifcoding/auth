@@ -1,10 +1,69 @@
+import { it } from "@effect/vitest";
 import * as AuthAtom from "@yielded/auth/Atom";
 import * as AuthContract from "@yielded/auth/AuthContract";
 import * as Client from "@yielded/auth/Client";
-import { Deferred, Effect, Schema } from "effect";
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect";
+import { TestClock } from "effect/testing";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import type { Atom } from "effect/unstable/reactivity";
 import { AsyncResult, AtomRegistry } from "effect/unstable/reactivity";
 import { expect, test } from "vite-plus/test";
+
+// e2ca72c admitted credential requests without a deadline; a stalled response
+// blocked account transitions and Scope cleanup even with an outer timeout.
+it.effect("bounds credential admission without retrying and releases its request Scope", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>();
+    const response = yield* Deferred.make<Response>();
+    let calls = 0;
+    let aborted = false;
+
+    const AppClient = Client.make(
+      AuthContract.make("test/admission-deadline", { claims: Schema.Struct({}) }),
+      {
+        baseUrl: "https://example.test",
+      },
+    );
+
+    const httpClient = HttpClient.make((request, _url, signal) =>
+      Effect.gen(function* () {
+        calls++;
+        signal.addEventListener(
+          "abort",
+          () => {
+            aborted = true;
+          },
+          { once: true },
+        );
+        yield* Deferred.succeed(entered, undefined);
+
+        return HttpClientResponse.fromWeb(request, yield* Deferred.await(response));
+      }),
+    );
+
+    const fiber = yield* AppClient.make.pipe(
+      Effect.flatMap(({ auth }) => auth.signOut()),
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.result,
+      Effect.scoped,
+      Effect.forkChild,
+    );
+
+    yield* Deferred.await(entered);
+    yield* TestClock.adjust("30 seconds");
+    const observed = fiber.pollUnsafe();
+
+    // Release the old implementation as well, so a red assertion cannot hang cleanup.
+    yield* Deferred.succeed(response, Response.json({ _tag: "Success" }));
+    yield* Fiber.await(fiber);
+    expect(observed).toMatchObject({
+      _tag: "Success",
+      value: { _tag: "Failure", failure: { _tag: "OperationHttpError", reason: "timeout" } },
+    });
+    expect(calls).toBe(1);
+    expect(aborted).toBe(true);
+  }),
+);
 
 test("latest named authentication settles after interrupted admission and failures discard previous values", () =>
   Effect.runPromise(
@@ -32,22 +91,33 @@ test("latest named authentication settles after interrupted admission and failur
 
         const AppClient = Client.make(authContract, {
           baseUrl: "https://example.test",
-          fetch: () => {
+        });
+
+        const httpClient = HttpClient.make((request) =>
+          Effect.gen(function* () {
             calls++;
             if (calls === 1)
-              return Promise.resolve(Response.json({ _tag: "Success", value: "old-member" }));
+              return HttpClientResponse.fromWeb(
+                request,
+                Response.json({ _tag: "Success", value: "old-member" }),
+              );
             if (calls === 2)
-              return Promise.resolve(Response.json({ _tag: "Failure", error: "denied" }));
+              return HttpClientResponse.fromWeb(
+                request,
+                Response.json({ _tag: "Failure", error: "denied" }),
+              );
             const entered = calls === 3 ? enteredFirst : enteredSecond;
             const response = calls === 3 ? first : second;
 
-            return Effect.runPromise(
-              Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(response))),
-            );
-          },
-        });
+            yield* Deferred.succeed(entered, undefined);
 
-        const auth = AuthAtom.make(AppClient);
+            return HttpClientResponse.fromWeb(request, yield* Deferred.await(response));
+          }),
+        );
+
+        const auth = AuthAtom.make(AppClient, {
+          httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+        });
 
         const r = yield* Effect.acquireRelease(
           Effect.sync(() => AtomRegistry.make()),

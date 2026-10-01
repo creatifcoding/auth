@@ -54,6 +54,7 @@ export default defineConfig({
           label: "Reference",
           items: [
             { label: "Public modules", slug: "reference/modules" },
+            { label: "Client & Atom", slug: "reference/client" },
             { label: "OAuth", slug: "reference/oauth" },
             { label: "iOS passkeys", slug: "reference/passkey-react-native" },
           ],
