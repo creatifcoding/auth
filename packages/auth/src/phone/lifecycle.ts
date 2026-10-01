@@ -109,7 +109,7 @@ export const makePhoneLifecycle = <
     readonly lifecycle?: PhoneLifecyclePolicy;
   },
 ) => {
-  const ClaimsForPhone = makePhoneClaims<Id, Claims>(moduleId);
+  const SessionClaims = makePhoneClaims<Id, Claims>(moduleId);
 
   const { sessions } = options,
     policy = Object.freeze({ ...(options.lifecycle ?? defaultPhoneLifecyclePolicy) }),
@@ -520,7 +520,10 @@ export const makePhoneLifecycle = <
             ],
           };
 
-        const claims = yield* (yield* ClaimsForPhone).resolve(credential);
+        const claims = yield* (yield* SessionClaims).resolve({
+          subjectId: credential.revision.subjectId,
+          credential,
+        });
 
         const established = yield* (yield* sessions.AuthenticationCompletion)
           .prepare({ evidence, claims })
@@ -586,7 +589,7 @@ export const makePhoneLifecycle = <
   };
 
   return Object.freeze({
-    ClaimsForPhone,
+    SessionClaims,
     binding,
     proof,
     Result,

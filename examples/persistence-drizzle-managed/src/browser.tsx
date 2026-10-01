@@ -11,7 +11,7 @@ const client = makeClient(
 
 mountAccountApp(client, {
   number: "01",
-  description: "Account starter",
+  description: "Managed Drizzle",
   emailDeliveryHint:
     "Local delivery saves codes in .data/mail/. Cloudflare delivery sends them to your inbox.",
   minimumPasswordLength,

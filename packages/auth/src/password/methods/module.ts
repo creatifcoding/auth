@@ -173,12 +173,14 @@ const makePasswordWithManagement = <
     }
   >(`effect-auth/password/${moduleId}/RegistrationAuthority`);
 
-  const ClaimsForPassword = Context.Service<
+  /** Supply application session claims for the verified password's subject. */
+  const SessionClaims = Context.Service<
     MethodService<Id, "claims"> & { readonly claims: Types.Invariant<Claims["Type"]> },
     {
-      readonly resolve: (
-        credential: PasswordCredentialSnapshot,
-      ) => Effect.Effect<Claims["Type"], PasswordUnavailable>;
+      readonly resolve: (input: {
+        readonly subjectId: SubjectId;
+        readonly credential: PasswordCredentialSnapshot;
+      }) => Effect.Effect<Claims["Type"], PasswordUnavailable>;
     }
   >(`effect-auth/password/${moduleId}/Claims`);
 
@@ -293,7 +295,7 @@ const makePasswordWithManagement = <
       const hasher = yield* PasswordHashing;
       const checker = yield* NewPasswordCheck;
       const actionEvidence = yield* PasswordActionEvidence;
-      const claims = yield* ClaimsForPassword;
+      const claims = yield* SessionClaims;
       const authority = yield* AuthenticationAuthority;
       const completion = yield* sessions.AuthenticationCompletion;
       const strategy = yield* sessions.SessionStrategy;
@@ -570,9 +572,12 @@ const makePasswordWithManagement = <
         signIn: Effect.fn("Passwords.signIn")(function* (request) {
           const verified = yield* verifyPassword(request, "sign-in");
 
-          const values = yield* claims.resolve(
-            yield* snapshotPasswordCredential(verified.credential),
-          );
+          const credential = yield* snapshotPasswordCredential(verified.credential);
+
+          const values = yield* claims.resolve({
+            subjectId: credential.revision.subjectId,
+            credential,
+          });
 
           // Settlement is already committed. No physical owner surrounds async session
           // planning; final authority compares the SAME original semantic revisions.
@@ -941,7 +946,7 @@ const makePasswordWithManagement = <
       ),
     Passwords,
     RegistrationAuthority,
-    ClaimsForPassword,
+    SessionClaims,
     layer,
     handlersLayer,
     operations,

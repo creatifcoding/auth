@@ -91,7 +91,7 @@ The strategy handles code generation and verification. Supply these implementati
 | `PhonePersistenceLive`     | Finds the account for a phone number and enforces admission limits. | Your database, using a library adapter below. |
 | `ProofPersistenceLive`     | Stores code digests, expiry, failed attempts, and consumption.      | Your database, using a library adapter below. |
 | `PhoneDeliveryEligibility` | Decides which destination numbers you support.                      | Your application policy.                      |
-| `ClaimsForPhone`           | Returns the session fields declared in `AppAuth.claims`.            | Your application.                             |
+| `SessionClaims`            | Returns the session fields declared in `AppAuth.claims`.            | Your application.                             |
 | `SmsDelivery`              | Sends the message.                                                  | `Twilio.layer` or another transport.          |
 
 `PhonePersistenceLive` and `ProofPersistenceLive` are names for the Layers you build
@@ -137,8 +137,8 @@ export const PhoneLive = Layer.mergeAll(
   Layer.succeed(PhoneOtp.PhoneDeliveryEligibility, {
     allowed: (number) => Effect.succeed(number.startsWith("+1")),
   }),
-  Layer.succeed(AppAuth.strategies.phone.ClaimsForPhone, {
-    resolve: ({ phoneNumber }) => Effect.succeed({ phoneNumber }),
+  Layer.succeed(AppAuth.strategies.phone.SessionClaims, {
+    resolve: ({ credential }) => Effect.succeed({ phoneNumber: credential.phoneNumber }),
   }),
   SmsLive,
 );
@@ -151,8 +151,7 @@ export const AuthLive = AppAuth.layer.pipe(
 
 This example allows `+1` destinations and stores the **verified** phone number
 in the session. Replace the prefix check with your supported destinations. To add
-account fields to claims, query your account using `snapshot.revision.subjectId`
-inside `resolve` and return the fields declared in `AppAuth.claims`.
+account fields to claims, accept `resolve: ({ subjectId }) => …` and query your account by that ID and return the fields declared in `AppAuth.claims`.
 
 `TwilioConfigLive` loads credentials from Effect Config; use `messagingServiceSid`
 instead of `from` for a Twilio Messaging Service. The adapter uses Effect HTTP and

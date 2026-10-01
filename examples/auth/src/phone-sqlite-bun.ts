@@ -100,12 +100,12 @@ export const phoneConsumer = Effect.gen(function* () {
     phoneStorage,
     Layer.succeed(Proofs.ProofPersistence, proofServices.proofPersistence),
     Layer.succeed(Sessions.AuthenticationAuthority, authority.authenticationAuthority),
-    Layer.succeed(phone.ClaimsForPhone, {
-      resolve: (snapshot) =>
+    Layer.succeed(phone.SessionClaims, {
+      resolve: ({ subjectId }) =>
         database
           .select()
           .from(customer)
-          .where(eq(customer.customerNo, nativeSubject(snapshot.revision.subjectId)))
+          .where(eq(customer.customerNo, nativeSubject(subjectId)))
           .pipe(
             Effect.flatMap((rows) =>
               rows[0] === undefined

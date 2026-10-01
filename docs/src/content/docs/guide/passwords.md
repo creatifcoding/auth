@@ -107,7 +107,7 @@ export const PasswordLive = Layer.mergeAll(
   ),
   PasswordPersistenceLive,
   ProofPersistenceLive,
-  Layer.succeed(AppAuth.strategies.password.ClaimsForPassword, { resolve: resolvePasswordClaims }),
+  Layer.succeed(AppAuth.strategies.password.SessionClaims, { resolve: resolvePasswordClaims }),
   Layer.succeed(AppAuth.strategies.password.RegistrationAuthority, { register: registerAccount }),
   Layer.succeed(Password.CompromisedPasswords, { check: checkPassword }),
   Layer.succeed(Password.PasswordActionEvidence, { verify: authorizePasswordChange }),

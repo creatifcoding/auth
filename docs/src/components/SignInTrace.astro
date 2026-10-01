@@ -175,6 +175,10 @@ const inline = (text: string) =>
 
     const update = () => {
       frame = 0;
+
+      // Anchor navigation can scroll before the first ResizeObserver callback.
+      if (points.length === 0) return;
+
       const length = reduce.matches ? total : progress();
 
       live.style.strokeDashoffset = `${total - length}`;

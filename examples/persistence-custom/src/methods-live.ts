@@ -14,7 +14,7 @@ export const AccountMethodsLive = Layer.effect(
     const persistence = yield* Password.PasswordPersistence;
     const hasher = yield* Password.PasswordHashing;
     const authority = yield* Sessions.AuthenticationAuthority;
-    const claims = yield* AppAuth.strategies.password.ClaimsForPassword;
+    const claims = yield* AppAuth.strategies.password.SessionClaims;
     const completion = yield* AppAuth.sessions.AuthenticationCompletion;
     const crypto = yield* Crypto.Crypto;
     const moduleId = AppAuth.strategies.password.persistence.moduleId;
@@ -188,7 +188,11 @@ export const AccountMethodsLive = Layer.effect(
 
         if (checked._tag === "Failure") return yield* checked.failure;
         if (decision !== "verified") return yield* Password.PasswordRejected.make({});
-        const values = yield* claims.resolve(checked.success.credential);
+
+        const values = yield* claims.resolve({
+          subjectId: checked.success.credential.revision.subjectId,
+          credential: checked.success.credential,
+        });
 
         return yield* completion
           .prepare({ evidence: checked.success.evidence, claims: values })

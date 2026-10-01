@@ -732,10 +732,10 @@ export const makePasswordConsumer = Effect.gen(function* () {
       Layer.succeed(Sessions.AuthenticationAuthority, authority),
       Layer.succeed(Password.PasswordActionEvidence, factor),
       Layer.succeed(passwords.RegistrationAuthority, registration),
-      Layer.succeed(passwords.ClaimsForPassword, {
-        resolve: (credential) =>
+      Layer.succeed(passwords.SessionClaims, {
+        resolve: ({ subjectId }) =>
           Effect.suspend(() => {
-            const row = find(state, credential.revision.subjectId);
+            const row = find(state, subjectId);
 
             return row
               ? Effect.succeed({ team: row.team })

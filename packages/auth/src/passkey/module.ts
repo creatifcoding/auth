@@ -6,6 +6,7 @@ import type { AuthInvocation } from "../operations/context";
 import type { AuthOperationResult } from "../operations/credentials";
 import { operationGroup } from "../operations/operation";
 import { make as makePasskeyContract } from "../PasskeyContract";
+import type { SubjectId } from "../Schema";
 import type { AuthenticationAuthority } from "../sessions/AuthenticationAuthority";
 import type { makeSessionModule } from "../sessions/module";
 import {
@@ -86,16 +87,18 @@ export const makePasskeyMethod = <
   const source = configuredSource ?? capturePasskeyConfiguration(options);
   const ceremony = makePasskeyCeremony(moduleId, source, "sign-in");
 
-  const ClaimsForPasskey = Context.Service<
+  /** Supply application session claims for the verified passkey's subject. */
+  const SessionClaims = Context.Service<
     {
       readonly moduleId: Id;
       readonly kind: "passkey-claims";
       readonly claims: Types.Invariant<Claims["Type"]>;
     },
     {
-      readonly resolve: (
-        credential: PasskeyCredential,
-      ) => Effect.Effect<Claims["Type"], PasskeyUnavailable>;
+      readonly resolve: (input: {
+        readonly subjectId: SubjectId;
+        readonly credential: PasskeyCredential;
+      }) => Effect.Effect<Claims["Type"], PasskeyUnavailable>;
     }
   >(`effect-auth/ClaimsForPasskey/${moduleId.length}:${moduleId}`);
 
@@ -128,7 +131,7 @@ export const makePasskeyMethod = <
     Passkeys,
     Effect.gen(function* () {
       const runtime = yield* ceremony.make,
-        claims = yield* ClaimsForPasskey,
+        claims = yield* SessionClaims,
         completion = yield* sessions.AuthenticationCompletion,
         persistence = yield* PasskeyPersistence;
 
@@ -158,7 +161,10 @@ export const makePasskeyMethod = <
             .authentication(input, { _tag: "SignIn" })
             .pipe(Effect.provide(services));
 
-          const resolved = yield* claims.resolve(verified.credential);
+          const resolved = yield* claims.resolve({
+            subjectId: verified.credential.revision.subjectId,
+            credential: verified.credential,
+          });
 
           const encoded = yield* Schema.encodeEffect(claimsCodec)(resolved).pipe(
             Effect.provide(services),
@@ -336,7 +342,7 @@ export const makePasskeyMethod = <
       { completion: true },
     ),
     Passkeys,
-    ClaimsForPasskey,
+    SessionClaims,
     binding: ceremony.binding,
     layer,
     handlersLayer,

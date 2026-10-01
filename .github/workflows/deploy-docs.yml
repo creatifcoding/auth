@@ -6,10 +6,6 @@ on:
     paths:
       - "docs/**"
       - "README.md"
-      - "examples/persistence-drizzle-managed/**"
-      - "examples/shared/account/**"
-      - "scripts/build-starter.ts"
-      - "scripts/db-generate.ts"
       - "packages/*/package.json"
       - "tsconfig.base.json"
       - "alchemy.run.ts"

@@ -131,12 +131,8 @@ start include the root README's shared contract, server, and client examples:
 Markdown pages use `<!--@include: @/../README.md#region-->` and the MDX home page
 uses `<Snippet>`. Guides show feature setup and usage.
 
-`vp run starter:build` packages the managed Drizzle example and shared account UI
-as `docs/public/auth-starter.tar.gz`. Docs development and builds regenerate it.
-The archive resolves catalog and workspace dependencies to the manifest versions,
-includes migrations, and keeps account sources inside the standalone app. It never
-copies local data, environment secrets, build output, or installed dependencies.
-Keep referenced package versions published before deploying the download.
+Getting started teaches package installation and composition in the reader's own
+application. Runnable examples live in `examples/*` and are linked as source references.
 This contributor guide stays at the top of `docs/` and is excluded from the public site.
 
 `alchemy.run.ts` deploys the site to `https://yielded.dev/auth/` through the

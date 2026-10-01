@@ -418,14 +418,14 @@ export const PasswordsLive = Layer.effectContext(
             )
             .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       }),
-      Context.add(AppAuth.strategies.password.ClaimsForPassword, {
-        resolve: (snapshot) =>
+      Context.add(AppAuth.strategies.password.SessionClaims, {
+        resolve: ({ subjectId, credential }) =>
           store
             .read((state) =>
               Effect.gen(function* () {
-                const account = customer(state, snapshot.revision.subjectId);
+                const account = customer(state, subjectId);
 
-                if (account === undefined || !current(state, snapshot.revision))
+                if (account === undefined || !current(state, credential.revision))
                   return yield* Password.PasswordUnavailable.make({});
 
                 return claims(account);

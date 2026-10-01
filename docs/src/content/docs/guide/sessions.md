@@ -55,10 +55,25 @@ invalid, or expired credentials return `null`. An unavailable session store,
 defect, or interruption remains a failure. No cookie parsing or catch handler is
 needed in application code.
 
-Use `yield* auth.requireSession()` when a handler requires authentication; it fails
-with `AuthenticationRequired` for an anonymous request. Outside a request, use
-`auth.verifySession(redactedCredential)` to verify an explicit credential without
-delivery requirements.
+For a handler that requires authentication:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const session = yield* auth.requireSession();
+```
+
+An anonymous request fails with `AuthenticationRequired`. The
+[HTTP guide](./http-and-client#protect-an-httpapi-group) shows how to require a
+session for an entire HttpApi group.
+
+Outside a request, verify an explicit credential:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const session = yield* auth.verifySession(redactedCredential);
+```
 
 ## Sign out
 
@@ -79,9 +94,14 @@ request context and cookie delivery.
 
 ## Renew a session
 
-Call `yield* auth.renewSession()` to renew explicitly. `getSession()` and
-`requireSession()` never silently rotate credentials. Renewal delivers a
-replacement credential through the same request boundary.
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const session = yield* auth.renewSession();
+```
+
+Renewal delivers a replacement credential through the request boundary.
+`getSession()` and `requireSession()` do not rotate credentials.
 
 ## Session lifecycle
 

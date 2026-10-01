@@ -1,10 +1,13 @@
 ---
-title: HTTP and client state
-description: Mount a shared auth API, configure cookies, and compose Effect Atom workflows.
+title: HTTP integration
+description: Mount auth in an Effect HttpRouter or HttpApi and call the service from application handlers.
 ---
 
-One contract supplies server methods and a typed client. Effect Atom owns client
-state and workflows; Effect HttpClient owns transport.
+Mount auth beside your existing Effect routes. The HTTP boundary decodes the
+shared contract, supplies request credentials, and delivers cookies. Application
+handlers call the same auth service directly.
+
+For browser queries and mutations, continue with the [Effect Atom client](./client).
 
 ```mermaid
 flowchart LR
@@ -34,14 +37,8 @@ The contract includes `getSession`, `requireSession`, `signOut`, and `renewSessi
 It exposes only the additional actions you select. Installing a strategy does
 not publish all its methods.
 
-| Actions                             | HTTP method | Default path                                          |
-| ----------------------------------- | ----------- | ----------------------------------------------------- |
-| `getSession`, `requireSession`      | GET         | `/auth/getSession`, `/auth/requireSession`            |
-| `signIn`, `signOut`, `renewSession` | POST        | `/auth/signIn`, `/auth/signOut`, `/auth/renewSession` |
-
-No-input queries use GET. Queries with payloads use POST so their inputs stay out
-of URLs. Change the shared prefix with `basePath` on `AuthContract.make`; server
-and client use the same descriptors.
+The [HTTP reference](../reference/http#route-defaults) lists default routes and
+how to change the shared base path.
 
 ## Configure the server
 
@@ -93,14 +90,24 @@ import { AppAuth } from "./auth";
 export const http = Http.make(AppAuth, { origin: "https://app.example.com" });
 ```
 
-Wrap those route Layers with `ApplicationRoutes.pipe(http.middleware,
-Layer.provide(AppAuth.layer))` before merging them above.
+Wrap the application routes before merging them with the generated auth routes:
 
-The middleware creates fresh request context and delivers credential cookies on
-the response. It accepts ordinary JSON, form, and multipart routes. Inside those
-routes, call `auth.getSession()`, `auth.requireSession()`, or `auth.signOut()` after
-`const auth = yield* AppAuth`. These are local Effects; they do not make HTTP calls
-or require a headers argument.
+```ts title="apps/server/routes.ts"
+import { Layer } from "effect";
+
+import { ApplicationRoutes } from "./application-routes";
+import { AppAuth, AuthRoutes } from "./auth";
+import { http } from "./auth-http";
+import { AuthDependencies } from "./auth-live";
+
+export const Routes = Layer.mergeAll(
+  AuthRoutes,
+  ApplicationRoutes.pipe(http.middleware, Layer.provide(AppAuth.layer)),
+).pipe(Layer.provide(AuthDependencies));
+```
+
+The middleware reads request credentials and delivers cookies on the response.
+Handlers can call auth directly, including from JSON, form, and multipart routes.
 
 ### Join an existing HttpApi
 
@@ -133,282 +140,166 @@ export const Routes = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }
 );
 ```
 
-Both mounting forms use the same bounded transport and handlers. The group defaults
-to `auth`; pass matching `{ name: "account" }` options to `httpGroup` and `handlers`
-to rename it. Middleware and annotations compose normally, with their requirements
-visible in Layer types. Configure paths in the contract's `basePath` rather than
-prefixing generated endpoints afterward.
+Auth appears as the `auth` group in the API and its OpenAPI document. Set route
+paths in the shared contract's `basePath`; see the [HTTP reference](../reference/http#route-defaults)
+for path and group-name options.
 
-The [shared contract](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/auth-contract.ts)
-and [server example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/auth-server.ts)
-show a complete group and handler pair.
+### Protect an application handler
 
-### Cookies and protected handlers
+Inside a route covered by `http.middleware`, require a session before doing the work:
 
-Cookies default to `Secure`, `HttpOnly`, `SameSite=Lax`, path `/`, and the
-`__Host-effect-auth-` prefix. Override `cookie.name` for the session slot or
-`cookie.prefix` for all slots. Plain HTTP development requires an explicit
-`cookie.secure: false`. Use your real HTTPS origin; never derive trusted origins
-from an untrusted request header.
-
-POST auth actions require the configured Origin, JSON content type, and
-`x-effect-auth-csrf: 1` by default. GET actions have no body or CSRF header and
-reject an explicitly untrusted Origin. Duplicate credential cookies are rejected,
-and session responses are not cacheable. If you override `csrf` on the server,
-pass matching settings to `Client.make`.
-
-`http.middleware` supplies context; it does not require every route to be signed
-in. Call `auth.requireSession()` in protected application handlers. For declarative
-HttpApi protection, define `SessionContract.makeSessionHttpContract`,
-attach its `RequireSession` middleware, and read `CurrentSession` in handlers.
-Provide `http.securityLayer(contract)` and apply `http.middleware` to the route
-Layer. Its cookie name must match the adapter. It declares 401 for absent or
-invalid sessions and 503 for unavailable verification. See the
-[session HTTP example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/session-http.ts).
-
-Named mutations enforce Origin and CSRF before side effects, including local
-calls from application routes. Raw strategy methods are treated as mutations.
-For a custom credential-producing workflow, call `http.protect(effect)` inside
-the request boundary; it applies mutation policy and supplies private collectors
-without imposing a body format. Custom hosts still own webhook validation and
-ordinary application mutation policy.
-
-## Expose another method
-
-The method guides show the available local strategy calls. Browser access requires
-an action in `AuthApi`: `AuthContract.passwordSignIn` is the password shortcut;
-`AuthContract.fromOperation` reuses a pure operation contract; `AuthContract.action`
-accepts explicit payload, success, and error schemas.
-
-Each action selects a server `method` and, when needed, a `strategy`. The method
-defaults to the action's name. You can expose two strategies under different names
-without making the client choose a strategy string. Configure only actions your
-application intends to serve. Passkey and TOTP have dedicated pure contract modules;
-the email, phone, and OAuth flows currently require explicit action schemas.
-
-Map private method inputs through `requestFields` when declaring an action:
-
-| Method input                                                         | Credential slot      |
-| -------------------------------------------------------------------- | -------------------- |
-| Email, phone, or OAuth `requestBinding`; passkey `bindingCredential` | `request-binding`    |
-| Email continuation `credential`                                      | `proof-continuation` |
-| TOTP `pendingCredential`                                             | `pending-proof`      |
-
-The server injects those values from `Auth.AuthRequest`; both named local calls and
-remote payloads omit them. Set `credentials: true` for actions that issue or clear
-credentials, declare any private reveals, and supply a `subject.fromSuccess`
-projection for actions that establish or replace the authenticated account.
-`fromOperation` carries forward the operation's schemas, replay policy, credential
-delivery, and reveal declarations; the subject projection remains explicit.
-
-See the [passkey contract](./passkeys#define-the-shared-actions) for a complete
-example and [TOTP](./totp#expose-private-reveals-over-http) for private reveals.
-
-## Connect client state
-
-```ts title="apps/web/auth-client.ts"
-import { Atom as AuthAtom, Client } from "@yielded/auth";
-
-import { AuthApi } from "@app/domain/auth-contract";
-
-export const AppClient = Client.make(AuthApi, { baseUrl: "https://app.example.com" });
-export const auth = AuthAtom.make(AppClient);
-```
-
-`auth.session` is a query atom; `auth.signIn` and `auth.signOut` are mutation atoms.
-The application registry acquires and closes the client. Fetch is configured by
-default; declaring the client and atoms performs no I/O.
-
-### React
-
-Use ordinary `@effect/atom-react` hooks under your application's `RegistryProvider`:
-
-```tsx title="apps/web/account.tsx"
-import { RegistryProvider, useAtom, useAtomValue } from "@effect/atom-react";
-
-import { auth } from "./auth-client";
-
-export function Account() {
-  const session = useAtomValue(auth.session);
-  const [signOutResult, signOut] = useAtom(auth.signOut);
-
-  if (session._tag === "Initial") return <p>Loading…</p>;
-  if (session._tag === "Failure") return <p>Session unavailable</p>;
-  if (session.value === null) return <p>Signed out</p>;
-
-  return (
-    <button disabled={signOutResult.waiting} onClick={() => signOut(undefined)}>
-      Sign out {session.value.claims.displayName}
-    </button>
-  );
-}
-
-export function App() {
-  return (
-    <RegistryProvider>
-      <Account />
-    </RegistryProvider>
-  );
-}
-```
-
-Reuse an existing provider if you have one. React renders and dispatches; put
-multi-step logic in [workflow atoms](#compose-a-passkey-workflow).
-
-### Compose queries
-
-`auth.runtime` supplies the same client and account lifetime to your own atoms:
-
-```ts title="apps/web/member-name.ts"
+```ts title="apps/server/current-member.ts"
 import { Effect } from "effect";
 
-import { AppClient, auth } from "./auth-client";
+import { AppAuth } from "./auth";
 
-export const memberName = auth.runtime.atom(
-  Effect.gen(function* () {
-    const client = yield* AppClient;
-    const session = yield* client.auth.getSession();
+export const currentMember = Effect.fn("app.currentMember")(function* () {
+  const auth = yield* AppAuth;
+  const session = yield* auth.requireSession();
 
-    return session?.claims.displayName ?? null;
-  }),
-);
-```
-
-### Invalidation and account lifetime
-
-Auth mutations refresh auth queries automatically. To also refresh application
-queries, replace the `AuthAtom.make` call with a shared runtime and reactivity keys:
-
-```ts
-import { Atom } from "effect/unstable/reactivity";
-
-export const appRuntime = Atom.context();
-export const auth = AuthAtom.make(AppClient, {
-  runtime: appRuntime,
-  reactivityKeys: { signIn: ["projects"], signOut: ["projects"] },
+  return session.claims;
 });
 ```
 
-Use `appRuntime` for the queries subscribed to `"projects"` too. Account changes
-dispose work and state owned by `auth.runtime`; other application atoms keep their
-own lifetime. See [account lifetime](../reference/client#account-lifetime).
+`requireSession()` fails with `AuthenticationRequired` when there is no valid
+session. Use `getSession()` for an optional session. Both read the current request
+context; neither makes an HTTP call.
 
-### Server rendering and hydration
+### Protect an HttpApi group
 
-Default atoms render `Initial` on the server without fetching. For session-aware
-rendering, use request-local atoms and registries; serialize only public session
-data. Follow the [hydration reference](../reference/client#server-rendering) and
-[SSR example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/auth-ssr.ts)
-for acquisition and cleanup.
+Declare the session requirement in your shared API:
 
-## Use your Effect HttpClient
+```ts title="packages/domain/profile-api.ts"
+import { SessionContract } from "@yielded/auth";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
 
-Replace the default `AuthAtom.make` call with explicit Layer composition:
+import { AuthApi } from "./auth-contract";
 
-```ts
-import { Layer } from "effect";
+export const SessionHttp = SessionContract.makeSessionHttpContract(
+  "app/Auth",
+  AuthApi.sessions.Session,
+  { cookieName: "__Host-app-session" },
+);
 
-import { ApplicationHttpClient } from "./http-client";
-
-export const ClientLive = AppClient.layer.pipe(Layer.provide(ApplicationHttpClient));
-export const auth = AuthAtom.make(AppClient, { layer: ClientLive });
+export const ProfileApi = HttpApi.make("profile").add(
+  HttpApiGroup.make("profile")
+    .add(HttpApiEndpoint.get("current", "/me", { success: AuthApi.claims }))
+    .middleware(SessionHttp.RequireSession),
+);
 ```
 
-For example, configure Effect's Fetch transport with browser credentials:
+On the server, supply the middleware and read `CurrentSession` in the handler:
 
-```ts title="apps/web/http-client.ts"
-import { Layer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+```ts title="apps/server/profile-routes.ts"
+import { Http } from "@yielded/auth";
+import { Effect, Layer } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 
-export const ApplicationHttpClient = FetchHttpClient.layer.pipe(
-  Layer.provide(
-    Layer.succeed(FetchHttpClient.RequestInit, {
-      credentials: "include",
-      redirect: "error",
-    }),
+import { ProfileApi, SessionHttp } from "@app/domain/profile-api";
+import { AppAuth } from "./auth";
+import { AuthLive } from "./auth-live";
+
+const http = Http.make(AppAuth, {
+  origin: "https://app.example.com",
+  cookie: { name: SessionHttp.cookieName },
+});
+
+const ProfileHandlers = HttpApiBuilder.group(ProfileApi, "profile", (handlers) =>
+  handlers.handle("current", () =>
+    Effect.map(SessionHttp.CurrentSession, (session) => session.claims),
   ),
 );
+
+const ProfileRoutes = HttpApiBuilder.layer(ProfileApi).pipe(
+  Layer.provide(ProfileHandlers),
+  Layer.provide(http.securityLayer(SessionHttp)),
+  http.middleware,
+);
+
+export const Routes = Layer.mergeAll(http.routes(), ProfileRoutes).pipe(Layer.provide(AuthLive));
 ```
 
-Supply a transport without retries, redirects, or status filtering: auth mutations
-make one attempt, and auth decodes expected failures from response bodies. A timeout
-may leave a mutation committed; reconcile with the server instead of retrying it.
-See [transport options](../reference/client#transport) for deadlines and native clients.
+Both route sets use the same cookie configuration. The session middleware returns
+401 for absent or invalid sessions and 503 when verification is unavailable.
+Your handler still decides whether the authenticated account may perform an
+application action.
 
-## Call the client directly
+## Cookies and deployment
 
-Provide `layerFetch` to a standalone Effect program:
+For HTTPS, set your trusted application origin. The defaults use `Secure`,
+`HttpOnly`, and `SameSite=Lax` cookies:
 
 ```ts
-import { Effect } from "effect";
-
-import { AppClient } from "./auth-client";
-
-export const session = Effect.gen(function* () {
-  const client = yield* AppClient;
-  return yield* client.auth.getSession();
-}).pipe(Effect.provide(AppClient.layerFetch));
+export const http = Http.make(AppAuth, {
+  origin: "https://app.example.com",
+});
 ```
 
-To use your transport, replace `Effect.provide(AppClient.layerFetch)` with
-`Effect.provide(ClientLive)` from the previous example. To share the Atom client,
-compose through `auth.runtime` instead of acquiring a separate Layer.
+For local development over plain HTTP:
 
-## Compose a passkey workflow
-
-The [passkey guide](./passkeys) defines both the server strategy and this shared
-contract:
-
-<!--@include: ./passkeys.md#passkey-contract-->
-
-Bind `PasskeyApi` with `Auth.make(PasskeyApi, { sessions, strategies })` on the server,
-using the same passkey configuration. `requestFields` removes private inputs from
-the public schema and injects them from request credentials during execution.
-Neither local nor HTTP callers can supply those private fields. For new contracts,
-`AuthContract.action` also accepts explicit input, success, and error schemas.
-
-```ts title="apps/web/passkey-workflow.ts"
-import { Effect, Redacted } from "effect";
-import { Atom as AuthAtom, Client } from "@yielded/auth";
-import * as PasskeyBrowser from "@yielded/auth-simplewebauthn/Browser";
-
-import { PasskeyApi } from "@app/domain/passkey-contract";
-
-export const PasskeyClient = Client.make(PasskeyApi, { baseUrl: "https://app.example.com" });
-export const passkeys = AuthAtom.make(PasskeyClient);
-
-export const signIn = passkeys.runtime.fn<{ flowId: string; commandId: string }>()(
-  Effect.fn("app.passkeySignIn")(function* (input) {
-    const client = yield* PasskeyClient;
-    const browser = yield* PasskeyBrowser.make();
-    const started = yield* client.auth.signIn({
-      ...input,
-      profileId: "default",
-    });
-    const response = yield* browser.authenticate({ started, mediation: "required" });
-
-    return yield* client.auth.completeSignIn({
-      flowId: input.flowId,
-      response: Redacted.value(response.response),
-    });
-  }),
-);
+```ts
+export const http = Http.make(AppAuth, {
+  origin: "http://localhost:3000",
+  cookie: { secure: false },
+});
 ```
 
-The atom owns the ceremony and cancellation. An admitted credential response
-settles before publishing an account change; that change then retires this custom
-workflow. Render the updated session rather than chaining UI work after its
-completion. Unknown write outcomes require authoritative lookup or a fresh flow.
+The auth client sends the required CSRF header automatically. Keep custom cookie
+names and CSRF settings aligned with the server; [cookies and request policy](../reference/http#cookies-and-request-policy)
+lists the options.
 
-## Lower-level transports
+## Expose another method
 
-`http.withRequest` wraps a custom Effect returning `HttpServerResponse`.
-`http.operationLayer` supplies browser policy and caller resolution to existing
-`OperationHttpServer` contracts. Those descriptors continue to own private payload
-injection and explicitly selected reveals.
-Encode expected response failures before leaving the request wrapper.
+To add passkeys alongside passwords, declare the begin and complete actions in
+the shared contract:
 
-`OperationHttpClient.make` requires the same Effect `HttpClient` service.
-`AuthAtom.query`, `AuthAtom.mutation`, and `AuthAtom.workflow` remain available for
-custom integration. Private reveals belong in a finite
-collector, outside ordinary query caches, logs, and persisted client state.
+```ts title="packages/domain/auth-contract.ts"
+import { AuthContract, PasskeyContract } from "@yielded/auth";
+import { Schema } from "effect";
+
+export const AuthApi = AuthContract.make("app/Auth", {
+  claims: Schema.Struct({ displayName: Schema.String }),
+  actions: (sessions) => {
+    const passkey = PasskeyContract.make("app/Auth/passkey", sessions);
+
+    return {
+      signIn: AuthContract.passwordSignIn(sessions),
+      beginPasskey: AuthContract.fromOperation(passkey.operations.Begin, {
+        strategy: "passkey",
+        method: "signIn",
+      }),
+      completePasskey: AuthContract.fromOperation(passkey.operations.Complete, {
+        strategy: "passkey",
+        method: "completeSignIn",
+        requestFields: { bindingCredential: "request-binding" },
+        subject: {
+          fromSuccess: (result) =>
+            result._tag === "Authenticated" ? result.session.subjectId : undefined,
+        },
+      }),
+    };
+  },
+});
+```
+
+Bind the new actions to a passkey strategy on the server:
+
+```ts title="apps/server/auth.ts"
+import { Auth, Passkey, Password, Sessions } from "@yielded/auth";
+
+import { AuthApi } from "@app/domain/auth-contract";
+
+export const AppAuth = Auth.make(AuthApi, {
+  sessions: Sessions.stateful(),
+  strategies: { password: Password.make(), passkey: Passkey.make() },
+  defaultStrategy: "password",
+});
+```
+
+The client now has `beginPasskey` and `completePasskey` actions. `requestFields`
+supplies the private binding from a cookie; `subject` publishes the authenticated
+account after completion. The [passkey guide](./passkeys#install-the-server-verifier)
+shows verifier and storage Layers, and the [client guide](./client#compose-a-passkey-workflow)
+shows the browser ceremony.
+
+For custom actions, see [action schemas and credential mapping](../reference/http#declare-an-action).

@@ -80,7 +80,7 @@ export const makePhoneOtp = <
     policy: options.policy ?? defaultProofPolicy,
   });
 
-  const ClaimsForPhone = makePhoneClaims<Id, Claims>(moduleId);
+  const SessionClaims = makePhoneClaims<Id, Claims>(moduleId);
 
   const capture = Effect.fn("PhoneOtp.capture")(function* (request: {
     readonly flowId: RequestBindingFlowId;
@@ -291,7 +291,10 @@ export const makePhoneOtp = <
           Effect.mapError(phoneFailure),
         );
 
-        const claims = yield* (yield* ClaimsForPhone).resolve(claimCredential);
+        const claims = yield* (yield* SessionClaims).resolve({
+          subjectId: claimCredential.revision.subjectId,
+          credential: claimCredential,
+        });
 
         const established = yield* (yield* sessions.AuthenticationCompletion)
           .prepare({ evidence, claims })
@@ -319,7 +322,7 @@ export const makePhoneOtp = <
 
   return Object.freeze({
     persistence: { kind: "phone" as const, moduleId, lifecycle: false as const },
-    ClaimsForPhone,
+    SessionClaims,
     binding,
     proof,
     layer,

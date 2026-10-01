@@ -884,12 +884,12 @@ export const PasskeysLive = Layer.effectContext(
             )
             .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       }),
-      Context.add(AppAuth.strategies.passkey.ClaimsForPasskey, {
-        resolve: (credential) =>
+      Context.add(AppAuth.strategies.passkey.SessionClaims, {
+        resolve: ({ subjectId, credential }) =>
           store
             .read((state) =>
               Effect.gen(function* () {
-                const account = customer(state, credential.revision.subjectId);
+                const account = customer(state, subjectId);
 
                 if (account === undefined || !current(state, credential.revision))
                   return yield* Passkey.PasskeyUnavailable.make({});

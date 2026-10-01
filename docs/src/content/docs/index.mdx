@@ -1,37 +1,29 @@
 ---
 title: Yielded Auth
-description: Authentication for Effect. Start with managed tables, then take over your schema or storage without changing your auth API.
+description: Authentication that composes with Effect. Your accounts and storage, one typed contract from server to client.
 template: splash
 hero:
-  title: Authentication you can own, one layer at a time.
-  tagline: Passwords, passkeys, one-time codes, and OAuth for Effect. Start with managed tables, then map your own schema or write the storage yourself. Your auth API stays the same.
+  title: Authentication that fits your Effect application.
+  tagline: Schema for the contract. Layers for your backend. Effect Atom for the client. Passwords, passkeys, codes, and OAuth with your accounts, your database, and your policies.
   actions:
     - text: Get started
       link: /auth/guide/getting-started/
       icon: right-arrow
       variant: primary
-    - text: How sign-in works
-      link: /auth/guide/authentication/
+    - text: See how it fits
+      link: /auth/guide/effect/
       variant: secondary
 ---
 
 import { Snippet } from "@yielded/starlight-theme/components";
 
 import CallSites from "../../components/CallSites.astro";
-import MethodIndex from "../../components/MethodIndex.astro";
 import OwnershipLadder from "../../components/OwnershipLadder.astro";
 
-## Choose how much you own
+## One contract, server to client
 
-Each level hands you one more layer of the stack. Move between them by changing
-Layers; nothing that calls auth has to change.
-
-<OwnershipLadder />
-
-## One contract, every call site
-
-Declare session claims and the actions clients may call. Your server, its HTTP
-routes, and your client all use the same definition.
+Describe your session claims and the actions clients may call with Effect Schema.
+The server, HTTP routes, and client share that definition.
 
 <CallSites
   sites={[
@@ -44,118 +36,57 @@ routes, and your client all use the same definition.
   <Snippet src="../README.md" region="auth-contract" />
 </CallSites>
 
-Each call takes the same input and returns the same typed result or failure.
-Clients can reach only the actions you declare.
+Inputs and public results use the same schemas. Expected failures stay typed;
+credentials travel through the private HTTP boundary. Clients reach only the
+actions you declare.
 
-## Install the methods you need
+## An ordinary Effect service
 
-export const methods = [
-  {
-    name: "Passwords",
-    href: "/auth/guide/passwords/",
-    summary: "Registration, sign-in, and recovery.",
-    detail: "Supply password hashing, credential storage, and account claims through Layers. Registration and recovery use the same strategy.",
-    code: `import { Schema } from "effect";
-import { Auth, Password, Sessions } from "@yielded/auth";
+Choose your methods and session behavior, then supply their dependencies with
+Layers. Inside a handler, `yield* AppAuth` gives you auth alongside your other
+application services.
 
-export const AppAuth = Auth.make("app/Auth", {
-  claims: Schema.Struct({ displayName: Schema.String }),
-  sessions: Sessions.stateful(),
-  strategies: {
-    password: Password.make(),
-  },
-  defaultStrategy: "password",
-});`,
-  },
-  {
-    name: "Passkeys",
-    href: "/auth/guide/passkeys/",
-    summary: "WebAuthn sign-in and enrollment.",
-    detail: "Supply relying-party configuration, credential storage, and WebAuthn verification. A browser or iOS adapter handles the local passkey prompt.",
-    code: `import { Schema } from "effect";
-import { Auth, Passkey, Sessions } from "@yielded/auth";
+<Snippet src="../README.md" region="auth-server" />
 
-export const AppAuth = Auth.make("app/Auth", {
-  claims: Schema.Struct({ displayName: Schema.String }),
-  sessions: Sessions.stateful(),
-  strategies: {
-    passkey: Passkey.make(),
-  },
-  defaultStrategy: "passkey",
-});`,
-  },
-  {
-    name: "Email codes & magic links",
-    href: "/auth/guide/codes/",
-    summary: "One-time sign-in by email.",
-    detail: "Your email service delivers the code; Yielded Auth verifies the proof and completes sign-in. Use Email.makeLink() for magic links.",
-    code: `import { Schema } from "effect";
-import { Auth, Email, Sessions } from "@yielded/auth";
+Provide storage, account policy, hashing, and keys to `AuthRoutes`; its Layer type
+shows what is still needed. Your app owns account creation and authorization.
+[See how Auth fits into Effect](/auth/guide/effect/), or
+[add it to an existing HttpApi](/auth/guide/http-and-client/#join-an-existing-httpapi).
 
-export const AppAuth = Auth.make("app/Auth", {
-  claims: Schema.Struct({ displayName: Schema.String }),
-  sessions: Sessions.stateful(),
-  strategies: {
-    email: Email.makeCode(),
-  },
-  defaultStrategy: "email",
-});`,
-  },
-  {
-    name: "Phone codes",
-    href: "/auth/guide/phone/",
-    summary: "One-time sign-in by SMS.",
-    detail: "Supply phone lookup, SMS delivery, and your destination policy. Bind requests to a server-verified network key for admission limits.",
-    code: `import { Schema } from "effect";
-import { Auth, PhoneOtp, Sessions } from "@yielded/auth";
+## Effect on the client too
 
-export const AppAuth = Auth.make("app/Auth", {
-  claims: Schema.Struct({ displayName: Schema.String }),
-  sessions: Sessions.stateful(),
-  strategies: {
-    phone: PhoneOtp.make(),
-  },
-  defaultStrategy: "phone",
-});`,
-  },
-  {
-    name: "Two-factor",
-    href: "/auth/guide/totp/",
-    summary: "Authenticator apps after a first factor.",
-    detail: "Add an authenticator alongside a primary method. Your account policy decides when it is required; supply a session completion Layer with pending-authentication support, as shown in the guide.",
-    code: `import { Schema } from "effect";
-import { Auth, Password, Totp } from "@yielded/auth";
+Derive an Effect HttpClient service and atoms from the shared contract:
 
-export const AppAuth = Auth.make("app/Auth", {
-  claims: Schema.Struct({ displayName: Schema.String }),
-  strategies: {
-    password: Password.make(),
-    totp: Totp.make({ issuer: "My app" }),
-  },
-  defaultStrategy: "password",
-});`,
-  },
-  {
-    name: "OAuth & OIDC",
-    href: "/auth/guide/oauth/",
-    summary: "GitHub, Google, or any OpenID provider.",
-    detail: "Configure the provider and callback routes through the HTTP adapter. Supply account links and claims through Layers; add an access profile to retain provider API access.",
-    code: `import { Schema } from "effect";
-import { Auth, OAuth, Sessions } from "@yielded/auth";
+<Snippet src="../README.md" region="auth-client" />
 
-export const AppAuth = Auth.make("app/Auth", {
-  claims: Schema.Struct({ displayName: Schema.String }),
-  sessions: Sessions.stateful(),
-  strategies: {
-    social: OAuth.make(),
-  },
-  defaultStrategy: "social",
-});`,
-  },
-];
+Read `auth.session` and dispatch `auth.signIn` or `auth.signOut` with ordinary
+`@effect/atom-react` hooks. Auth mutations refresh auth queries automatically.
+Compose workflows in Effect and connect your application's queries through
+reactivity keys. [Build the client](/auth/guide/client/).
 
-<MethodIndex id="auth-methods" methods={methods} />
+## Your accounts, your storage
 
-Each method adds the services it needs to the type of `AppAuth.layer`, so the
-compiler lists what your application still has to provide. Publish the actions
-your client needs through a [shared contract](/auth/guide/http-and-client/).
+Keep your customer or employee model. Use managed auth tables, map your own SQL
+schema, or supply storage services for a different backend. Changing storage
+Layers keeps the contract and client intact.
+
+<OwnershipLadder />
+
+The [database and backend guide](/auth/guide/storage/) explains the choices and
+the durability each implementation must provide. Four
+[runnable account apps](/auth/guide/examples/#run-an-account-app) show the same
+workflows across Drizzle, Effect SQL, and a non-SQL store.
+
+## Add the methods your application needs
+
+| Method                                          | What you can build                                          |
+| ----------------------------------------------- | ----------------------------------------------------------- |
+| [Passwords](/auth/guide/passwords/)             | Registration, sign-in, and recovery.                        |
+| [Passkeys](/auth/guide/passkeys/)               | WebAuthn sign-in and credential management.                 |
+| [Email codes & magic links](/auth/guide/codes/) | Passwordless sign-in and address verification.              |
+| [Phone codes](/auth/guide/phone/)               | SMS sign-in and number verification.                        |
+| [Two-factor authentication](/auth/guide/totp/)  | Authenticator apps after a first factor.                    |
+| [OAuth & OIDC](/auth/guide/oauth/)              | Provider sign-in, account linking, and retained API access. |
+
+Each guide shows the strategy, the services you supply, and the calls you make.
+Start with [GitHub](/auth/guide/github/) or [Google](/auth/guide/google/) for provider setup.

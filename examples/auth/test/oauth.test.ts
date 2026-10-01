@@ -259,7 +259,7 @@ const harness = (
     Layer.provide(layerWebCrypto),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
     Layer.provide(
-      Layer.succeed(oauth.ClaimsForOAuth, {
+      Layer.succeed(oauth.SessionClaims, {
         resolve: () => Effect.succeed({ role: "member" as const, athleteId: 123 }),
       }),
     ),

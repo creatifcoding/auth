@@ -78,8 +78,8 @@ export const makeApplicationAuth = (configuration: {
   // const AppLive = AuthRoutes.pipe(
   //   Layer.provide(AuthDependenciesLive),
   // );
-  // AccountsLive implements AppAuth.strategies.password.ClaimsForPassword,
-  // AppAuth.strategies.passkey.ClaimsForPasskey, AppAuth.strategies.phone.ClaimsForPhone
+  // AccountsLive implements AppAuth.strategies.password.SessionClaims,
+  // AppAuth.strategies.passkey.SessionClaims, AppAuth.strategies.phone.SessionClaims
   // and Sessions.AuthenticationAuthority for this account model.
   // PersistenceLive supplies session/password/passkey/proof storage and exact credential lookups.
   return {
