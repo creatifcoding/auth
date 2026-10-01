@@ -12,7 +12,7 @@ actions in a [shared contract](./http-and-client#expose-another-method).
 
 ## Enable email codes
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Schema } from "effect";
 import { Auth, Email, Sessions } from "@yielded/auth";
 
@@ -100,7 +100,7 @@ to cookies so they stay out of ordinary browser payloads.
 
 ## Use a magic link instead
 
-```ts title="magic-link.ts"
+```ts title="apps/server/magic-link.ts"
 import { Email } from "@yielded/auth";
 
 export const magicLink = Email.makeLink();
@@ -114,7 +114,7 @@ history, and complete from the originating client.
 <details>
 <summary>Proof expiry and rate limits</summary>
 
-```ts title="proof-policy.ts"
+```ts title="apps/server/proof-policy.ts"
 import { type Proofs } from "@yielded/auth";
 
 export const proofPolicy: Proofs.ProofPolicy = {
@@ -147,7 +147,7 @@ flow IDs must not reset account-level attempt budgets.
 Lookup, claims, storage, and delivery are application-supplied. The library provides
 an exact-route allowlist helper, Web Crypto, and empty lifecycle hooks:
 
-```ts title="email-live.ts"
+```ts title="apps/server/email-live.ts"
 import { Layer } from "effect";
 import { Email, Proofs } from "@yielded/auth";
 

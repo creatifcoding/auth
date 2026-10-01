@@ -1,34 +1,86 @@
 ---
 /**
- * A code sample (the default slot) beside an index of guides it introduces.
+ * Select a method to explore its server definition and open the matching guide.
  */
+import { Code } from "@astrojs/starlight/components";
+
 interface Props {
+  readonly id: string;
   readonly methods: ReadonlyArray<{
     readonly name: string;
     readonly href: string;
     readonly summary: string;
+    readonly code: string;
+    readonly detail: string;
   }>;
 }
 
-const { methods } = Astro.props;
+const { id, methods } = Astro.props;
 ---
 
-<div class="method-index not-content">
-  <div class="code"><slot /></div>
-  <ul>
+<method-index class="not-content">
+  <fieldset hidden>
+    <legend>Choose a method to explore</legend>
+    <div class="choices">
+      {
+        methods.map(({ name, summary }, index) => (
+          <label>
+            <input
+              type="radio"
+              name={id}
+              value={index}
+              checked={index === 0}
+              aria-controls={`${id}-${index}`}
+            />
+            <span>
+              <strong>{name}</strong>
+              <span class="summary">{summary}</span>
+            </span>
+          </label>
+        ))
+      }
+    </div>
+  </fieldset>
+  <div class="examples">
     {
-      methods.map(({ name, href, summary }) => (
-        <li>
-          <a {href}>{name}</a>
-          <span>{summary}</span>
-        </li>
+      methods.map(({ name, href, code, detail }, index) => (
+        <section id={`${id}-${index}`} aria-label={`${name} example`}>
+          <h3>{name}</h3>
+          <Code code={code} lang="ts" title="apps/server/auth.ts" />
+          <p>{detail}</p>
+          <a href={href}>{name} guide <span aria-hidden="true">→</span></a>
+        </section>
       ))
     }
-  </ul>
-</div>
+  </div>
+</method-index>
+
+<script>
+  class MethodIndex extends HTMLElement {
+    connectedCallback() {
+      const choices = this.querySelector("fieldset");
+      const inputs = this.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+      const panels = this.querySelectorAll<HTMLElement>("section");
+
+      const update = () => {
+        inputs.forEach((input, index) => {
+          const panel = panels[index];
+
+          if (panel) panel.hidden = !input.checked;
+        });
+      };
+
+      update();
+      if (choices) choices.hidden = false;
+      this.addEventListener("change", update);
+    }
+  }
+
+  customElements.define("method-index", MethodIndex);
+</script>
 
 <style>
-  .method-index {
+  method-index {
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
     gap: 2.5rem;
@@ -36,69 +88,152 @@ const { methods } = Astro.props;
     margin-top: 1.5rem;
   }
 
-  .code :global(.expressive-code) {
+  .examples {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  section + section {
+    margin-top: 2rem;
+  }
+
+  fieldset:not([hidden]) + .examples section {
+    margin-top: 0;
+  }
+
+  h3 {
+    margin: 0 0 0.75rem;
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-lg);
+  }
+
+  .examples :global(.expressive-code) {
     margin: 0;
   }
 
-  .code :global(p) {
+  p {
     margin: 1.25rem 0 0;
     color: var(--sl-color-gray-3);
     font-size: var(--sl-text-sm);
     line-height: 1.65;
   }
 
-  .code :global(p code) {
-    color: var(--sl-color-white);
-    font-family: var(--sl-font-mono);
-  }
-
-  .code :global(p a) {
-    color: var(--sl-color-white);
-    text-decoration-color: color-mix(in srgb, var(--sl-color-accent) 70%, transparent);
-    text-decoration-thickness: 1.5px;
-    text-underline-offset: 0.2em;
-  }
-
-  ul {
+  fieldset {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
     margin: 0;
     padding: 0;
-    border-top: 1px solid var(--yl-border);
-    list-style: none;
+    border: 0;
   }
 
-  li {
+  legend {
+    margin-bottom: 0.75rem;
+    padding: 0;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+  }
+
+  label {
     display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    padding: 0.6rem 0;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.8rem;
     border-bottom: 1px solid var(--yl-border);
+    cursor: pointer;
+  }
+
+  label:first-of-type {
+    border-top: 1px solid var(--yl-border);
+  }
+
+  label:hover,
+  label:has(:checked) {
+    background: color-mix(in srgb, var(--sl-color-accent) 7%, transparent);
+  }
+
+  label:has(:checked) strong {
+    color: var(--sl-color-accent);
+  }
+
+  input {
+    flex-shrink: 0;
+    margin: 0;
+    accent-color: var(--sl-color-accent);
+  }
+
+  strong {
+    color: var(--sl-color-white);
+    font-weight: 600;
+  }
+
+  .summary {
+    display: block;
+    margin-top: 0.15rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
   }
 
   a {
-    color: var(--sl-color-white);
+    display: inline-block;
+    margin-top: 0.75rem;
+    color: var(--sl-color-accent);
     font-weight: 600;
     text-decoration: none;
   }
 
   a:hover {
-    color: var(--sl-color-accent);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
 
-  a:focus-visible {
+  a:focus-visible,
+  label:has(:focus-visible) {
     outline: 2px solid var(--sl-color-accent);
     outline-offset: 2px;
     border-radius: 2px;
   }
 
-  span {
-    color: var(--sl-color-gray-3);
-    font-size: var(--sl-text-sm);
-  }
-
   @media (max-width: 56rem) {
-    .method-index {
+    method-index {
       grid-template-columns: minmax(0, 1fr);
       gap: 1.5rem;
+    }
+
+    fieldset {
+      grid-column: 1;
+      grid-row: auto;
+    }
+
+    .examples {
+      grid-row: auto;
+    }
+
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    label {
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--yl-border);
+      border-radius: 0.4rem;
+      font-size: var(--sl-text-sm);
+      line-height: 1.35;
+    }
+
+    .summary {
+      display: none;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    .choices {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

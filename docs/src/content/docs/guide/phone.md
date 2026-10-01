@@ -15,7 +15,7 @@ a [shared contract](./http-and-client#expose-another-method) for browser clients
 
 ## Enable phone sign-in
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Schema } from "effect";
 import { Auth, PhoneOtp, Sessions } from "@yielded/auth";
 
@@ -107,7 +107,7 @@ supply your table mappings and migrations.
 
 Wire those Layers with a sending policy and session claims:
 
-```ts title="phone-live.ts"
+```ts title="apps/server/phone-live.ts"
 import { Config, Effect, Layer } from "effect";
 import { PhoneOtp } from "@yielded/auth";
 import * as Twilio from "@yielded/auth/adapters/Twilio";

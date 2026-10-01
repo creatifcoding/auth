@@ -8,7 +8,7 @@ and delivery through the [HTTP boundary](./http-and-client).
 
 ## Configure sessions
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Schema } from "effect";
 import { Auth, Sessions } from "@yielded/auth";
 

@@ -12,7 +12,7 @@ request binding, single-use challenges, credential storage, and session issuance
 
 <!-- #region passkey-contract -->
 
-```ts title="passkey-contract.ts"
+```ts title="packages/domain/passkey-contract.ts"
 import { Schema } from "effect";
 import { AuthContract, PasskeyContract } from "@yielded/auth";
 
@@ -44,10 +44,10 @@ the named server call nor the browser payload includes that credential. The
 
 ## Enable passkeys
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Auth, Passkey, Sessions } from "@yielded/auth";
 
-import { PasskeyApi } from "./passkey-contract";
+import { PasskeyApi } from "@app/domain/passkey-contract";
 
 export const AppAuth = Auth.make(PasskeyApi, {
   sessions: Sessions.stateful(),
@@ -181,7 +181,7 @@ The client exposes the same calls as `client.auth.signIn(...)` and
 
 ## Install the server verifier
 
-```ts title="passkey-protocol.ts"
+```ts title="apps/server/passkey-protocol.ts"
 import { Layer } from "effect";
 import { Passkey } from "@yielded/auth";
 import * as PasskeyServer from "@yielded/auth-simplewebauthn/Server";
@@ -203,7 +203,7 @@ ID and exact allowed origins; changing them can make existing passkeys unusable.
 
 The verifier is an optional adapter; storage and claims have no automatic defaults:
 
-```ts title="passkey-live.ts"
+```ts title="apps/server/passkey-live.ts"
 import { Layer } from "effect";
 
 import { AppAuth } from "./auth";

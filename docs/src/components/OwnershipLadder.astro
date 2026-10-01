@@ -87,6 +87,9 @@ const edges = (row: number, column: number) => {
 
   return [above === "app" ? "top" : "", right === "app" ? "right" : ""].join(" ").trim() || undefined;
 };
+
+// Narrow columns break an API name after a dot, never inside an identifier.
+const segments = (api: string) => api.split(/(?<=\.)/);
 ---
 
 <figure class="ladder not-content">
@@ -99,7 +102,14 @@ const edges = (row: number, column: number) => {
           levels.map(({ name, api }) => (
             <th scope="col">
               <span class="level">{name}</span>
-              <code class="api">{api}</code>
+              <code class="api">
+                {segments(api).map((segment) => (
+                  <>
+                    {segment}
+                    <wbr />
+                  </>
+                ))}
+              </code>
             </th>
           ))
         }
@@ -156,14 +166,13 @@ const edges = (row: number, column: number) => {
           <p class="level">{name}</p>
           <code class="api">{api}</code>
           <dl>
-            {layers.map((layer) => {
+            {layers.map((layer, row) => {
               const cell = layer.cells[column]!;
               return (
-                <div data-owner={cell.owner}>
+                <div data-owner={cell.owner} data-edge={edges(row, column)}>
                   <dt>{layer.name}</dt>
-                  <dd>
-                    <span class="owner">{ownerLabel[cell.owner]}</span> {cell.note}
-                  </dd>
+                  <dd class="owner">{ownerLabel[cell.owner]}</dd>
+                  <dd class="note">{cell.note}</dd>
                 </div>
               );
             })}
@@ -193,6 +202,7 @@ const edges = (row: number, column: number) => {
     --rule: 2px solid var(--auth);
 
     margin: 1.75rem 0 0;
+    container-type: inline-size;
   }
 
   .sr-only {
@@ -351,7 +361,7 @@ const edges = (row: number, column: number) => {
     outline-offset: 2px;
   }
 
-  /* Narrow screens: one block per level. */
+  /* Narrow containers: one stack per level, with the same boundary rule. */
   .stacked {
     display: none;
     margin: 0;
@@ -370,39 +380,54 @@ const edges = (row: number, column: number) => {
 
   .stacked dl {
     margin: 0.85rem 0 0;
+    overflow: hidden;
+    border: 1px solid var(--yl-border);
+    border-radius: 0.6rem;
   }
 
   .stacked dl > div {
-    padding: 0.55rem 0.75rem;
-    border-left: 2px solid var(--yl-border-strong);
-  }
-
-  .stacked dl > div[data-owner="auth"] {
-    border-left-color: var(--auth);
-    background: var(--auth-fill);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    column-gap: 1rem;
+    padding: 0.7rem 0.85rem;
+    background: var(--yl-bg-raised);
   }
 
   .stacked dl > div + div {
-    margin-top: 0.25rem;
+    border-top: 1px solid var(--yl-border);
+  }
+
+  .stacked dl > div[data-owner="auth"] {
+    background: var(--auth-fill);
+  }
+
+  .stacked dl > div[data-edge~="top"] {
+    border-top: var(--rule);
   }
 
   .stacked dt {
-    color: var(--sl-color-gray-3);
-    font-size: var(--sl-text-xs);
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-sm);
+    font-weight: 500;
   }
 
   .stacked dd {
-    margin: 0.1rem 0 0;
-    color: var(--sl-color-gray-3);
-    font-size: var(--sl-text-sm);
+    margin: 0;
   }
 
-  .stacked dd .owner {
-    display: inline;
+  .stacked .owner {
+    font-size: var(--sl-text-xs);
+    line-height: inherit;
   }
 
   .stacked [data-owner="auth"] .owner {
     color: var(--auth);
+  }
+
+  .stacked .note {
+    grid-column: 1 / -1;
+    margin-top: 0.15rem;
   }
 
   .stacked .apps {
@@ -415,7 +440,7 @@ const edges = (row: number, column: number) => {
     font-size: var(--sl-text-sm);
   }
 
-  @media (max-width: 44rem) {
+  @container (max-width: 40rem) {
     figure.ladder table {
       display: none;
     }

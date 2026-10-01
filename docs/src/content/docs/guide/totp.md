@@ -9,7 +9,7 @@ request handlers, with `AppAuth` and the HTTP request boundary provided.
 
 ## Enable the authenticator
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Schema } from "effect";
 import { Auth, Password, Totp } from "@yielded/auth";
 
@@ -35,7 +35,7 @@ pending-authentication support. Storage, secret keys, and action authorization
 have no automatic defaults. This definition omits `sessions`
 so you can supply the custom completion Layer below to `AppAuth.layer`.
 
-```ts title="sessions.ts"
+```ts title="apps/server/sessions.ts"
 import { Layer } from "effect";
 
 import { AppAuth } from "./auth";
@@ -109,7 +109,7 @@ code. Each code is consumed once. A replay or exhausted attempt budget fails clo
 
 Use the pure TOTP contracts to add named actions:
 
-```ts title="totp-contract.ts"
+```ts title="packages/domain/totp-contract.ts"
 import { Schema } from "effect";
 import { AuthContract, TotpContract } from "@yielded/auth";
 

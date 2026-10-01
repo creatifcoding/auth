@@ -163,7 +163,7 @@ no automatic deletion or migration.
 
 Declare the actions for `OAuth` inside `Auth.make`:
 
-```ts title="auth-contract.ts"
+```ts title="packages/domain/auth-contract.ts"
 import { Schema } from "effect";
 import { AuthContract } from "@yielded/auth";
 
@@ -180,7 +180,7 @@ export const AuthApi = AuthContract.make("app/Auth", {
 
 With `AppAuth` from the guide and `AuthRoutes` from a provider page:
 
-```ts title="oauth-live.ts"
+```ts title="apps/server/oauth-live.ts"
 import { Layer } from "effect";
 import { OAuth } from "@yielded/auth";
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";

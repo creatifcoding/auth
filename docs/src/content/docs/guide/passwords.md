@@ -8,7 +8,7 @@ recovery to enable full password management.
 
 ## Enable passwords
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Schema } from "effect";
 import { Auth, Password, Sessions } from "@yielded/auth";
 
@@ -88,7 +88,7 @@ Supply `PasswordHashing` explicitly. The maintained Argon2id adapter lives in
 Web Crypto. Storage, claims, account creation, screening, and change authorization
 remain application-owned:
 
-```ts title="password-live.ts"
+```ts title="apps/server/password-live.ts"
 import { Layer } from "effect";
 import { Password, Proofs, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";

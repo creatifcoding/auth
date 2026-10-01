@@ -32,7 +32,7 @@ import { AuthPersistence } from "@yielded/auth-persistence-drizzle/SqliteBun";
 
 Bind it to the Auth definition and map the existing customer table:
 
-```ts title="schema.ts"
+```ts title="apps/server/schema.ts"
 import { AuthPersistence } from "@yielded/auth-persistence-drizzle/SqliteBun";
 import { Schema as AuthSchema } from "@yielded/auth";
 import { Effect } from "effect";
@@ -62,12 +62,12 @@ as a named export so Drizzle Kit discovers it; the
 [managed schema](https://github.com/yielded-dev/auth/blob/main/examples/persistence-drizzle-managed/src/schema.ts)
 shows the complete exports. Both Drizzle examples use Drizzle Kit:
 
-```ts title="drizzle.config.ts"
+```ts title="apps/server/drizzle.config.ts"
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
   dialect: "sqlite",
-  schema: ["./src/customers.ts", "./src/schema.ts"],
+  schema: ["./customers.ts", "./schema.ts"],
   out: "./drizzle",
 });
 ```
@@ -76,7 +76,7 @@ Generate SQL after changing the schema, review it, and commit the SQL and snapsh
 The examples expose `vp run db:generate --name=describe_change` and `vp run db:migrate`
 from their directories. The latter uses the same migration Layer as startup:
 
-```ts title="auth-live.ts"
+```ts title="apps/server/auth-live.ts"
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import { AuthPersistence } from "@yielded/auth-persistence-drizzle/SqliteBun";
 import { Layer } from "effect";
@@ -87,7 +87,7 @@ import { Persistence, storage } from "./schema";
 const DatabaseLive = SqliteClient.layer({ filename: "auth.sqlite" });
 const ConfigLive = Persistence.Config.layer(storage);
 const DatabaseReady = AuthPersistence.migrationsLayer({
-  migrationsFolder: new URL("../drizzle/", import.meta.url).pathname,
+  migrationsFolder: new URL("./drizzle/", import.meta.url).pathname,
 }).pipe(Layer.provideMerge(ConfigLive), Layer.provideMerge(DatabaseLive));
 export const AuthLive = AppAuth.layer.pipe(
   Layer.provide(Persistence.layer),
@@ -153,7 +153,7 @@ outcome does not authorize issuing another credential or repeating delivery.
 
 For SQLite on Bun, create the Drizzle client and provide the resulting service:
 
-```ts title="auth-persistence.ts"
+```ts title="apps/server/auth-persistence.ts"
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Effect, Layer } from "effect";
@@ -178,7 +178,7 @@ Supply `LifecycleHooks` and your other account/session Layers at the composition
 
 ## Compose the application Layer
 
-```ts title="auth-dependencies.ts"
+```ts title="apps/server/auth-dependencies.ts"
 import { Layer } from "effect";
 import { Auth, Hooks, Proofs, WebCrypto } from "@yielded/auth";
 
@@ -207,7 +207,7 @@ neither has an automatic default.
 
 Add the method's Layers, such as `PasswordLive` from the [password guide](../guide/passwords#supply-the-services):
 
-```ts title="auth-routes.ts"
+```ts title="apps/server/auth-routes.ts"
 import { Layer } from "effect";
 import { Http } from "@yielded/auth";
 
@@ -319,7 +319,7 @@ row mappings, wrap the explicit adapter services:
 
 <!-- #region phone-layers -->
 
-```ts title="auth-persistence.ts"
+```ts title="apps/server/auth-persistence.ts"
 import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Effect, Layer } from "effect";
 import { phonePersistenceLayer } from "@yielded/auth-persistence-drizzle";
