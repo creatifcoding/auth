@@ -116,7 +116,9 @@ test("latest named authentication settles after interrupted admission and failur
         );
 
         const auth = AuthAtom.make(AppClient, {
-          httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+          layer: AppClient.layer.pipe(
+            Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
+          ),
         });
 
         const r = yield* Effect.acquireRelease(

@@ -119,8 +119,9 @@ through `auth.runtime` to share the client and account lifetime:
 
 <!--@include: @/../README.md#auth-query-->
 
-Fetch is configured by default. Pass `{ httpClient: ApplicationHttpClient }` to
-`AuthAtom.make` to use your transport Layer. The [client guide](./http-and-client#connect-client-state)
+Fetch is configured by default. To customize transport, compose `AppClient.layer`
+with your HttpClient Layer and pass `{ layer: ClientLive }` to `AuthAtom.make`.
+The [client guide](./http-and-client#connect-client-state)
 shows React, shared invalidation, and standalone Effect calls.
 
 ## Connect your application

@@ -1,5 +1,4 @@
 import { Context, Effect, Layer, Schema, Scope } from "effect";
-import type { HttpClient } from "effect/unstable/http";
 import { AsyncResult, Atom, AtomRegistry, Reactivity } from "effect/unstable/reactivity";
 
 import {
@@ -25,9 +24,7 @@ export interface AuthAtomOptions<
 > {
   /** Use the application's runtime factory to share Layers and invalidation. */
   readonly runtime?: Atom.RegistryRuntimeFactory | Atom.SharedRuntimeFactory;
-  /** Application-configured, non-retrying transport. Defaults to the client's layerFetch. */
-  readonly httpClient?: Layer.Layer<HttpClient.HttpClient, E>;
-  /** Replace the configured client service, for example with an application test Layer. */
+  /** Client service Layer with its dependencies provided. Defaults to the client's layerFetch. */
   readonly layer?: Layer.Layer<ClientService<Id, Actions>, E>;
   /** Additional application queries invalidated by a successful mutation. */
   readonly reactivityKeys?: Partial<{
@@ -226,10 +223,7 @@ export const make = <const Id extends string, Actions extends ActionsWithSession
   const clientLayer: Layer.Layer<
     ClientService<Id, Actions>,
     E | OperationHttpError
-  > = options.layer ??
-  (options.httpClient === undefined
-    ? client.layerFetch
-    : client.layer.pipe(Layer.provide(options.httpClient)));
+  > = options.layer ?? client.layerFetch;
 
   const host = factory(
     Layer.effectContext(acquire).pipe(
