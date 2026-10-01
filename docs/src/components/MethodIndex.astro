@@ -21,23 +21,25 @@ const { id, methods } = Astro.props;
 <method-index class="not-content">
   <fieldset hidden>
     <legend>Choose a method to explore</legend>
-    {
-      methods.map(({ name, summary }, index) => (
-        <label>
-          <input
-            type="radio"
-            name={id}
-            value={index}
-            checked={index === 0}
-            aria-controls={`${id}-${index}`}
-          />
-          <span>
-            <strong>{name}</strong>
-            <span class="summary">{summary}</span>
-          </span>
-        </label>
-      ))
-    }
+    <div class="choices">
+      {
+        methods.map(({ name, summary }, index) => (
+          <label>
+            <input
+              type="radio"
+              name={id}
+              value={index}
+              checked={index === 0}
+              aria-controls={`${id}-${index}`}
+            />
+            <span>
+              <strong>{name}</strong>
+              <span class="summary">{summary}</span>
+            </span>
+          </label>
+        ))
+      }
+    </div>
   </fieldset>
   <div class="examples">
     {
@@ -208,18 +210,30 @@ const { id, methods } = Astro.props;
       grid-row: auto;
     }
 
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
     label {
-      display: inline-flex;
       align-items: center;
-      margin: 0.25rem 0.25rem 0.25rem 0;
+      gap: 0.6rem;
       padding: 0.6rem 0.75rem;
       border: 1px solid var(--yl-border);
       border-radius: 0.4rem;
       font-size: var(--sl-text-sm);
+      line-height: 1.35;
     }
 
     .summary {
       display: none;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    .choices {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

@@ -49,15 +49,13 @@ Clients can reach only the actions you declare.
 
 ## Install the methods you need
 
-<MethodIndex
-  id="auth-methods"
-  methods={[
-    {
-      name: "Passwords",
-      href: "/auth/guide/passwords/",
-      summary: "Registration, sign-in, and recovery.",
-      detail: "Supply password hashing, credential storage, and account claims through Layers. Registration and recovery use the same strategy.",
-      code: `import { Schema } from "effect";
+export const methods = [
+  {
+    name: "Passwords",
+    href: "/auth/guide/passwords/",
+    summary: "Registration, sign-in, and recovery.",
+    detail: "Supply password hashing, credential storage, and account claims through Layers. Registration and recovery use the same strategy.",
+    code: `import { Schema } from "effect";
 import { Auth, Password, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
@@ -68,13 +66,13 @@ export const AppAuth = Auth.make("app/Auth", {
   },
   defaultStrategy: "password",
 });`,
-    },
-    {
-      name: "Passkeys",
-      href: "/auth/guide/passkeys/",
-      summary: "WebAuthn sign-in and enrollment.",
-      detail: "Supply relying-party configuration, credential storage, and WebAuthn verification. A browser or iOS adapter handles the local passkey prompt.",
-      code: `import { Schema } from "effect";
+  },
+  {
+    name: "Passkeys",
+    href: "/auth/guide/passkeys/",
+    summary: "WebAuthn sign-in and enrollment.",
+    detail: "Supply relying-party configuration, credential storage, and WebAuthn verification. A browser or iOS adapter handles the local passkey prompt.",
+    code: `import { Schema } from "effect";
 import { Auth, Passkey, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
@@ -85,13 +83,13 @@ export const AppAuth = Auth.make("app/Auth", {
   },
   defaultStrategy: "passkey",
 });`,
-    },
-    {
-      name: "Email codes & magic links",
-      href: "/auth/guide/codes/",
-      summary: "One-time sign-in by email.",
-      detail: "Your email service delivers the code; Yielded Auth verifies the proof and completes sign-in. Use Email.makeLink() for magic links.",
-      code: `import { Schema } from "effect";
+  },
+  {
+    name: "Email codes & magic links",
+    href: "/auth/guide/codes/",
+    summary: "One-time sign-in by email.",
+    detail: "Your email service delivers the code; Yielded Auth verifies the proof and completes sign-in. Use Email.makeLink() for magic links.",
+    code: `import { Schema } from "effect";
 import { Auth, Email, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
@@ -102,13 +100,13 @@ export const AppAuth = Auth.make("app/Auth", {
   },
   defaultStrategy: "email",
 });`,
-    },
-    {
-      name: "Phone codes",
-      href: "/auth/guide/phone/",
-      summary: "One-time sign-in by SMS.",
-      detail: "Supply phone lookup, SMS delivery, and your destination policy. Bind requests to a server-verified network key for admission limits.",
-      code: `import { Schema } from "effect";
+  },
+  {
+    name: "Phone codes",
+    href: "/auth/guide/phone/",
+    summary: "One-time sign-in by SMS.",
+    detail: "Supply phone lookup, SMS delivery, and your destination policy. Bind requests to a server-verified network key for admission limits.",
+    code: `import { Schema } from "effect";
 import { Auth, PhoneOtp, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
@@ -119,13 +117,13 @@ export const AppAuth = Auth.make("app/Auth", {
   },
   defaultStrategy: "phone",
 });`,
-    },
-    {
-      name: "Two-factor",
-      href: "/auth/guide/totp/",
-      summary: "Authenticator apps after a first factor.",
-      detail: "Add an authenticator alongside a primary method. Your account policy decides when it is required; supply a session completion Layer with pending-authentication support, as shown in the guide.",
-      code: `import { Schema } from "effect";
+  },
+  {
+    name: "Two-factor",
+    href: "/auth/guide/totp/",
+    summary: "Authenticator apps after a first factor.",
+    detail: "Add an authenticator alongside a primary method. Your account policy decides when it is required; supply a session completion Layer with pending-authentication support, as shown in the guide.",
+    code: `import { Schema } from "effect";
 import { Auth, Password, Totp } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
@@ -136,13 +134,13 @@ export const AppAuth = Auth.make("app/Auth", {
   },
   defaultStrategy: "password",
 });`,
-    },
-    {
-      name: "OAuth & OIDC",
-      href: "/auth/guide/oauth/",
-      summary: "GitHub, Google, or any OpenID provider.",
-      detail: "Configure the provider and callback routes through the HTTP adapter. Supply account links and claims through Layers; add an access profile to retain provider API access.",
-      code: `import { Schema } from "effect";
+  },
+  {
+    name: "OAuth & OIDC",
+    href: "/auth/guide/oauth/",
+    summary: "GitHub, Google, or any OpenID provider.",
+    detail: "Configure the provider and callback routes through the HTTP adapter. Supply account links and claims through Layers; add an access profile to retain provider API access.",
+    code: `import { Schema } from "effect";
 import { Auth, OAuth, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
@@ -153,9 +151,10 @@ export const AppAuth = Auth.make("app/Auth", {
   },
   defaultStrategy: "social",
 });`,
-    },
-  ]}
-/>
+  },
+];
+
+<MethodIndex id="auth-methods" methods={methods} />
 
 Each method adds the services it needs to the type of `AppAuth.layer`, so the
 compiler lists what your application still has to provide. Publish the actions
