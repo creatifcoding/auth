@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-const drizzleVersion = "1.0.0-rc.5-ab785fc";
+const drizzleVersion = "1.0.0-rc.4";
 const dependency = `drizzle-orm@${drizzleVersion}`;
 const filename = `${dependency}.patch`;
 const patchPath = `patches/${filename}`;

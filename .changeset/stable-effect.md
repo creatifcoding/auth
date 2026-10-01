@@ -9,4 +9,4 @@
 "@yielded/auth-simplewebauthn": patch
 ---
 
-Require stable Effect and matching SQL drivers, and update Cloudflare integration to effect-cf 0.53. Use the current Effect module paths and run the temporary Drizzle patch CLI when adding Drizzle to an existing Bun app.
+Require stable Effect and matching SQL drivers, and update Cloudflare integration to effect-cf 0.53. Support Drizzle RC4 with the temporary Drizzle patch CLI when adding Drizzle to an existing Bun app.

@@ -2,7 +2,7 @@
 
 Temporary compatibility patch for Drizzle's Effect integration. The CLI saves a
 native Bun patch and runs `bun install`; subsequent installs apply it from your
-lockfile. It updates Drizzle's SQL type imports and schema length helper in its
+lockfile. It updates Drizzle's SQL type imports, error classes, and schema length helper in its
 ESM and CommonJS artifacts. Your application's Effect package stays unchanged.
 
 ## Apply
@@ -11,6 +11,7 @@ Install your application's dependencies first, then run from the workspace that
 depends on Drizzle:
 
 ```sh
+bun add drizzle-orm@1.0.0-rc.4
 bunx @yielded/drizzle-effect-v4-patch@beta patch
 ```
 
@@ -19,8 +20,8 @@ Commit `package.json`, `bun.lock` (or `bun.lockb`), and the generated file in
 Use `--dir path/to/workspace` to select another workspace; patch configuration
 belongs to the nearest Bun lockfile's directory.
 
-Only `drizzle-orm@1.0.0-rc.5-ab785fc` is verified. Other releases, including RC4,
-are rejected. This does not widen Yielded Auth's adapter peer requirements.
+The patch targets the released `drizzle-orm@1.0.0-rc.4`. Other versions, including
+commit snapshots, are rejected. Yielded Auth's Drizzle adapter accepts this release.
 The CLI supports Bun projects and refuses to overwrite a conflicting patch.
 If installation fails after saving configuration, rerun the command to finish.
 
