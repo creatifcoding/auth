@@ -124,7 +124,8 @@ const result = yield* client.auth.signIn({ email, password });
 ```
 
 `auth.runtime` provides the client to composed queries and workflows; standalone
-Effect programs provide `AppClient.layer`. Both constructors are synchronous.
+Effect programs provide `AppClient.layerFetch`, or supply their own Effect `HttpClient`
+to `AppClient.layer`. Both constructors are synchronous.
 The registry or application Scope owns acquisition and finalization. See
 [client state](./http-and-client#connect-client-state) for reactivity keys and
 ordinary React Atom hooks.

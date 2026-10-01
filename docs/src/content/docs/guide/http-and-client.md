@@ -217,11 +217,32 @@ const client = yield* AppClient;
 const session = yield* client.auth.getSession();
 ```
 
-`Client.make` declares a yieldable service. Provide `AppClient.layer` to a program,
-or yield `AppClient.make` inside a Scope to acquire an instance directly.
+`Client.make` declares a yieldable service. Provide `AppClient.layerFetch` for the
+configured Fetch transport. To use an application transport, provide its
+`HttpClient` Layer to `AppClient.layer`, or yield `AppClient.make` inside a Scope
+with `HttpClient.HttpClient` available.
 `client.auth.signIn({ email, password })` and `client.auth.signOut()` return Effects
-with typed errors and schema requirements. The client handles envelopes and CSRF;
-the browser manages Origin and cookies. Mutations are never automatically retried.
+with typed errors and schema requirements. Effect's HTTP client owns request
+execution, tracing, cancellation, and response resources. Auth owns credential
+settlement, envelopes, CSRF, and bounded decoding; the browser manages Origin and cookies.
+
+Supply a transport without automatic retries, redirect following, or status filtering:
+auth mutations make one attempt, and expected failures are decoded from their response
+envelopes. `layerFetch` defaults to `credentials: "include"` (`"omit"` in native mode)
+and `redirect: "error"`, preserving other `FetchHttpClient.RequestInit` construction
+defaults. Customize Fetch through `FetchHttpClient.Fetch` when constructing the Layer.
+An application-supplied transport owns these settings itself. Native exchanges disable
+standard HTTP tracing and automatic trace-header propagation to keep custom credential
+headers private; application redaction settings remain intact.
+
+Writes settle in order within one client instance; reads can run concurrently.
+Account changes wait for admitted writes, including requests delayed by middleware.
+
+Each request and response body has a 30-second deadline. Set a positive, finite
+`requestTimeout` in `Client.make` to change it. Timeout returns `OperationHttpError`
+with reason `"timeout"`; a mutation may already have committed. Reconcile with the
+server or start a fresh flow; never retry credential issuance based on timeout alone.
+`maximumResponseBytes` defaults to 1 MiB and may only lower that limit.
 
 The native HttpApi group documents the exact transport envelopes. A plain
 `HttpApiClient` does not supply the auth client's credential settlement, private
@@ -241,7 +262,8 @@ Both constructors are synchronous and perform no I/O. The application Atom
 registry owns client acquisition and finalization. `auth.getSession` is a query
 atom, `auth.session` is its alias, and `auth.signIn` and `auth.signOut` are mutation
 atoms. Queries expose loading, success, and failure through `AsyncResult`,
-including setup errors.
+including setup errors. The default client Layer is `AppClient.layerFetch`; pass
+`{ httpClient: ApplicationHttpClient }` to use the application's transport Layer.
 
 Compose application queries with the same scoped client:
 
@@ -399,6 +421,7 @@ completion. Unknown write outcomes require authoritative lookup or a fresh flow.
 injection and explicitly selected reveals.
 Encode expected response failures before leaving the request wrapper.
 
-`OperationHttpClient`, `AuthAtom.query`, `AuthAtom.mutation`, and `AuthAtom.workflow`
-remain available for custom integration. Private reveals belong in a finite
+`OperationHttpClient.make` requires the same Effect `HttpClient` service.
+`AuthAtom.query`, `AuthAtom.mutation`, and `AuthAtom.workflow` remain available for
+custom integration. Private reveals belong in a finite
 collector, outside ordinary query caches, logs, and persisted client state.

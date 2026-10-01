@@ -114,7 +114,8 @@ const result = yield* client.auth.signIn({ email, password });
 
 Both calls return Effects; the remote client handles HTTP and schema decoding.
 Use `auth.runtime` for client workflows that share the atoms' instance, or provide
-`AppClient.layer` at a standalone program boundary. The
+`AppClient.layerFetch` at a standalone program boundary. Supply your own Effect
+`HttpClient` to `AppClient.layer` when customizing transport. The
 [getting-started guide](docs/src/content/docs/guide/getting-started.md) and
 [HTTP and client guide](docs/src/content/docs/guide/http-and-client.md) show the full composition.
 

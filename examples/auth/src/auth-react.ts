@@ -33,7 +33,7 @@ export function BrowserApp() {
 }
 
 // Run through the same auth runtime when sharing the browser instance, or
-// provide AppClient.layer at a separate program boundary for a fresh client.
+// provide AppClient.layerFetch at a separate program boundary for a fresh client.
 export const signOutFromEffect = Effect.fn("example.signOutFromEffect")(function* () {
   const client = yield* AppClient;
 

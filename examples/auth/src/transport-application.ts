@@ -86,7 +86,7 @@ export const server = OperationHttpServer.make(transport).pipe(
   Effect.provide(Layer.mergeAll(transportConfiguration, transportInvocation, currentSubjectLayer)),
 );
 
-/** The Fetch client works without React; expose its effects through any host runtime. */
+/** Supply an Effect HttpClient Layer at the host boundary; React is optional. */
 export const fetchClient = OperationHttpClient.make({
   baseUrl: "https://account.example",
   csrfHeader: "x-example-csrf",

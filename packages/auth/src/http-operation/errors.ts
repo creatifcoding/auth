@@ -30,6 +30,7 @@ export class OperationHttpError extends Schema.TaggedError<OperationHttpError>()
       "too-large",
       "response",
       "network",
+      "timeout",
       "stale-response",
       "private-output",
       "unavailable",
