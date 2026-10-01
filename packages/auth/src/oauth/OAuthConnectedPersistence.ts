@@ -5,8 +5,15 @@ import type { SubjectId } from "../Schema";
 import type { OAuthAccountRevision } from "./accountsModels";
 import type * as M from "./connectedModels";
 import type { PrepareOAuthCommit } from "./OAuthSignInPersistence";
+import type {
+  OAuthSignInAccessClaim,
+  OAuthSignInAccessInspection,
+  OAuthSignInAccessOutcome,
+} from "./signInAccessModels";
 import type { OAuthUnavailable } from "./signInErrors";
 import type {
+  OAuthClaim,
+  OAuthCredentialSnapshot,
   OAuthClaimId,
   OAuthCleanupInput,
   OAuthCommandId,
@@ -24,6 +31,30 @@ type Mutation<A> = Effect.Effect<PreparedCommit<A>, OAuthUnavailable>;
 export class OAuthConnectedPersistence extends Context.Service<
   OAuthConnectedPersistence,
   {
+    /** Reserve client order before a guest sign-in exchanges its code. A lost
+     * receipt never authorizes exchange or a second reservation. Unresolved
+     * reservations remain visible to cohort revocation and ownership cleanup. */
+    readonly claimSignIn: <A>(
+      input: { readonly claim: OAuthClaim; readonly configuration: M.OAuthConnectedConfiguration },
+      prepare: PrepareOAuthCommit<OAuthSignInAccessClaim, A>,
+    ) => Mutation<A>;
+    /** Resolve the grant slot only after shared sign-in resolved the local
+     * credential. Recheck ownership, revisions, policy and cohort order. */
+    readonly inspectSignIn: (input: {
+      readonly reservation: OAuthSignInAccessClaim;
+      readonly credential: OAuthCredentialSnapshot;
+      readonly grantId: typeof M.OAuthGrantId.Type;
+    }) => Effect.Effect<OAuthSignInAccessInspection, OAuthUnavailable>;
+    /** Commit sealed tokens into the ordinary connected-grant store. Exact
+     * reservation/target/revisions are rechecked; no session is released before
+     * confirmation. Failed/unknown exchanges retain unresolved cohort work. */
+    readonly settleSignIn: <A>(
+      input: {
+        readonly reservation: OAuthSignInAccessClaim;
+        readonly outcome: OAuthSignInAccessOutcome;
+      },
+      prepare: PrepareOAuthCommit<typeof M.OAuthConnectedSettlementDecision.Type, A>,
+    ) => Mutation<A>;
     readonly capture: (input: {
       readonly moduleId: typeof OAuthModuleId.Type;
       readonly subjectId: SubjectId;

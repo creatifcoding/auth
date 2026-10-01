@@ -12,3 +12,7 @@ export const OAuthProviderKey = Schema.String.check(
 ).pipe(Schema.brand("effect-auth/OAuthProviderKey"));
 
 export type OAuthProviderKey = typeof OAuthProviderKey.Type;
+
+export const OAuthGeneration = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+);

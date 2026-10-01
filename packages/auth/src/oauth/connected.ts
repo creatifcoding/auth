@@ -643,6 +643,7 @@ export const makeOAuthConnected = <const Id extends string>(
                   identity: projected.identity,
                   configuration: protocolConfiguration,
                   grantId: context.grantId,
+                  exchangeOrder: owned.order,
                   grantVersion: SecurityRevision.make(yield* random()),
                   tokenVersion: SecurityRevision.make(yield* random()),
                   cohortGeneration: inspectedGrant.cohortGeneration,

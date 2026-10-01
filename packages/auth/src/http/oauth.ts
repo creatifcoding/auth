@@ -1,4 +1,4 @@
-import { Effect, Layer, Result, Schema } from "effect";
+import { Context, Effect, Layer, Result, Schema } from "effect";
 
 import { cryptoLayer } from "../auth/defaults";
 import type { AnyRoute } from "../http-operation/contract";
@@ -6,6 +6,7 @@ import { OperationHttpConfigurationError, OperationHttpError } from "../http-ope
 import { oauthCallback, type OAuthHttpCallback } from "../http-operation/server";
 import { origin as Origin } from "../internal/origin";
 import { selectCallback } from "../oauth/callback";
+import { OAuthConnectedProtocol } from "../oauth/OAuthConnectedProtocol";
 import { OAuthProtocol } from "../oauth/OAuthProtocol";
 import type { ProviderDefinition } from "../oauth/providerDefinition";
 import { OAuthProviderKey } from "../oauth/schema";
@@ -136,8 +137,7 @@ export const makeOAuth = <E, R, ResponseR>(
   const configuration = Effect.fromResult(saved);
   const respond = options.respond;
 
-  const layer = Layer.effect(
-    OAuthProtocol,
+  const layer = Layer.effectContext(
     Effect.gen(function* () {
       const { entries } = yield* configuration;
 
@@ -153,13 +153,32 @@ export const makeOAuth = <E, R, ResponseR>(
 
       const protocols = new Map(installed);
 
-      return OAuthProtocol.of({
+      const signIn = OAuthProtocol.of({
         prepareAuthorization: (input) =>
           protocols.get(input.provider)?.prepareAuthorization(input) ?? OAuthRejected.make({}),
         exchangeVerifiedIdentity: (input) =>
           protocols.get(input.configuration.provider)?.exchangeVerifiedIdentity(input) ??
           OAuthUnavailable.make({}),
       });
+
+      const connected = OAuthConnectedProtocol.of({
+        prepareAuthorization: (input) =>
+          protocols.get(input.profile.provider)?.connected?.prepareAuthorization(input) ??
+          OAuthUnavailable.make({}),
+        exchangeGrant: (input) =>
+          protocols.get(input.configuration.provider)?.connected?.exchangeGrant(input) ??
+          OAuthUnavailable.make({}),
+        refreshGrant: (input) =>
+          protocols.get(input.context.configuration.provider)?.connected?.refreshGrant(input) ??
+          OAuthUnavailable.make({}),
+        revokeGrant: (input) =>
+          protocols.get(input.context.configuration.provider)?.connected?.revokeGrant(input) ??
+          OAuthUnavailable.make({}),
+      });
+
+      return Context.make(OAuthProtocol, signIn).pipe(
+        Context.add(OAuthConnectedProtocol, connected),
+      );
     }),
   );
 

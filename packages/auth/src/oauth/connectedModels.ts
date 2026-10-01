@@ -7,6 +7,13 @@ import {
   OAuthActionAuthorization,
   OAuthActionDigest,
 } from "./accountsModels";
+import {
+  OAuthGrantId,
+  OAuthPermissionProfileKey,
+  OAuthConnectedScopes,
+  OAuthConnectedResources,
+  OAuthConnectedProfile,
+} from "./permissionProfile";
 import { OAuthProviderKey } from "./schema";
 import {
   OAuthCallbackId,
@@ -25,44 +32,19 @@ import {
   OAuthTransactionSecrets,
 } from "./signInModels";
 
-const label = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9._:/-]{1,256}$/));
-const duration = Schema.Int.check(Schema.isBetween({ minimum: 1000, maximum: 2592000000 }));
 const revision = SecurityRevision.check(Schema.isMaxLength(256));
 
-export const OAuthGrantId = label.pipe(Schema.brand("effect-auth/OAuthGrantId"));
+export { OAuthGrantId } from "./permissionProfile";
 
-export const OAuthPermissionProfileKey = label.pipe(
-  Schema.brand("effect-auth/OAuthPermissionProfileKey"),
-);
+export {
+  OAuthPermissionProfileKey,
+  OAuthConnectedScopes,
+  OAuthConnectedResources,
+  OAuthConnectedProfile,
+} from "./permissionProfile";
 
 /** Durable authority-issued total order, comparable with cohort cutoffs. Never caller time. */
 export const OAuthConnectedOrder = Schema.String.check(Schema.isPattern(/^[0-9]{1,128}$/));
-
-export const OAuthConnectedScopes = Schema.Array(
-  Schema.String.check(Schema.isPattern(/^[\x21\x23-\x5b\x5d-\x7e]{1,256}$/)),
-).check(Schema.isMaxLength(64));
-
-export const OAuthConnectedResources = Schema.Array(
-  Schema.NonEmptyString.check(Schema.isMaxLength(2048)),
-).check(Schema.isMaxLength(16));
-
-export const OAuthConnectedProfile = Schema.Struct({
-  key: OAuthPermissionProfileKey,
-  generation: OAuthGeneration,
-  issuance: Schema.Literals(["active", "retired"]),
-  provider: OAuthProviderKey,
-  clientRegistrationId: label,
-  scopes: OAuthConnectedScopes,
-  resources: OAuthConnectedResources,
-  retention: Schema.Literals(["access-only", "access-and-refresh"]),
-  maximumAccessLifetimeMillis: duration,
-  maximumRefreshLifetimeMillis: Schema.optionalKey(duration),
-  refreshAheadMillis: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 300000 })),
-  refresh: Schema.Literals(["unsupported", "confidential", "rotating"]),
-  revocation: Schema.Literals(["unsupported", "cohort"]),
-});
-
-export type OAuthConnectedProfile = typeof OAuthConnectedProfile.Type;
 
 export const OAuthConnectedPolicy = Schema.Struct({
   ...OAuthSignInPolicy.fields,
@@ -257,6 +239,8 @@ export const OAuthConnectedTokenMetadata = Schema.Struct({
 
 export const OAuthConnectedTokenContext = Schema.Struct({
   namespace: Schema.Literal("effect-auth/oauth-connected-token-context/v1"),
+  /** Order reserved before this token exchange, including refresh. */
+  exchangeOrder: OAuthConnectedOrder,
   moduleId: OAuthModuleId,
   subjectId: OAuthAccountRevision.fields.subjectId,
   identity: OAuthExternalIdentity,
@@ -323,6 +307,7 @@ export type OAuthConnectedRevocationJob = typeof OAuthConnectedRevocationJob.Typ
 
 export const OAuthConnectedRefreshClaim = Schema.Struct({
   grant: OAuthConnectedStoredGrant,
+  order: OAuthConnectedOrder,
   claimId: OAuthClaimId,
   claimedAtMillis: OAuthInstant,
   claimExpiresAtMillis: OAuthInstant,

@@ -401,6 +401,7 @@ export const makeOAuthConnectedAccess = <const Id extends string>(
                   const context = snapshotOAuthSync(M.OAuthConnectedTokenContext, {
                     ...grant.context,
                     tokenVersion: nextTokenVersion,
+                    exchangeOrder: owned.order,
                     metadata: projected.metadata,
                   });
 
@@ -452,6 +453,9 @@ export const makeOAuthConnectedAccess = <const Id extends string>(
             );
 
             const exchanged = yield* Effect.exit(restore(connectedBounded(exchange, remaining)));
+
+            if (Exit.isFailure(exchanged) && Cause.hasDies(exchanged.cause))
+              yield* reportAuthFailure("oauth-connected", exchanged.cause);
 
             const outcome: M.OAuthConnectedRefreshOutcome = Exit.isSuccess(exchanged)
               ? exchanged.value

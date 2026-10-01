@@ -19,6 +19,7 @@ import { connectedInputs, connectedRevocationInputs } from "./oauth-connected-in
 import * as Maintenance from "./oauth-connected-maintenance";
 import * as Management from "./oauth-connected-management";
 import { settle } from "./oauth-connected-settlement";
+import * as SignIn from "./oauth-connected-sign-in";
 import * as S from "./oauth-connected-state";
 import { capturedOAuthService } from "./oauth-input";
 import { CurrentOAuthTransaction } from "./oauth-owner";
@@ -124,6 +125,14 @@ export const makeConnected = (
 ): OAuthConnectedPersistence["Service"] =>
   capturedOAuthService<OAuthConnectedPersistence["Service"]>(
     {
+      claimSignIn: mutation(mapping, execute, SignIn.claimSignIn, M.OAuthSignInAccessClaim),
+      inspectSignIn: read(mapping, execute, SignIn.inspectSignIn),
+      settleSignIn: mutation(
+        mapping,
+        execute,
+        SignIn.settleSignIn,
+        M.OAuthConnectedSettlementDecision,
+      ),
       capture: read(mapping, execute, F.capture),
       issue: mutation(mapping, execute, F.issue, M.OAuthConnectedIssueDecision),
       preflight: read(mapping, execute, F.preflight),

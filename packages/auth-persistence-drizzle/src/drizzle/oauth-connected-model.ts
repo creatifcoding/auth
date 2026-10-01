@@ -7,6 +7,8 @@ import type { SubjectIdCodec } from "./model";
 import type {
   OAuthAuthorityReadTable,
   OAuthClock,
+  OAuthCredentialReadTable,
+  OAuthFlowTable,
   OAuthOwnershipMutation,
   OAuthSubjectReadTable,
   requiredOAuthTupleConstraints,
@@ -53,6 +55,9 @@ export interface OAuthConnectedFlowTable<F extends Table, N> {
   readonly work: Column<F>;
   /** Exact sealed quarantine when no correctly sealed revocation job is available. */
   readonly custody: Column<F>;
+  /** Required when retaining grants during sign-in. subjectId is NULL until
+   * identity resolution; custom required columns are supplied by this encoder. */
+  readonly encodeSignIn?: (reservation: M.OAuthSignInAccessClaim) => InferInsertModel<F>;
   readonly encodeInsert: (input: {
     readonly flow: M.OAuthConnectedPendingFlow;
     readonly subjectId: N;
@@ -193,6 +198,12 @@ export type OAuthConnectedPolicyInput<N> = {
       readonly grant?: M.OAuthConnectedTokenContext;
     }
   | {
+      readonly kind: "sign-in";
+      readonly credential: M.OAuthCredentialSnapshot;
+      readonly configuration: M.OAuthConnectedConfiguration;
+      readonly grant?: M.OAuthConnectedTokenContext;
+    }
+  | {
       readonly kind: "metadata" | "use";
       readonly authorization: M.OAuthConnectedUseAuthorization;
       readonly grant?: M.OAuthConnectedTokenContext;
@@ -307,6 +318,12 @@ export interface OAuthConnectedMapping<
   readonly subject: OAuthConnectedSubjectTable<S>;
   readonly authority: OAuthAuthorityReadTable<AC>;
   readonly admission: OAuthConnectedAdmissionTable<A, N>;
+  /** Same shared sign-in tables used by OAuthSignInPersistence. Enable only
+   * alongside a nullable connected-flow subjectId and flow.encodeSignIn. */
+  readonly signIn?: {
+    readonly credential: OAuthCredentialReadTable<Table>;
+    readonly flow: OAuthFlowTable<Table>;
+  };
   readonly command: OAuthConnectedCommandTable<D, N>;
   readonly policy: OAuthConnectedSqlPolicy<N>;
   readonly constraints: typeof requiredOAuthConnectedConstraints;

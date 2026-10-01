@@ -105,6 +105,19 @@ const snapshot =
     snapshotOAuthSync(schema, input);
 
 export const connectedInputs = {
+  claimSignIn: snapshot(
+    Schema.Struct({ claim: M.OAuthClaim, configuration: M.OAuthConnectedConfiguration }),
+  ),
+  inspectSignIn: snapshot(
+    Schema.Struct({
+      reservation: M.OAuthSignInAccessClaim,
+      credential: M.OAuthCredentialSnapshot,
+      grantId: M.OAuthGrantId,
+    }),
+  ),
+  settleSignIn: snapshot(
+    Schema.Struct({ reservation: M.OAuthSignInAccessClaim, outcome: M.OAuthSignInAccessOutcome }),
+  ),
   capture: snapshot(capture),
   issue: snapshot(issue),
   preflight: snapshot(M.OAuthConnectedAccess),

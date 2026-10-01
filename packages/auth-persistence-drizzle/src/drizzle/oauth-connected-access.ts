@@ -132,6 +132,7 @@ export const claimRefresh = Effect.fn("oauthConnected.claimRefresh")(function* (
 
   const claim = snapshotOAuthSync(M.OAuthConnectedRefreshClaim, {
     grant: input.grant,
+    order: String(yield* S.nextOrder(mapping, read.client)),
     claimId: input.claimId,
     claimedAtMillis: read.now,
     claimExpiresAtMillis: expires,
@@ -204,10 +205,16 @@ export const settleRefresh = Effect.fn("oauthConnected.settleRefresh")(function*
   if (incoming !== undefined)
     invariant(
       C.sameContext(
-        { ...incoming.context, tokenVersion: old.tokenVersion, metadata: old.metadata },
+        {
+          ...incoming.context,
+          tokenVersion: old.tokenVersion,
+          metadata: old.metadata,
+          exchangeOrder: old.exchangeOrder,
+        },
         old,
       ) &&
         incoming.context.tokenVersion === input.claim.nextTokenVersion &&
+        incoming.context.exchangeOrder === input.claim.order &&
         validMetadata(incoming.context, now) &&
         incoming.context.metadata.obtainedAtMillis >= input.claim.claimedAtMillis &&
         (incoming.context.metadata.refreshUseUntilMillis === undefined ||

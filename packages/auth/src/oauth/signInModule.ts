@@ -30,7 +30,12 @@ import type { makeSessionModule } from "../sessions/module";
 import { makeOAuthAccounts } from "./accounts";
 import type { OAuthAccountsPolicy } from "./accountsModels";
 import { makeOAuthConnected } from "./connected";
-import type { OAuthConnectedPolicy } from "./connectedModels";
+import { wipeConnectedMaterial } from "./connectedAccess";
+import {
+  type OAuthConnectedPolicy,
+  type OAuthConnectedProfile,
+  type OAuthConnectedGrantResponse,
+} from "./connectedModels";
 import { completionResult } from "./contracts";
 import { OAuthProtocol } from "./OAuthProtocol";
 import { OAuthRegistrationIntents, OAuthRegistrationSettlement } from "./OAuthRegistrationIntents";
@@ -40,6 +45,8 @@ import { OAuthTransactionProtector } from "./OAuthTransactionProtector";
 import { makeOAuthRegistration } from "./registration";
 import { OAuthRegistrationIntent, OAuthRegistrationPolicy } from "./registrationModels";
 import * as registrationSecrets from "./registrationSecrets";
+import { signInAccess } from "./signInAccess";
+import type { OAuthSignInAccessClaim } from "./signInAccessModels";
 import {
   OAuthConfigurationError,
   OAuthMethodUnsupported,
@@ -125,10 +132,12 @@ export const makeOAuthMethod = <
   const Id extends string,
   const SessionId extends string,
   Claims extends Schema.Codec<unknown, unknown, unknown, unknown>,
+  Access extends OAuthConnectedProfile | undefined = undefined,
 >(
   moduleId: Id,
   options: {
     readonly sessions: ReturnType<typeof makeSessionModule<SessionId, Claims>>;
+    readonly access?: Access;
   },
 ) => {
   const sessions = options.sessions;
@@ -193,6 +202,7 @@ export const makeOAuthMethod = <
           return yield* OAuthConfigurationError.make({ reason: "policy" });
         const policy = captured;
         const registration = yield* registrationSource;
+        const access = yield* signInAccess(moduleId, policy, options.access);
         const { issue: issueBinding, verify: verifyBinding } = yield* binding.RequestBinding;
         const { prepareAuthorization, exchangeVerifiedIdentity } = yield* OAuthProtocol;
         const { resolve: returnTarget } = yield* OAuthReturnTargets;
@@ -292,7 +302,7 @@ export const makeOAuthMethod = <
             if (binder.expiresAtMillis !== command.expiresAtMillis)
               return yield* OAuthUnavailable.make({});
 
-            const prepared = yield* prepareAuthorization(
+            const prepared = yield* (access?.prepare ?? prepareAuthorization)(
               Object.freeze({
                 provider: request.provider,
                 ...(request.callbackId === undefined ? {} : { callbackId: request.callbackId }),
@@ -320,6 +330,7 @@ export const makeOAuthMethod = <
               flowId: request.flowId,
               commandId: request.commandId,
               ...prepared.configuration,
+              ...(access === undefined ? {} : { access: access.profile }),
               returnTarget: canonicalTarget,
               stateDigest: yield* stateDigest(
                 request.flowId,
@@ -391,6 +402,15 @@ export const makeOAuthMethod = <
 
         const complete = Effect.fn("OAuth.SignIn.complete")(
           function* (raw: typeof OAuthSignInComplete.Type) {
+            let privateGrant: OAuthConnectedGrantResponse | undefined;
+            let grantStartedAt: number | undefined;
+            let reservation: OAuthSignInAccessClaim | undefined;
+
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                if (privateGrant !== undefined) wipeConnectedMaterial(privateGrant.material);
+              }),
+            );
             yield* noAmbient();
             const request = yield* snapshotOAuth(OAuthSignInComplete, raw);
             const response = request.response;
@@ -488,14 +508,30 @@ export const makeOAuthMethod = <
                   if (verifiedAt >= owned.claimExpiresAtMillis)
                     return yield* OAuthUnavailable.make({});
 
-                  const identity = yield* exchangeVerifiedIdentity({
+                  const exchangeInput = {
                     configuration: snapshotOAuthSync(OAuthProtocolConfiguration, context),
                     response: snapshotOAuthSync(OAuthCallbackResponse, response) as typeof response,
                     secrets: snapshotOAuthSync(OAuthTransactionSecrets, secrets),
                     verificationStartedAt: start,
-                  }).pipe(
-                    Effect.flatMap((value) => snapshotOAuth(OAuthVerifiedExternalIdentity, value)),
-                  );
+                  };
+
+                  let identity: OAuthVerifiedExternalIdentity;
+
+                  if (access === undefined) {
+                    if (context.access !== undefined) return yield* OAuthRejected.make({});
+                    identity = yield* exchangeVerifiedIdentity(exchangeInput).pipe(
+                      Effect.flatMap((value) =>
+                        snapshotOAuth(OAuthVerifiedExternalIdentity, value),
+                      ),
+                    );
+                  } else {
+                    reservation = yield* access.claim(owned);
+                    grantStartedAt = DateTime.toEpochMillis(start);
+                    const exchanged = yield* access.exchange(reservation, exchangeInput);
+
+                    privateGrant = exchanged.grant;
+                    identity = exchanged.identity;
+                  }
 
                   if (
                     identity.identity.provider !== context.provider ||
@@ -622,8 +658,16 @@ export const makeOAuthMethod = <
                   Effect.mapError(() => OAuthUnavailable.make({})),
                 );
 
+                if (
+                  exchanged !== undefined &&
+                  Exit.isFailure(exchanged) &&
+                  Cause.hasInterrupts(exchanged.cause)
+                )
+                  return yield* Effect.interrupt;
+
                 return {
                   finished,
+                  ambiguous: outcome._tag === "Ambiguous",
                   registrationCommand: registrationPrepared?.command,
                   context,
                   verifiedAt,
@@ -633,6 +677,17 @@ export const makeOAuthMethod = <
             );
 
             const { finished, context, verifiedAt, identity, registrationCommand } = settled;
+
+            if (access !== undefined && reservation !== undefined && finished._tag !== "Verified") {
+              yield* access.abandon(
+                reservation,
+                finished._tag === "Cancelled"
+                  ? "Cancelled"
+                  : finished._tag === "Ambiguous"
+                    ? "Ambiguous"
+                    : "Rejected",
+              );
+            }
 
             if (finished._tag === "RegistrationIssued") {
               if (registrationCommand === undefined) return yield* OAuthUnavailable.make({});
@@ -653,7 +708,8 @@ export const makeOAuthMethod = <
                 value: { _tag: "Cancelled" as const, returnTarget: context.returnTarget },
                 credentialCommands: [{ _tag: "Clear" as const, slot: "request-binding" as const }],
               };
-            if (finished._tag === "Ambiguous") return yield* OAuthUnavailable.make({});
+            if (finished._tag === "Ambiguous" || settled.ambiguous)
+              return yield* OAuthUnavailable.make({});
             if (finished._tag !== "Verified" || identity === undefined)
               return yield* OAuthRejected.make({});
             const credential = snapshotOAuthSync(OAuthCredentialSnapshot, finished.credential);
@@ -672,6 +728,25 @@ export const makeOAuthMethod = <
               )
             )
               return yield* OAuthUnavailable.make({});
+
+            const connection =
+              access === undefined
+                ? undefined
+                : yield* Effect.gen(function* () {
+                    if (
+                      reservation === undefined ||
+                      privateGrant === undefined ||
+                      grantStartedAt === undefined
+                    )
+                      return yield* OAuthUnavailable.make({});
+
+                    return yield* bounded(
+                      access.retain(reservation, credential, privateGrant, grantStartedAt),
+                      policy.settlementTimeoutMillis,
+                    ).pipe(
+                      Effect.catchTag("TimeoutError", () => Effect.fail(OAuthUnavailable.make({}))),
+                    );
+                  });
 
             const bindingDigest = yield* hash(
               yield* Schema.encodeEffect(contextJson)(context).pipe(
@@ -713,13 +788,18 @@ export const makeOAuthMethod = <
             );
 
             return {
-              value: { completion: established.value, returnTarget: context.returnTarget },
+              value: {
+                completion: established.value,
+                returnTarget: context.returnTarget,
+                ...(connection === undefined ? {} : { connection }),
+              },
               credentialCommands: [
                 ...established.credentialCommands,
                 { _tag: "Clear" as const, slot: "request-binding" as const },
               ],
             };
           },
+          Effect.scoped,
           Effect.provideService(Crypto.Crypto, crypto),
           Effect.tapCause((cause) =>
             Cause.hasDies(cause) ? reportAuthFailure("oauth-sign-in", cause) : Effect.void,
