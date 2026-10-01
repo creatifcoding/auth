@@ -1,6 +1,3 @@
-import { requireStandalone } from "@yielded/auth-persistence/Adapter";
-import { AuthStore } from "@yielded/auth/AuthStore";
-import { AuthStoreError } from "@yielded/auth/Errors";
 import {
   ExternalIdentityMutation,
   SubjectProvisioner,
@@ -8,47 +5,10 @@ import {
   type ExternalIdentity,
   type LoginIdentifier,
 } from "@yielded/auth/Identity";
-import { OAuthStateStore, type OAuthState } from "@yielded/auth/OAuth";
-import {
-  type ConsumeChallenge,
-  type NewChallenge,
-  type NewRegistration,
-  type PendingRegistration,
-} from "@yielded/auth/Schema";
-import {
-  getTableColumns,
-  type AnyColumn,
-  type InferInsertModel,
-  type InferSelectModel,
-  type Table,
-} from "drizzle-orm";
+import { getTableColumns, type AnyColumn, type InferInsertModel, type Table } from "drizzle-orm";
 import { Context, DateTime, Effect, Layer } from "effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 export type CommitMode = "interactive" | "synchronous" | "batch";
-
-/**
- * Ordinary error-channel consumes must own their commit. Coordinated callers
- * use the decision methods inside their outer transaction and translate only
- * after that owner commits.
- */
-export interface SqlClientTransactionDatabase {
-  readonly $client: Pick<SqlClient.SqlClient, "transactionService">;
-}
-
-export const requireStandaloneConsume = (
-  database: SqlClientTransactionDatabase,
-): Effect.Effect<void, AuthStoreError> =>
-  requireStandalone(
-    () =>
-      AuthStoreError.make({
-        message: "Use the decision consume API inside an outer database transaction",
-      }),
-    database.$client,
-  );
-
-export type { ChallengeConsumeDecision } from "@yielded/auth/Persistence";
-export type { ConsumeDecision } from "@yielded/auth/AuthStore";
 
 export {
   PersistenceMappingError,
@@ -62,155 +22,7 @@ export interface InstantCodec<NativeInstant> {
   readonly decode: (native: NativeInstant) => Effect.Effect<DateTime.Utc, PersistenceMappingError>;
 }
 
-export interface RequiredAuthStoreConstraints {
-  readonly series: "unique(namespace,value,purpose)";
-  readonly challengeDigest: "unique(tokenDigest)";
-  readonly registrationDigest: "unique(tokenDigest)";
-}
-
-export interface RequiredOAuthStateConstraints {
-  readonly oauthStateDigest: "unique(stateDigest)";
-}
-
-export interface RequiredAuthConstraints
-  extends RequiredAuthStoreConstraints, RequiredOAuthStateConstraints {}
-
-export const requiredAuthConstraints: RequiredAuthConstraints = {
-  series: "unique(namespace,value,purpose)",
-  challengeDigest: "unique(tokenDigest)",
-  registrationDigest: "unique(tokenDigest)",
-  oauthStateDigest: "unique(stateDigest)",
-};
-
-export const requiredAuthStoreConstraints: RequiredAuthStoreConstraints = {
-  series: "unique(namespace,value,purpose)",
-  challengeDigest: "unique(tokenDigest)",
-  registrationDigest: "unique(tokenDigest)",
-};
-
-export const requiredOAuthStateConstraints: RequiredOAuthStateConstraints = {
-  oauthStateDigest: "unique(stateDigest)",
-};
-
 type ColumnKey<T extends Table> = Extract<keyof T["_"]["columns"], string>;
-
-export interface ChallengeRecord {
-  readonly challenge: NewChallenge;
-  readonly namespace: string;
-  readonly failedAttempts: number;
-  readonly consumed: boolean;
-}
-
-export interface ChallengeColumns<T extends Table> {
-  readonly challengeId: ColumnKey<T>;
-  readonly tokenDigest: ColumnKey<T>;
-  readonly namespace: ColumnKey<T>;
-  readonly value: ColumnKey<T>;
-  readonly purpose: ColumnKey<T>;
-  readonly otpKeyId: ColumnKey<T>;
-  readonly otpDigest: ColumnKey<T>;
-  readonly issuedAt: ColumnKey<T>;
-  readonly expiresAt: ColumnKey<T>;
-  readonly attemptLimit: ColumnKey<T>;
-  readonly failedAttempts: ColumnKey<T>;
-  readonly consumed: ColumnKey<T>;
-}
-
-/**
- * Inputs are immutable server-created issuances. Replacements must advance
- * issuedAt; equal or older issuances fail even after consumption or expiry.
- * Instant encoding must preserve this ordering. Retain the series row as an
- * issuance watermark until every previously accepted issuance has expired;
- * current-row expiry alone is insufficient if historical lifetimes were longer.
- */
-export interface ChallengeTableMapping<T extends Table> {
-  readonly table: T;
-  readonly columns: ChallengeColumns<T>;
-  readonly identifierNamespace: string;
-  readonly encodeInstant: (instant: DateTime.Utc) => unknown;
-  readonly encodeInsert: (
-    input: NewChallenge,
-    state: {
-      readonly namespace: string;
-      readonly failedAttempts: number;
-      readonly consumed: false;
-    },
-  ) => InferInsertModel<T>;
-  readonly encodeUpdate: (
-    input: NewChallenge,
-    state: {
-      readonly namespace: string;
-      readonly failedAttempts: unknown;
-      readonly consumed: false;
-    },
-  ) => Readonly<Record<string, unknown>>;
-  readonly decode: (
-    row: InferSelectModel<T>,
-  ) => Effect.Effect<ChallengeRecord, PersistenceMappingError>;
-}
-
-export interface RegistrationRecord {
-  readonly registration: PendingRegistration;
-  readonly consumed: boolean;
-}
-
-export interface RegistrationColumns<T extends Table> {
-  readonly registrationId: ColumnKey<T>;
-  readonly tokenDigest: ColumnKey<T>;
-  readonly expiresAt: ColumnKey<T>;
-  readonly consumed: ColumnKey<T>;
-}
-
-export interface RegistrationTableMapping<T extends Table> {
-  readonly table: T;
-  readonly columns: RegistrationColumns<T>;
-  readonly encodeInstant: (instant: DateTime.Utc) => unknown;
-  readonly encodeInsert: (input: NewRegistration, consumed: false) => InferInsertModel<T>;
-  readonly decode: (
-    row: InferSelectModel<T>,
-  ) => Effect.Effect<RegistrationRecord, PersistenceMappingError>;
-}
-
-export interface OAuthStateColumns<T extends Table> {
-  readonly stateDigest: ColumnKey<T>;
-  readonly expiresAt: ColumnKey<T>;
-  readonly consumed: ColumnKey<T>;
-}
-
-export interface OAuthStateTableMapping<T extends Table> {
-  readonly table: T;
-  readonly columns: OAuthStateColumns<T>;
-  readonly encodeInstant: (instant: DateTime.Utc) => unknown;
-  readonly encodeInsert: (state: OAuthState, consumed: false) => InferInsertModel<T>;
-  readonly decode: (
-    row: InferSelectModel<T>,
-  ) => Effect.Effect<
-    { readonly state: OAuthState; readonly consumed: boolean },
-    PersistenceMappingError
-  >;
-}
-
-export interface AuthStoreTables<Challenge extends Table, Registration extends Table> {
-  readonly constraints: RequiredAuthStoreConstraints;
-  readonly challenge: ChallengeTableMapping<Challenge>;
-  readonly registration: RegistrationTableMapping<Registration>;
-}
-
-export interface OAuthStateTables<State extends Table> {
-  readonly constraints: RequiredOAuthStateConstraints;
-  readonly oauthState: OAuthStateTableMapping<State>;
-}
-
-export interface AuthTables<
-  Challenge extends Table,
-  Registration extends Table,
-  State extends Table,
-> {
-  readonly constraints: RequiredAuthConstraints;
-  readonly challenge: ChallengeTableMapping<Challenge>;
-  readonly registration: RegistrationTableMapping<Registration>;
-  readonly oauthState: OAuthStateTableMapping<State>;
-}
 
 export interface RequiredIdentityConstraints {
   readonly identifier: "unique(namespace,value)";
@@ -419,25 +231,6 @@ export const column = <T extends Table>(table: T, key: ColumnKey<T>): AnyColumn 
 export const updateValues = <T extends Table>(
   entries: ReadonlyArray<readonly [ColumnKey<T>, unknown]>,
 ): Partial<InferInsertModel<T>> => Object.fromEntries(entries) as Partial<InferInsertModel<T>>;
-
-export type ChallengeInput = ConsumeChallenge;
-
-/** Acquire an application database in Effect and expose the auth stores as one layer. */
-export const authServicesLayer = <E, R>(
-  acquire: Effect.Effect<
-    {
-      readonly authStore: AuthStore["Service"];
-      readonly oauthStateStore: OAuthStateStore["Service"];
-    },
-    E,
-    R
-  >,
-) =>
-  Layer.effectContext(
-    Effect.map(acquire, ({ authStore, oauthStateStore }) =>
-      Context.make(AuthStore, authStore).pipe(Context.add(OAuthStateStore, oauthStateStore)),
-    ),
-  );
 
 /** Acquire an application database in Effect and expose the identity services as one layer. */
 export const identityServicesLayer = <E, R>(

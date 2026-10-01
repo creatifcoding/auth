@@ -31,7 +31,7 @@ module-loading boundary narrow when running without a bundler.
 Optional adapters are direct imports, for example `@yielded/auth-persistence-drizzle/Postgres`,
 `@yielded/auth-openid-client`, `@yielded/auth-simplewebauthn/Browser`, or
 `@yielded/auth/adapters/Twilio`. Install only the peers
-required by the selected adapters. `@yielded/auth/Testing` remains test-only.
+required by the selected adapters.
 
 ## Application composition
 
@@ -62,7 +62,6 @@ helpers separately from server verifiers and persistence adapters.
 | `OperationHttp`                                      | Shared operation HTTP descriptors.                                  |
 | `OperationHttpClient`, `OperationHttpServer`         | Client execution and server routing.                                |
 | `Atom`                                               | Effect Atom queries, mutations, and client workflows.               |
-| `HttpServer`, `Rpc`                                  | Lower-level HTTP and RPC integrations.                              |
 
 Use `@yielded/auth/contracts` for shared definitions. Browser helpers use direct
 `@yielded/auth/Client` and `@yielded/auth/Atom` imports.
@@ -84,7 +83,7 @@ you use.
 | `@yielded/auth-openid-client`           | OAuth/OIDC verification and provider configuration.                                             |
 | `@yielded/auth-openid-client/Connected` | Connected grant management.                                                                     |
 | `@yielded/auth-openid-client/GitHub`    | GitHub configuration and operations using OpenID Client.                                        |
-| `@yielded/auth-cloudflare`              | Durable Object storage and email bindings.                                                      |
+| `@yielded/auth-cloudflare`              | Worker email delivery through `EmailProofDelivery`.                                             |
 | `@yielded/auth-crypto`                  | Password hashing, TOTP, and OAuth secret protection through `/Password`, `/Totp`, and `/OAuth`. |
 | `@yielded/auth-persistence`             | Direct Effect SQL persistence; requires an application-provided SQL client.                     |
 | `@yielded/auth-persistence-drizzle`     | Drizzle mappings and explicit driver modules such as `/Postgres` and `/SqliteBun`.              |
@@ -103,20 +102,20 @@ Adapter authors can use `@yielded/auth-persistence/Adapter` for the shared SQL k
 The [adapter guide](./adapters) covers transaction authority, durable receipts,
 and runtime constraints.
 
-## Focused service modules
+## Lower-level composition
 
-These direct subpaths expose individual services and contracts for lower-level
-composition. Start with `Auth.make` for application authentication.
+`Password.makeModule`, `Email.makeModule`, and `Sessions.make` expose the same
+implementations that `Auth.make` binds. Use them when you own operation composition;
+`Auth.make` supplies the application service and request boundary.
 
-| Modules                                                     | Responsibility                                      |
-| ----------------------------------------------------------- | --------------------------------------------------- |
-| `AuthSession`, `AuthStore`, `AuthTokenCodec`                | Session values, storage, and token codecs.          |
-| `PasswordAuth`, `PasswordCredentialStore`, `PasswordHasher` | Password services, storage, and hashing.            |
-| `EmailOtp`, `EmailOtpSender`                                | Email OTP service and delivery.                     |
-| `SmsDelivery`                                               | Required SMS transport for phone codes.             |
-| `IdentityResolver`, `Policy`                                | Identity resolution and authentication policy.      |
-| `Errors`, `Workflows`, `WebCrypto`                          | Errors, workflow composition, and cryptography.     |
-| `Testing`                                                   | Test-only helpers; exclude from production imports. |
+Storage implements the strategy ports in `Password`, `Email`, `Proofs`, and
+`Sessions`. Password hashing comes from `@yielded/auth-crypto/Password`.
+Application account services provide identity authority and session claims.
+`SmsDelivery` and `Proofs.EmailProofDelivery` own private delivery.
+
+`OAuthApp` offers a managed provider flow with encrypted connected tokens and
+stateless sessions. Its persistence and expiry-based invalidation contract differs
+from the general strategy composition; see [managed OAuth](../guide/oauth#sign-in-and-connect-provider-access).
 
 API comments and signatures live beside the
 [public source modules](https://github.com/yielded-dev/auth/tree/main/packages/auth/src).

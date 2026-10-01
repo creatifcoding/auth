@@ -105,15 +105,7 @@ export {
 } from "./drizzle/proof-model";
 
 export {
-  type AuthStoreTables,
-  type AuthTables,
-  type ChallengeColumns,
-  type ChallengeConsumeDecision,
-  type ChallengeInput,
-  type ChallengeRecord,
-  type ChallengeTableMapping,
   type CommitMode,
-  type ConsumeDecision,
   type D1ExternalIdentityMapping,
   type D1GeneratedIdentityMapping,
   type D1SubjectProvisioningMapping,
@@ -121,31 +113,17 @@ export {
   type ExternalIdentityTables,
   type IdentityTables,
   type InstantCodec,
-  type OAuthStateColumns,
-  type OAuthStateTableMapping,
-  type OAuthStateTables,
-  type RegistrationColumns,
-  type RegistrationRecord,
-  type RegistrationTableMapping,
-  type RequiredAuthConstraints,
-  type RequiredAuthStoreConstraints,
   type RequiredExternalIdentityConstraints,
   type RequiredIdentityConstraints,
-  type RequiredOAuthStateConstraints,
   type RequiredSubjectProvisioningConstraints,
   type SubjectIdCodec,
   type SubjectProvisioningTables,
-  authServicesLayer,
   column,
   identityServicesLayer,
   isMappedConstraintConflict,
   provisioningFingerprint,
-  requireStandaloneConsume,
-  requiredAuthConstraints,
-  requiredAuthStoreConstraints,
   requiredExternalIdentityConstraints,
   requiredIdentityConstraints,
-  requiredOAuthStateConstraints,
   requiredSubjectProvisioningConstraints,
   updateValues,
 } from "./drizzle/model";
@@ -334,7 +312,6 @@ export {
 export { passwordPersistenceLayer, passwordRegistrationLayer } from "./drizzle/password-target";
 export { passwordPreparedPersistenceLayer } from "./drizzle/password-prepared-target";
 export { proofPersistenceLayer } from "./drizzle/proof-target";
-export { AuthStoreDecisions } from "@yielded/auth/Persistence";
 
 export {
   type TotpMapping,
@@ -346,7 +323,6 @@ export {
 } from "./drizzle/totp-model";
 
 export { encodeTotpRecord, decodeTotpRecord } from "./drizzle/totp-state";
-export { OAuthStateDecisions } from "@yielded/auth/OAuth";
 
 export {
   type PasskeyCredentialInsert,

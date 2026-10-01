@@ -6,6 +6,10 @@ description: See how methods, sessions, and application services connect.
 Your app owns users and storage. Yielded Auth verifies authentication methods and
 issues sessions through those services.
 
+Start with `Auth.make` and the strategies. For lower-level composition,
+`Password.makeModule`, `Email.makeModule`, and `Sessions.make` expose the same
+implementations. Supply account authority, persistence, and delivery through Layers.
+
 ```text
 your request handler
   → AppAuth

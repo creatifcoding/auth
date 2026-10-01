@@ -1,27 +1,4 @@
 export {
-  type BeginOAuthInput,
-  type CompleteOAuthError,
-  type CompleteOAuthInput,
-  OAuth,
-} from "./oauth/OAuth";
-
-export {
-  type GithubOAuthOptions,
-  githubOAuthProviderKey,
-  makeGithubOAuthProvider,
-} from "./oauth/GithubOAuthProvider";
-
-export {
-  InvalidOAuthState,
-  OAuthAccessDenied,
-  OAuthConnectionNotFound,
-  OAuthGrantRejected,
-  OAuthProviderError,
-  OAuthReauthorizationRequired,
-  UnknownOAuthProvider,
-} from "./oauth/errors";
-
-export {
   OAuthAccountRevision,
   OAuthAccountsPolicy,
   OAuthActionAuthorization,
@@ -49,15 +26,7 @@ export {
 export { OAuthAccountsPersistence } from "./oauth/OAuthAccountsPersistence";
 export { OAuthActionEvidence } from "./oauth/OAuthActionEvidence";
 
-export {
-  OAuthAuthorization,
-  OAuthCallbackParams,
-  OAuthConnection,
-  OAuthIdentity,
-  OAuthProviderKey,
-  OAuthState,
-  OAuthTokens,
-} from "./oauth/schema";
+export { OAuthProviderKey } from "./oauth/schema";
 
 export {
   OAuthAuthorizationUrl,
@@ -179,26 +148,9 @@ export {
 
 export { OAuthConnectedTransactionProtector } from "./oauth/OAuthConnectedTransactionProtector";
 export { OAuthConnectedUseAuthority } from "./oauth/OAuthConnectedUseAuthority";
-export { OAuthConnectionStore } from "./oauth/OAuthConnectionStore";
-
-export {
-  type OAuthIdentityEndpoint,
-  type OAuthProvider,
-  type OAuthTokenGrant,
-  decodeStandardTokenGrant,
-} from "./oauth/OAuthProvider";
-
 export { OAuthLinkTransactionProtector } from "./oauth/OAuthLinkTransactionProtector";
 
-export {
-  OAuthPolicy,
-  type OAuthPolicyShape,
-  defaultOAuthPolicy,
-  layerOAuthPolicy,
-} from "./oauth/policy";
-
 export { OAuthProtocol } from "./oauth/OAuthProtocol";
-export { OAuthProviders } from "./oauth/OAuthProviders";
 
 export {
   OAuthRegistrationAccess,
@@ -223,7 +175,6 @@ export {
 
 export { OAuthReturnTargets } from "./oauth/OAuthReturnTargets";
 export { OAuthSignInPersistence, type PrepareOAuthCommit } from "./oauth/OAuthSignInPersistence";
-export { OAuthStateStore } from "./oauth/OAuthStateStore";
 export { type OAuthTransactionKeyring } from "./oauth/transactionKeyring";
 export { OAuthTransactionProtector } from "./oauth/OAuthTransactionProtector";
 export { makeOAuthConnected as makeConnectedModule } from "./oauth/connected";
@@ -239,8 +190,6 @@ export {
   makeAccounts,
   makeConnected,
 } from "./oauth/definition";
-
-export { OAuthStateDecisions } from "./oauth/OAuthStateDecisions";
 
 export { freezeOAuth, snapshotOAuth, snapshotOAuthSync } from "./oauth/signInSnapshot";
 

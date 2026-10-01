@@ -3,18 +3,12 @@ import { type EffectPgDatabase, makeWithDefaults } from "drizzle-orm/effect-post
 import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect } from "effect";
 
-import type { AuthTables, IdentityTables } from "./drizzle/model";
+import type { IdentityTables } from "./drizzle/model";
 import {
-  coordinatePgAuthStoreTransaction,
-  coordinatePgAuthTransaction,
-  coordinatePgOAuthStateTransaction,
-  makePgAuthServices,
-  makePgAuthStoreServices,
   makePgExternalIdentityServices,
   makePgIdentityServices,
-  makePgOAuthStateServices,
   makePgSubjectProvisioningServices,
-} from "./drizzle/pg";
+} from "./drizzle/pg-identity";
 
 export {
   coordinatePgAuthenticationAuthority as coordinateAuthenticationAuthority,
@@ -48,21 +42,11 @@ export {
 } from "./drizzle/pg-emails";
 
 export {
-  coordinatePgAuthStoreTransaction as coordinateAuthStoreTransaction,
-  coordinatePgAuthTransaction as coordinateAuthTransaction,
-  coordinatePgOAuthStateTransaction as coordinateOAuthStateTransaction,
-  makePgAuthStoreServices as makeAuthStoreServices,
   makePgExternalIdentityServices as makeExternalIdentityServices,
-  makePgOAuthStateServices as makeOAuthStateServices,
   makePgSubjectProvisioningServices as makeSubjectProvisioningServices,
 };
 
 export const commitMode = "interactive" as const;
-
-export const makeAuthServices = <C extends AnyPgTable, R extends AnyPgTable, S extends AnyPgTable>(
-  database: EffectPgDatabase<AnyRelations>,
-  mapping: AuthTables<C, R, S>,
-) => makePgAuthServices(database, mapping);
 
 export const makeIdentityServices = <
   Subject extends AnyPgTable,
