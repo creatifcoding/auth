@@ -1,15 +1,5 @@
 import { BunRuntime } from "@effect/platform-bun";
-import {
-  composePlugins,
-  HookDenied,
-  hookContribution,
-  interactiveContribution,
-  LifecycleEventId,
-  pluginContributions,
-} from "@yielded/auth/Hooks";
-import { LoginIdentifier } from "@yielded/auth/Identity";
-import { guest, remoteGroup } from "@yielded/auth/Operations";
-import { SubjectId } from "@yielded/auth/Schema";
+import { Hooks, Identity, Operations, Schema as AuthSchema } from "@yielded/auth";
 import { DateTime, Effect, Layer, Redacted, Schema, Semaphore } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
@@ -24,23 +14,23 @@ import {
   RegistrationTransaction,
 } from "./external-method";
 
-const registrationGate = hookContribution("example/registration-gate");
-const notification = hookContribution("example/registration-notification");
+const registrationGate = Hooks.hookContribution("example/registration-gate");
+const notification = Hooks.hookContribution("example/registration-notification");
 
-const consumer = pluginContributions({
+const consumer = Hooks.pluginContributions({
   id: "example/consumer",
   operations: [],
   hooks: [registrationGate, notification],
   routes: [],
 });
 
-const composition = composePlugins(externalMethodContributions, consumer);
+const composition = Hooks.composePlugins(externalMethodContributions, consumer);
 
 const gates = registrationGate.layer({
   before: (snapshot) =>
     snapshot.action === "registration" &&
     snapshot.identifiers.some((identifier) => identifier.value.endsWith("@blocked.example"))
-      ? Effect.fail(HookDenied.make({ reason: "policy" }))
+      ? Effect.fail(Hooks.HookDenied.make({ reason: "policy" }))
       : Effect.void,
 });
 
@@ -59,8 +49,8 @@ const hooks = composition.hooks.pipe(Layer.provide(Layer.mergeAll(gates, notific
 const authority = Layer.effect(
   RegistrationAuthority,
   Effect.sync(() => {
-    let identities = new Map<string, SubjectId>();
-    let onboarding = new Set<SubjectId>();
+    let identities = new Map<string, AuthSchema.SubjectId>();
+    let onboarding = new Set<AuthSchema.SubjectId>();
     const lock = Semaphore.makeUnsafe(1);
 
     return RegistrationAuthority.of({
@@ -78,7 +68,7 @@ const authority = Layer.effect(
 
                     const subjectId =
                       nextIdentities.get(key) ??
-                      SubjectId.make(`partner/${nextIdentities.size + 1}`);
+                      AuthSchema.SubjectId.make(`partner/${nextIdentities.size + 1}`);
 
                     nextIdentities.set(key, subjectId);
 
@@ -106,9 +96,9 @@ const verifier = Layer.succeed(ExternalProofVerifier, {
   verify: (proof) => {
     const identifier =
       Redacted.value(proof) === "fixture-proof"
-        ? LoginIdentifier.make({ namespace: "email", value: "reader@example.com" })
+        ? Identity.LoginIdentifier.make({ namespace: "email", value: "reader@example.com" })
         : Redacted.value(proof) === "fixture-blocked-proof"
-          ? LoginIdentifier.make({ namespace: "email", value: "reader@blocked.example" })
+          ? Identity.LoginIdentifier.make({ namespace: "email", value: "reader@blocked.example" })
           : undefined;
 
     return identifier === undefined
@@ -117,7 +107,7 @@ const verifier = Layer.succeed(ExternalProofVerifier, {
   },
 });
 
-const onboarding = interactiveContribution(
+const onboarding = Hooks.interactiveContribution(
   "example/onboarding",
   Effect.fn("RegistrationOnboarding.record")(function* (snapshot) {
     const transaction = yield* RegistrationTransaction;
@@ -130,11 +120,13 @@ const method = externalMethodLayer([onboarding]).pipe(
   Layer.provide(Layer.mergeAll(authority, verifier, hooks)),
 );
 
-const group = remoteGroup([ExternalRegistration]);
+const group = Operations.remoteGroup([ExternalRegistration]);
 
 const rpc = group
   .toLayer({
-    "example.external.register": ExternalRegistration.rpcHandler(() => Effect.succeed(guest)),
+    "example.external.register": ExternalRegistration.rpcHandler(() =>
+      Effect.succeed(Operations.guest),
+    ),
   })
   .pipe(Layer.provide(method));
 
@@ -144,14 +136,14 @@ const http = RpcServer.layerHttp({ group, path: "/auth", protocol: "http" }).pip
 );
 
 const program = Effect.gen(function* () {
-  const local = yield* ExternalRegistration.invoke(guest, {
+  const local = yield* ExternalRegistration.invoke(Operations.guest, {
     proof: Redacted.make("fixture-proof"),
-    eventId: LifecycleEventId.make("local-registration"),
+    eventId: Hooks.LifecycleEventId.make("local-registration"),
   }).pipe(Effect.provide(method));
 
-  const denied = yield* ExternalRegistration.invoke(guest, {
+  const denied = yield* ExternalRegistration.invoke(Operations.guest, {
     proof: Redacted.make("fixture-blocked-proof"),
-    eventId: LifecycleEventId.make("denied-registration"),
+    eventId: Hooks.LifecycleEventId.make("denied-registration"),
   }).pipe(Effect.provide(method), Effect.result);
 
   yield* Effect.log({ local, denied });
@@ -165,7 +157,7 @@ const program = Effect.gen(function* () {
     Schema.toCodecJson(ExternalRegistration.rpc.payloadSchema),
   )({
     proof: Redacted.make("fixture-proof"),
-    eventId: LifecycleEventId.make("remote-registration"),
+    eventId: Hooks.LifecycleEventId.make("remote-registration"),
   });
 
   const response = yield* Effect.promise(() =>

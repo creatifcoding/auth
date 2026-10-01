@@ -1,0 +1,96 @@
+---
+title: How sign-in works
+description: Follow one password sign-in from the browser to the session cookie, and see which code runs each step.
+---
+
+import SignInTrace from "../../../components/SignInTrace.astro";
+
+Follow one password sign-in from the browser to the session cookie. Yielded Auth
+runs the security-sensitive steps; your code supplies the accounts and storage
+they act on.
+
+<SignInTrace
+  steps={[
+    {
+      lane: "browser",
+      title: "Call the contract",
+      code: "yield* client.auth.signIn({ email, password })",
+      detail:
+        "The client encodes the input with your contract's schema, keeps the password `Redacted`, and posts it to `/auth/signIn`.",
+    },
+    {
+      lane: "auth",
+      title: "Decode the request",
+      code: "Http.layer(AppAuth, { origin })",
+      detail:
+        "The route decodes the input against the same contract and reads any session cookie into the request context.",
+    },
+    {
+      lane: "auth",
+      title: "Verify the password",
+      code: "Password.make()",
+      detail:
+        "The password method finds the credential through your password storage and checks it with the hashing Layer you supply.",
+    },
+    {
+      lane: "app",
+      title: "Resolve the account",
+      code: "ClaimsForPassword.resolve(credential)",
+      detail:
+        "Your account code returns the session claims, such as `displayName`, or rejects a disabled account.",
+    },
+    {
+      lane: "app",
+      title: "Commit the session",
+      detail:
+        "Your session storage writes the new session in one transaction, whether it uses managed tables, your own schema, or a custom service.",
+    },
+    {
+      lane: "auth",
+      title: "Set the cookie",
+      detail:
+        "Only after the commit does the session cookie go on the response. Credentials never appear in the result.",
+    },
+    {
+      lane: "browser",
+      title: "Read the result",
+      code: '{ _tag: "Authenticated", session }',
+      detail:
+        "The client decodes a session with your typed claims. A wrong password arrives as a typed `PasswordRejected` failure instead.",
+    },
+  ]}
+/>
+
+## What your code supplies
+
+| Service                      | Provides                                                                          |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `ClaimsForPassword`          | Session claims for an account, or a rejection.                                    |
+| Password and session storage | [Managed tables, your own schema, or custom services](/auth/reference/adapters/). |
+| `PasswordHashing`            | Argon2id from `@yielded/auth-crypto/Password`, or your own.                       |
+
+You don't need to memorize this list. `AppAuth.layer` names every missing service
+in its type, and each method you install adds its own.
+[Getting started](/auth/guide/getting-started/) wires these Layers.
+
+## Other methods, same path
+
+Every method follows the same route through your code. Multi-step methods
+return a public flow ID between calls; the private binding that ties the steps
+to one browser travels as a cookie, like the session.
+
+| Method                                         | Calls                                                                         |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Password](/auth/guide/passwords/)             | `signIn` → session or additional factor.                                      |
+| [Email code or magic link](/auth/guide/codes/) | `beginSignIn` → `signIn` sends the proof → `verifySignIn` → `completeSignIn`. |
+| [SMS code](/auth/guide/phone/)                 | `signIn` sends the code → `completeSignIn`.                                   |
+| [Passkey](/auth/guide/passkeys/)               | `signIn` → browser ceremony → `completeSignIn`.                               |
+| [OAuth](/auth/guide/oauth/)                    | `signIn` → provider redirect → `completeSignIn`.                              |
+| [TOTP](/auth/guide/totp/)                      | First factor returns a pending proof → `verifyPending`.                       |
+
+## When a response is lost
+
+Commands that change an account, such as registration or a password reset, take
+a request ID. A retry with the same ID returns the stored receipt instead of
+running the command again. If a commit's outcome is unknown, look the receipt up
+through your storage adapter rather than issuing credentials again.

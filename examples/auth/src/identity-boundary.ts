@@ -1,25 +1,19 @@
 import { BunRuntime } from "@effect/platform-bun";
-import {
-  identityQueryLayer,
-  InspectIdentity,
-  numericSubjectId,
-  stringSubjectId,
-} from "@yielded/auth/Identity";
-import { AuthenticationAssurance, guest, remoteGroup } from "@yielded/auth/Operations";
+import { Identity, Operations } from "@yielded/auth";
 import { DateTime, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { shopperIdentity, staffIdentity } from "./identity-consumers";
 
-const staffHandlers = identityQueryLayer.pipe(Layer.provide(staffIdentity));
-const shopperHandlers = identityQueryLayer.pipe(Layer.provide(shopperIdentity));
-const networkOperations = remoteGroup([InspectIdentity]);
+const staffHandlers = Identity.identityQueryLayer.pipe(Layer.provide(staffIdentity));
+const shopperHandlers = Identity.identityQueryLayer.pipe(Layer.provide(shopperIdentity));
+const networkOperations = Operations.remoteGroup([Identity.InspectIdentity]);
 
 /** No authentication is inferred from payloads or caller-supplied subject headers. */
 const rpcHandlers = networkOperations
   .toLayer({
-    "identity.inspect": InspectIdentity.rpcHandler(() => Effect.succeed(guest)),
+    "identity.inspect": Identity.InspectIdentity.rpcHandler(() => Effect.succeed(Operations.guest)),
   })
   .pipe(Layer.provide(staffHandlers));
 
@@ -32,27 +26,29 @@ const httpLayer = RpcServer.layerHttp({
 const program = Effect.gen(function* () {
   const authenticatedAt = yield* DateTime.now;
 
-  const assurance = AuthenticationAssurance.make({
+  const assurance = Operations.AuthenticationAssurance.make({
     method: "consumer-verified-credential",
     factors: ["possession"],
     authenticatedAt,
   });
 
-  const staffId = yield* stringSubjectId.toSubject("01991ac9-e630-7ef2-9577-af4d762fa101");
-  const shopperId = yield* numericSubjectId.toSubject(42);
+  const staffId = yield* Identity.stringSubjectId.toSubject("01991ac9-e630-7ef2-9577-af4d762fa101");
+  const shopperId = yield* Identity.numericSubjectId.toSubject(42);
 
-  const employee = yield* InspectIdentity.invoke(
+  const employee = yield* Identity.InspectIdentity.invoke(
     { _tag: "Authenticated", subjectId: staffId, assurance },
     undefined,
   ).pipe(Effect.provide(staffHandlers));
 
-  const shopper = yield* InspectIdentity.invoke(
+  const shopper = yield* Identity.InspectIdentity.invoke(
     { _tag: "Authenticated", subjectId: shopperId, assurance },
     undefined,
   ).pipe(Effect.provide(shopperHandlers));
 
   const localGuest = yield* Effect.result(
-    InspectIdentity.invoke(guest, undefined).pipe(Effect.provide(staffHandlers)),
+    Identity.InspectIdentity.invoke(Operations.guest, undefined).pipe(
+      Effect.provide(staffHandlers),
+    ),
   );
 
   yield* Effect.log({ employee, shopper, localGuest });

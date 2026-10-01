@@ -1,10 +1,4 @@
-import {
-  PasskeyProfile,
-  PasskeyMethodPolicy,
-  PasskeyManagementPolicy,
-  PasskeyRequirement,
-} from "@yielded/auth/Passkey";
-import { TotpPolicy } from "@yielded/auth/TotpContract";
+import { Passkey, TotpContract } from "@yielded/auth";
 import { Schema } from "effect";
 
 /** Shared application contracts contain no database, verifier, or secret configuration. */
@@ -16,7 +10,7 @@ export const registrationSchema = Schema.Struct({
   name: Schema.NonEmptyString,
 });
 
-export const profile = PasskeyProfile.make({
+export const profile = Passkey.PasskeyProfile.make({
   profileId: "primary",
   generation: 1,
   rpId: "localhost",
@@ -30,7 +24,7 @@ export const profile = PasskeyProfile.make({
   algorithms: [-7, -257],
 });
 
-export const policy = PasskeyMethodPolicy.make({
+export const policy = Passkey.PasskeyMethodPolicy.make({
   generation: 1,
   profiles: [profile],
   lifetimeMillis: 120000,
@@ -45,13 +39,13 @@ export const policy = PasskeyMethodPolicy.make({
   },
 });
 
-export const management = PasskeyManagementPolicy.make({
+export const management = Passkey.PasskeyManagementPolicy.make({
   maximumCredentials: 5,
   maximumEvidenceAgeMillis: 120000,
   requireImmediateInvalidation: true,
 });
 
-export const requirement = PasskeyRequirement.make({
+export const requirement = Passkey.PasskeyRequirement.make({
   maximumAgeMillis: 120000,
   alternatives: [
     { factors: ["possession"], minimumCredentials: 1, userVerified: true, phishingResistant: true },
@@ -64,7 +58,7 @@ export const StudioClaims = Schema.Struct({
   permissions: Schema.Array(Schema.Literal("design:edit")),
 });
 
-export const authenticatorPolicy = TotpPolicy.make({
+export const authenticatorPolicy = TotpContract.TotpPolicy.make({
   issuer: "Design Studio",
   enrollmentLifetimeMillis: 300000,
   revealLifetimeMillis: 60000,

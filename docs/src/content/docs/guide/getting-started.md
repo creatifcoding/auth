@@ -6,6 +6,9 @@ description: Define your authentication service and call it from your applicatio
 Define a shared contract, choose your server methods, and call them from your
 application. The contract also supplies your HTTP endpoints and browser client.
 
+Use generated auth tables and migrations, bring your schema, or replace individual
+services. [Choose how much you own](./storage) before connecting persistence.
+
 ## Install
 
 ```sh
@@ -97,8 +100,7 @@ strategy:
 
 ```ts title="auth-with-passkeys.ts"
 import { Schema } from "effect";
-import { Auth, Sessions } from "@yielded/auth";
-import { Passkey, Password } from "@yielded/auth/strategies";
+import { Auth, Passkey, Password, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),

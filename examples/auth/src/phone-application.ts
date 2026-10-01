@@ -1,5 +1,4 @@
-import { Auth } from "@yielded/auth";
-import { PhoneOtp } from "@yielded/auth/strategies";
+import { Auth, PhoneOtp } from "@yielded/auth";
 import { Encoding, Redacted, Schema } from "effect";
 
 import { lifecyclePolicy } from "./phone-sqlite-schema";

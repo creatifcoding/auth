@@ -1,23 +1,14 @@
-import { PasswordCredentialSnapshot } from "@yielded/auth/Password";
-import { type ProofBinding } from "@yielded/auth/Proofs";
-import { type SubjectId } from "@yielded/auth/Schema";
-import {
-  assessAuthentication,
-  type AuthenticationEvidence,
-  type AuthenticationRequirement,
-  type AuthenticationRevision,
-  SecurityRevision,
-} from "@yielded/auth/Sessions";
+import { Password, type Proofs, type Schema as AuthSchema, Sessions } from "@yielded/auth";
 import { DateTime, Effect } from "effect";
 
 import { AppAuth } from "./auth";
 import type { Claims } from "./contract";
 import { nextId, type Customer, type State } from "./model";
 
-export const customer = (state: Readonly<State>, id: SubjectId) =>
+export const customer = (state: Readonly<State>, id: AuthSchema.SubjectId) =>
   state.customers.find((item) => item.id === id && item.active);
 
-export const credentials = (state: Readonly<State>, id: SubjectId) => [
+export const credentials = (state: Readonly<State>, id: AuthSchema.SubjectId) => [
   ...state.passwords
     .filter((item) => item.subjectId === id)
     .map((item) => ({ credentialId: item.credentialId, revision: item.revision })),
@@ -42,7 +33,7 @@ export const revision = (
   state: Readonly<State>,
   account: Customer,
   ids?: ReadonlyArray<string>,
-): AuthenticationRevision => ({
+): Sessions.AuthenticationRevision => ({
   subjectId: account.id,
   securityRevision: account.securityRevision,
   credentials: credentials(state, account.id).filter(
@@ -50,7 +41,7 @@ export const revision = (
   ),
 });
 
-export const current = (state: Readonly<State>, snapshot: AuthenticationRevision) => {
+export const current = (state: Readonly<State>, snapshot: Sessions.AuthenticationRevision) => {
   const account = customer(state, snapshot.subjectId);
 
   if (account === undefined || account.securityRevision !== snapshot.securityRevision) return false;
@@ -68,7 +59,7 @@ export const passwordCredential = (state: Readonly<State>, account: Customer) =>
 
   return password === undefined
     ? undefined
-    : PasswordCredentialSnapshot.make({
+    : Password.PasswordCredentialSnapshot.make({
         moduleId: AppAuth.strategies.password.persistence.moduleId,
         revision: revision(state, account, [password.credentialId]),
         credentialId: password.credentialId,
@@ -93,17 +84,17 @@ export const claims = (account: Customer): typeof Claims.Type => ({
 
 export const satisfies = Effect.fn("Customers.satisfies")(function* (
   state: Readonly<State>,
-  evidence: AuthenticationEvidence,
-  requirement: AuthenticationRequirement,
+  evidence: Sessions.AuthenticationEvidence,
+  requirement: Sessions.AuthenticationRequirement,
 ) {
   if (!current(state, evidence.revision)) return false;
 
-  return (yield* assessAuthentication(evidence, requirement)).satisfied;
+  return (yield* Sessions.assessAuthentication(evidence, requirement)).satisfied;
 });
 
 export const evidenceDeadline = (
-  evidence: AuthenticationEvidence,
-  requirement: AuthenticationRequirement,
+  evidence: Sessions.AuthenticationEvidence,
+  requirement: Sessions.AuthenticationRequirement,
 ) =>
   Math.min(
     ...evidence.proofs.map(
@@ -111,7 +102,11 @@ export const evidenceDeadline = (
     ),
   );
 
-export const bindingCurrent = (state: Readonly<State>, binding: ProofBinding, purpose: string) => {
+export const bindingCurrent = (
+  state: Readonly<State>,
+  binding: Proofs.ProofBinding,
+  purpose: string,
+) => {
   const owner = state.customers.find(
     (item) => item.email === binding.identifier.value && item.active,
   );
@@ -125,10 +120,10 @@ export const bindingCurrent = (state: Readonly<State>, binding: ProofBinding, pu
     : owner.verifiedAtMillis === undefined;
 };
 
-export const invalidate = (state: State, subjectId: SubjectId) => {
+export const invalidate = (state: State, subjectId: AuthSchema.SubjectId) => {
   state.customers = state.customers.map((item) =>
     item.id === subjectId
-      ? { ...item, securityRevision: SecurityRevision.make(nextId(state, "security")) }
+      ? { ...item, securityRevision: Sessions.SecurityRevision.make(nextId(state, "security")) }
       : item,
   );
   state.sessions = state.sessions.filter((item) => item.subjectId !== subjectId);

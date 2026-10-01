@@ -1,10 +1,35 @@
 ---
 title: Examples
-description: Application compositions for authentication, persistence, and HTTP clients.
+description: Run a complete account app or explore focused authentication and client examples.
 ---
 
-Use these source references to connect Yielded Auth to your application's accounts,
-database, and request handlers. Each composition uses the package's public API.
+Start with a complete account app, then use the focused source references for
+individual features. All examples use the package's public API.
+
+## Run an account app
+
+Four apps implement the same registration, email verification, password and
+passkey sign-in, passkey enrollment, password recovery, and sign-out across the
+three [storage levels](./storage): managed tables, your schema, and your services.
+
+| App                                                                                                        | You own                                                                 | Backend              |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
+| [Managed&nbsp;Drizzle](https://github.com/yielded-dev/auth/tree/main/examples/persistence-drizzle-managed) | Your customer table. Drizzle Kit generates the auth tables' migrations. | SQLite               |
+| [Custom&nbsp;Drizzle](https://github.com/yielded-dev/auth/tree/main/examples/persistence-drizzle-custom)   | Every table and migration, mapped through Drizzle.                      | SQLite               |
+| [Effect&nbsp;SQL](https://github.com/yielded-dev/auth/tree/main/examples/persistence-sql)                  | Every table and migration, written in Effect SQL.                       | SQLite or PostgreSQL |
+| [Custom&nbsp;services](https://github.com/yielded-dev/auth/tree/main/examples/persistence-custom)          | The storage and sign-in services, here a single-writer file store.      | Local file           |
+
+Clone the repository and install dependencies with `vp install`. Follow the
+chosen example's README to configure Cloudflare email delivery, then run its
+`start` task from the repository root. For example:
+
+```sh
+vp -C examples/persistence-drizzle-managed run start
+```
+
+Open the URL printed by the server. The apps use ports 4181–4184 in table order
+and keep separate local data across restarts. Their READMEs describe environment
+variables, database migrations, and data resets.
 
 ## Authentication methods
 

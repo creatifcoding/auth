@@ -1,14 +1,6 @@
+import { OAuth, Schema as AuthSchema } from "@yielded/auth";
 import { requiredAuthConstraints, type AuthTables } from "@yielded/auth-persistence-drizzle";
 import type { makeAuthServices } from "@yielded/auth-persistence-drizzle/SqliteNode";
-import { OAuthState } from "@yielded/auth/OAuth";
-import {
-  ConsumeChallenge,
-  ConsumeRegistration,
-  NewChallenge,
-  NewRegistration,
-  PendingRegistration,
-  TokenDigest,
-} from "@yielded/auth/Schema";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { DateTime, Duration, Effect, Schema } from "effect";
 import type * as CoreSqlClient from "effect/unstable/sql/SqlClient";
@@ -107,7 +99,7 @@ export const mapping = {
       cooldownMillis: Duration.toMillis(input.resendCooldown),
     }),
     decode: (row) =>
-      Schema.decodeEffect(NewChallenge)({
+      Schema.decodeEffect(AuthSchema.NewChallenge)({
         challengeId: row.challengeKey,
         tokenDigest: row.digest,
         email: row.address,
@@ -150,7 +142,7 @@ export const mapping = {
       used,
     }),
     decode: (row) =>
-      Schema.decodeEffect(PendingRegistration)({
+      Schema.decodeEffect(AuthSchema.PendingRegistration)({
         registrationId: row.id,
         email: row.email,
         purpose: "registration",
@@ -178,7 +170,7 @@ export const mapping = {
       used,
     }),
     decode: (row) =>
-      Schema.decodeEffect(OAuthState)({
+      Schema.decodeEffect(OAuth.OAuthState)({
         stateDigest: row.digest,
         provider: row.provider,
         subjectId: row.subject,
@@ -213,7 +205,7 @@ export const verify = (
     const now = Date.now();
 
     const newChallenge = (suffix: string, overrides: Record<string, unknown> = {}) =>
-      Schema.decodeEffect(NewChallenge)({
+      Schema.decodeEffect(AuthSchema.NewChallenge)({
         challengeId: `01994d3e-0ab0-7000-8000-${suffix.padStart(12, "0")}`,
         tokenDigest: `sample-token-${suffix}`,
         email: `${suffix}@example.com`,
@@ -232,7 +224,7 @@ export const verify = (
 
     yield* services.authStore.issueChallenge(challenge);
 
-    const attempt = yield* Schema.decodeEffect(ConsumeChallenge)({
+    const attempt = yield* Schema.decodeEffect(AuthSchema.ConsumeChallenge)({
       tokenDigest: challenge.tokenDigest,
       otpDigests: { "key-1": challenge.otpDigest },
     });
@@ -256,7 +248,7 @@ export const verify = (
 
     yield* services.authStore.issueChallenge(budget);
 
-    const wrong = yield* Schema.decodeEffect(ConsumeChallenge)({
+    const wrong = yield* Schema.decodeEffect(AuthSchema.ConsumeChallenge)({
       tokenDigest: budget.tokenDigest,
       otpDigests: { "key-1": "wrong-digest" },
     });
@@ -274,7 +266,7 @@ export const verify = (
     yield* ensure(budgetRows[0]?.failures === 3, "wrong-attempt budget was not persisted");
     yield* ensure(
       (yield* services.decisions.consumeChallenge(
-        yield* Schema.decodeEffect(ConsumeChallenge)({
+        yield* Schema.decodeEffect(AuthSchema.ConsumeChallenge)({
           tokenDigest: budget.tokenDigest,
           otpDigests: { "key-1": budget.otpDigest },
         }),
@@ -287,7 +279,7 @@ export const verify = (
     const cooldownResults = yield* Effect.forEach(
       Array.from({ length: 8 }, (_, index) => index),
       (index) =>
-        Schema.decodeEffect(NewChallenge)({
+        Schema.decodeEffect(AuthSchema.NewChallenge)({
           ...cooldown,
           challengeId: `01994d3e-0ab0-7000-8001-${String(index).padStart(12, "0")}`,
           tokenDigest: `cooldown-${index}`,
@@ -303,7 +295,7 @@ export const verify = (
       "expected one cooldown issuance winner",
     );
 
-    const registration = yield* Schema.decodeEffect(NewRegistration)({
+    const registration = yield* Schema.decodeEffect(AuthSchema.NewRegistration)({
       registrationId: "01994d3e-0ab0-7000-8002-000000000001",
       tokenDigest: "registration-digest",
       email: "registration@example.com",
@@ -314,7 +306,7 @@ export const verify = (
 
     yield* services.authStore.issueRegistration(registration);
 
-    const registrationInput = yield* Schema.decodeEffect(ConsumeRegistration)({
+    const registrationInput = yield* Schema.decodeEffect(AuthSchema.ConsumeRegistration)({
       tokenDigest: registration.tokenDigest,
     });
 
@@ -328,7 +320,7 @@ export const verify = (
       "expected one registration winner",
     );
 
-    const state = yield* Schema.decodeEffect(OAuthState)({
+    const state = yield* Schema.decodeEffect(OAuth.OAuthState)({
       stateDigest: "state-digest",
       provider: "example",
       subjectId: "subject-1",
@@ -338,7 +330,7 @@ export const verify = (
     });
 
     yield* services.oauthStateStore.issue(state);
-    const stateDigest = yield* Schema.decodeEffect(TokenDigest)(state.stateDigest);
+    const stateDigest = yield* Schema.decodeEffect(AuthSchema.TokenDigest)(state.stateDigest);
 
     const stateResults = yield* Effect.all(
       Array.from({ length: 8 }, () => services.decisions.consumeOAuthState(stateDigest)),

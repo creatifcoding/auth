@@ -17,8 +17,7 @@ a [shared contract](./http-and-client#expose-another-method) for browser clients
 
 ```ts title="auth.ts"
 import { Schema } from "effect";
-import { Auth, Sessions } from "@yielded/auth";
-import { PhoneOtp } from "@yielded/auth/strategies";
+import { Auth, PhoneOtp, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
   claims: Schema.Struct({ phoneNumber: PhoneOtp.PhoneNumber }),
@@ -110,7 +109,7 @@ Wire those Layers with a sending policy and session claims:
 
 ```ts title="phone-live.ts"
 import { Config, Effect, Layer } from "effect";
-import { PhoneOtp } from "@yielded/auth/strategies";
+import { PhoneOtp } from "@yielded/auth";
 import * as Twilio from "@yielded/auth/adapters/Twilio";
 import { FetchHttpClient } from "effect/unstable/http";
 

@@ -1,15 +1,17 @@
+import {
+  Auth,
+  Hooks,
+  type Operations,
+  Passkey,
+  Schema as AuthSchema,
+  Sessions,
+  Totp,
+  WebCrypto,
+} from "@yielded/auth";
 import * as TotpCrypto from "@yielded/auth-crypto/Totp";
 import * as Mapping from "@yielded/auth-persistence-drizzle";
 import * as Native from "@yielded/auth-persistence-drizzle/Postgres";
 import * as PasskeyProtocol from "@yielded/auth-simplewebauthn/Server";
-import * as Auth from "@yielded/auth/Auth";
-import * as Hooks from "@yielded/auth/Hooks";
-import type { RequestBindingConfiguration } from "@yielded/auth/Operations";
-import * as Passkey from "@yielded/auth/Passkey";
-import { SubjectId, TokenDigest } from "@yielded/auth/Schema";
-import * as Sessions from "@yielded/auth/Sessions";
-import * as Totp from "@yielded/auth/Totp";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { type AnyRelations, eq } from "drizzle-orm";
 import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
@@ -84,7 +86,7 @@ export const registrationEvents = pgTable("studio_registration_events", {
 const sessionCodec = Schema.fromJsonString(
   Schema.Struct({
     ...sessions.Session.fields,
-    digest: TokenDigest,
+    digest: AuthSchema.TokenDigest,
     version: Sessions.SecurityRevision,
     provenance: Sessions.SessionAuthenticationProvenance,
     credentialVersion: Sessions.SessionCredentialVersion,
@@ -93,7 +95,7 @@ const sessionCodec = Schema.fromJsonString(
 
 const pendingCodec = Schema.fromJsonString(
   Schema.Struct({
-    digest: TokenDigest,
+    digest: AuthSchema.TokenDigest,
     version: Sessions.SecurityRevision,
     evidence: Sessions.AuthenticationEvidence,
     claims: StudioClaims,
@@ -126,8 +128,8 @@ const common = {
     nextSecurityRevisionSync: nextRevision,
   },
   subjectId: {
-    toNative: (id: SubjectId) => Effect.succeed(String(id)),
-    toSubject: (id: string) => Effect.succeed(SubjectId.make(id)),
+    toNative: (id: AuthSchema.SubjectId) => Effect.succeed(String(id)),
+    toSubject: (id: string) => Effect.succeed(AuthSchema.SubjectId.make(id)),
     equals: (left: string, right: string) => left === right,
   },
   credential: {
@@ -252,7 +254,7 @@ const sessionMapping = {
     Schema.decodeEffect(sessionCodec)(row.payload).pipe(
       Effect.map((record) => ({
         ...record,
-        digest: TokenDigest.make(row.digest),
+        digest: AuthSchema.TokenDigest.make(row.digest),
         version: Sessions.SecurityRevision.make(row.version),
       })),
       Effect.mapError(() =>
@@ -293,9 +295,9 @@ export const sessionPolicy = Sessions.SessionPolicy.make({
  * management proof. Public assurance metadata never supplies credential evidence. */
 const actionEvidence = Effect.fn("Studio.actionEvidence")(function* (
   proof: Redacted.Redacted<string> | undefined,
-  subjectId: SubjectId,
+  subjectId: AuthSchema.SubjectId,
   flowId: string,
-  bindingDigest: TokenDigest,
+  bindingDigest: AuthSchema.TokenDigest,
 ) {
   if (proof === undefined) return yield* Sessions.SessionInvalid.make({});
   const strategy = yield* sessions.SessionStrategy;
@@ -501,7 +503,7 @@ export const makeStudioStorage = Effect.fn("Studio.storage")(function* (
 
 export const makeStudioLive = Effect.fn("Studio.live")(function* (
   db: EffectPgDatabase<AnyRelations>,
-  binding: RequestBindingConfiguration,
+  binding: Operations.RequestBindingConfiguration,
   keys: Totp.TotpSecretKeys["Service"],
 ) {
   const hook = Hooks.hookContribution("studio/registration-audit");
@@ -532,7 +534,7 @@ export const makeStudioLive = Effect.fn("Studio.live")(function* (
     storage,
     Passkey.PasskeyConfig.layer({ profiles: [Studio.profile] }),
     hookLayer,
-    layerWebCrypto,
+    WebCrypto.layerWebCrypto,
     Auth.RequestBindingConfig.layer(binding),
     TotpCrypto.layer.pipe(Layer.provide(Layer.succeed(Totp.TotpSecretKeys, keys))),
   );

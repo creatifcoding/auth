@@ -1,20 +1,13 @@
-import { Auth } from "@yielded/auth";
+import {
+  Auth,
+  OAuth,
+  type Operations,
+  type Schema as AuthSchema,
+  type Sessions,
+  WebCrypto,
+} from "@yielded/auth";
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
-import {
-  makeConnectedModule,
-  OAuthConnectedProfile,
-  OAuthPermissionProfileKey,
-  OAuthReturnTargets,
-  OAuthUnavailable,
-  type OAuthGrantId,
-  type OAuthTransactionKeyring,
-} from "@yielded/auth/OAuth";
-import type { AuthInvocation } from "@yielded/auth/Operations";
-import type { SubjectId } from "@yielded/auth/Schema";
-import type { SessionSigningKeyring } from "@yielded/auth/Sessions";
-import { OAuth } from "@yielded/auth/strategies";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { Context, Effect, Layer, Schema, Stream } from "effect";
 import type { HttpClientResponse } from "effect/unstable/http";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
@@ -58,7 +51,11 @@ export const githubRegistration = githubSignIn.registration;
 
 export class GitHubReferenceAccounts extends Context.Service<
   GitHubReferenceAccounts,
-  { readonly claims: (subjectId: SubjectId) => Effect.Effect<typeof Claims.Type, OAuthUnavailable> }
+  {
+    readonly claims: (
+      subjectId: AuthSchema.SubjectId,
+    ) => Effect.Effect<typeof Claims.Type, OAuth.OAuthUnavailable>;
+  }
 >()("example/GitHubReferenceAccounts") {}
 
 const claimsLayer = Layer.effect(
@@ -83,9 +80,9 @@ const claimsLayer = Layer.effect(
  * Registration atomically provisions a new local subject; it never merges email. */
 export const githubSignInLayer = (input: {
   readonly registration: GitHub.Registration;
-  readonly bindingKeys: SessionSigningKeyring;
-  readonly transactionKeys: OAuthTransactionKeyring;
-  readonly sessionKeys: SessionSigningKeyring;
+  readonly bindingKeys: Sessions.SessionSigningKeyring;
+  readonly transactionKeys: OAuth.OAuthTransactionKeyring;
+  readonly sessionKeys: Sessions.SessionSigningKeyring;
 }) => {
   const shared = Layer.mergeAll(
     GitHub.layer(input.registration),
@@ -95,7 +92,7 @@ export const githubSignInLayer = (input: {
       keyring: input.bindingKeys,
     }),
     OAuthCrypto.transactionLayer(input.transactionKeys),
-    OAuthReturnTargets.exactRoutes(["/account"]),
+    OAuth.OAuthReturnTargets.exactRoutes(["/account"]),
     claimsLayer,
     githubSessions.statelessLayer(
       {
@@ -119,7 +116,7 @@ export const githubSignInLayer = (input: {
 
   return GitHubAuth.layer.pipe(
     Layer.provide(Layer.merge(shared, completion)),
-    Layer.provide(layerWebCrypto),
+    Layer.provide(WebCrypto.layerWebCrypto),
   );
 };
 
@@ -133,7 +130,9 @@ const readUserProfile = Effect.fn("example.GitHub.readUserProfile")(
       Stream.mapEffect((chunk) => {
         bytes += chunk.byteLength;
 
-        return bytes > 1024 * 1024 ? Effect.fail(OAuthUnavailable.make({})) : Effect.succeed(chunk);
+        return bytes > 1024 * 1024
+          ? Effect.fail(OAuth.OAuthUnavailable.make({}))
+          : Effect.succeed(chunk);
       }),
       Stream.decodeText(),
       Stream.runFold(
@@ -144,7 +143,7 @@ const readUserProfile = Effect.fn("example.GitHub.readUserProfile")(
 
     return yield* decodeUserProfile(body);
   },
-  Effect.mapError(() => OAuthUnavailable.make({})),
+  Effect.mapError(() => OAuth.OAuthUnavailable.make({})),
 );
 
 /** Optional API connection: a distinct module/binder and independent action
@@ -152,12 +151,12 @@ const readUserProfile = Effect.fn("example.GitHub.readUserProfile")(
  * Its sole sample capability is GET /user, requiring only read:user. */
 export const githubProfileConnection = (input: {
   readonly registration: GitHub.Registration;
-  readonly bindingKeys: SessionSigningKeyring;
-  readonly transactionKeys: OAuthTransactionKeyring;
-  readonly tokenKeys: OAuthTransactionKeyring;
+  readonly bindingKeys: Sessions.SessionSigningKeyring;
+  readonly transactionKeys: OAuth.OAuthTransactionKeyring;
+  readonly tokenKeys: OAuth.OAuthTransactionKeyring;
 }) => {
-  const profile = OAuthConnectedProfile.make({
-    key: OAuthPermissionProfileKey.make("github-profile"),
+  const profile = OAuth.OAuthConnectedProfile.make({
+    key: OAuth.OAuthPermissionProfileKey.make("github-profile"),
     generation: 1,
     issuance: "active",
     provider: GitHub.gitHubOAuthAppProviderKey,
@@ -172,7 +171,7 @@ export const githubProfileConnection = (input: {
     revocation: "cohort",
   });
 
-  const connected = makeConnectedModule("example/github-api", {
+  const connected = OAuth.makeConnectedModule("example/github-api", {
     ...entryPolicy,
     profiles: [profile],
     maximumEvidenceAgeMillis: 60_000,
@@ -189,17 +188,17 @@ export const githubProfileConnection = (input: {
     }),
     OAuthCrypto.connectedTransactionLayer(input.transactionKeys),
     OAuthCrypto.connectedTokenLayer(input.tokenKeys),
-    OAuthReturnTargets.exactRoutes(["/account/connections"]),
+    OAuth.OAuthReturnTargets.exactRoutes(["/account/connections"]),
   );
 
   const methods = Layer.mergeAll(
     connected.layer,
     connected.accessLayer,
     connected.maintenanceLayer,
-  ).pipe(Layer.provide(shared), Layer.provide(layerWebCrypto));
+  ).pipe(Layer.provide(shared), Layer.provide(WebCrypto.layerWebCrypto));
 
   const readMyProfile = Effect.fn("example.GitHub.readMyProfile")(
-    function* (caller: AuthInvocation, grantId: typeof OAuthGrantId.Type) {
+    function* (caller: Operations.AuthInvocation, grantId: typeof OAuth.OAuthGrantId.Type) {
       const access = yield* connected.ConnectedAccess;
       const http = yield* HttpClient.HttpClient;
 
@@ -218,10 +217,10 @@ export const githubProfileConnection = (input: {
             Effect.flatMap((response) =>
               response.status === 200
                 ? readUserProfile(response)
-                : Effect.fail(OAuthUnavailable.make({})),
+                : Effect.fail(OAuth.OAuthUnavailable.make({})),
             ),
             Effect.timeout(10_000),
-            Effect.mapError(() => OAuthUnavailable.make({})),
+            Effect.mapError(() => OAuth.OAuthUnavailable.make({})),
           ),
       );
     },

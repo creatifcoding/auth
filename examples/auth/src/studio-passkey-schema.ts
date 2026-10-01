@@ -1,3 +1,4 @@
+import { Passkey, Schema as AuthSchema } from "@yielded/auth";
 import {
   requiredPasskeyCredentialConstraints,
   requiredPasskeyManagementConstraints,
@@ -8,8 +9,6 @@ import {
   type PasskeyRegistrationMapping,
   type PasskeyWriteTables,
 } from "@yielded/auth-persistence-drizzle";
-import { PasskeyCredential, PasskeyMethodPolicy, PasskeyProfile } from "@yielded/auth/Passkey";
-import { SubjectId } from "@yielded/auth/Schema";
 import { sql } from "drizzle-orm";
 import { bigint, boolean, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
@@ -161,8 +160,8 @@ export const command = pgTable("studio_passkey_command", {
 
 export { registrationSchema, profile, policy, management, requirement } from "./studio-models";
 import { registrationSchema, management, requirement } from "./studio-models";
-const profileCodec = Schema.fromJsonString(PasskeyProfile);
-const policyCodec = Schema.fromJsonString(PasskeyMethodPolicy);
+const profileCodec = Schema.fromJsonString(Passkey.PasskeyProfile);
+const policyCodec = Schema.fromJsonString(Passkey.PasskeyMethodPolicy);
 const active = (value: unknown) => value === "active";
 
 export const read = {
@@ -198,7 +197,7 @@ export const read = {
     decode: (row) =>
       // oxlint-disable-next-line no-restricted-properties -- the partial native database row is decoded at the storage boundary.
       Schema.decodeUnknownSync(
-        PasskeyCredential.mapFields(
+        Passkey.PasskeyCredential.mapFields(
           ({ revision: _revision, active: _active, ...fields }) => fields,
         ),
       )({ ...row, profile: Schema.decodeSync(profileCodec)(row.profile!) }),
@@ -243,8 +242,8 @@ export const read = {
     decodeSubjectId: (row) => row.subjectId!,
   },
   subjectIds: {
-    toNative: (id: SubjectId) => String(id),
-    toSubject: SubjectId.make,
+    toNative: (id: AuthSchema.SubjectId) => String(id),
+    toSubject: AuthSchema.SubjectId.make,
     equals: (left: string, right: string) => left === right,
   },
   constraints: requiredPasskeyCredentialConstraints,

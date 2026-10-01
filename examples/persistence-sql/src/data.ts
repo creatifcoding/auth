@@ -1,8 +1,6 @@
 import * as PgliteClient from "@effect/sql-pglite/PgliteClient";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
-import { RequestBindingConfig } from "@yielded/auth/Auth";
-import { ProofKeys } from "@yielded/auth/Proofs";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Auth, Proofs, WebCrypto } from "@yielded/auth";
 import {
   Config,
   Context,
@@ -97,12 +95,12 @@ export const KeysLive = Layer.unwrap(
     );
 
     return Layer.mergeAll(
-      ProofKeys.layer({ activeKeyId: "v1", keys: [{ id: "v1", material: keys.proof }] }),
-      RequestBindingConfig.layer({
+      Proofs.ProofKeys.layer({ activeKeyId: "v1", keys: [{ id: "v1", material: keys.proof }] }),
+      Auth.RequestBindingConfig.layer({
         keyring: { activeKeyId: "v1", keys: [{ id: "v1", material: keys.binding }] },
         lifetimeMillis: 300_000,
         generation: 1,
       }),
     );
   }),
-).pipe(Layer.provide(DataLive), Layer.provide(layerWebCrypto));
+).pipe(Layer.provide(DataLive), Layer.provide(WebCrypto.layerWebCrypto));

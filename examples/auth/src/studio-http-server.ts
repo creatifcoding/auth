@@ -1,6 +1,4 @@
-import { Http } from "@yielded/auth";
-import * as HttpServer from "@yielded/auth/OperationHttpServer";
-import { requireAuthenticated } from "@yielded/auth/Operations";
+import { Http, OperationHttpServer as HttpServer, Operations } from "@yielded/auth";
 import { type AnyRelations, eq } from "drizzle-orm";
 import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import { Effect, Layer } from "effect";
@@ -12,7 +10,7 @@ import { MemberProfile, transport } from "./studio-transport";
 export const memberLayer = (db: EffectPgDatabase<AnyRelations>) =>
   MemberProfile.handlerLayer(
     Effect.fn(function* (_input, invocation) {
-      const caller = yield* requireAuthenticated(invocation);
+      const caller = yield* Operations.requireAuthenticated(invocation);
 
       const [member] = yield* db
         .select()

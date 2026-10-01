@@ -1,25 +1,4 @@
-import {
-  PasskeyActionAuthorization,
-  PasskeyBegin,
-  PasskeyCeremony,
-  PasskeyClaim,
-  PasskeyCredential,
-  PasskeyCredentials,
-  PasskeyDescriptor,
-  PasskeyEnrollmentContext,
-  PasskeyLabel,
-  PasskeyManagementPersistence,
-  PasskeyMethodPolicy,
-  PasskeyModuleId,
-  PasskeyPersistence,
-  PasskeyProfile,
-  PasskeyRevision,
-  PasskeyUnavailable,
-  PasskeyUserHandle,
-  type PasskeyAccess,
-} from "@yielded/auth/Passkey";
-import { TokenDigest, type SubjectId } from "@yielded/auth/Schema";
-import { SecurityRevision } from "@yielded/auth/Sessions";
+import { Passkey, Schema as AuthSchema, Sessions } from "@yielded/auth";
 import { Context, Crypto, Effect, Encoding, Layer, Schema } from "effect";
 
 import { requirement, sessionRequirement } from "../../shared/account/auth";
@@ -36,27 +15,31 @@ import { AppAuth } from "./auth";
 import { charge, nextId, type State } from "./model";
 import { AccountStore } from "./store";
 
-const encodeCeremony = Schema.encodeSync(Schema.fromJsonString(PasskeyCeremony));
-const encodeClaim = Schema.encodeSync(Schema.fromJsonString(PasskeyClaim));
-const encodePolicy = Schema.encodeSync(Schema.fromJsonString(PasskeyMethodPolicy));
-const encodeProfile = Schema.encodeSync(Schema.fromJsonString(PasskeyProfile));
-const encodeAuthorization = Schema.encodeSync(Schema.fromJsonString(PasskeyActionAuthorization));
+const encodeCeremony = Schema.encodeSync(Schema.fromJsonString(Passkey.PasskeyCeremony));
+const encodeClaim = Schema.encodeSync(Schema.fromJsonString(Passkey.PasskeyClaim));
+const encodePolicy = Schema.encodeSync(Schema.fromJsonString(Passkey.PasskeyMethodPolicy));
+const encodeProfile = Schema.encodeSync(Schema.fromJsonString(Passkey.PasskeyProfile));
+
+const encodeAuthorization = Schema.encodeSync(
+  Schema.fromJsonString(Passkey.PasskeyActionAuthorization),
+);
+
 const managementId = AppAuth.strategies.passkeys.persistence.moduleId;
 const signInId = AppAuth.strategies.passkey.persistence.moduleId;
 const management = AppAuth.strategies.passkeys.persistence.managementPolicy;
 
 type Row = State["ceremonies"][number];
 
-const knownSubject = (ceremony: PasskeyCeremony) =>
+const knownSubject = (ceremony: Passkey.PasskeyCeremony) =>
   ceremony.context._tag === "Enrollment" ? ceremony.context.revision.subjectId : undefined;
 
-const live = (ceremony: PasskeyCeremony, now: number, claim?: PasskeyClaim) =>
+const live = (ceremony: Passkey.PasskeyCeremony, now: number, claim?: Passkey.PasskeyClaim) =>
   now >= ceremony.issuedAtMillis &&
   now < ceremony.expiresAtMillis &&
   now < ceremony.requestBindingExpiresAtMillis &&
   (claim === undefined || (now >= claim.claimedAtMillis && now < claim.claimExpiresAtMillis));
 
-const matches = (ceremony: PasskeyCeremony, access: PasskeyAccess) =>
+const matches = (ceremony: Passkey.PasskeyCeremony, access: Passkey.PasskeyAccess) =>
   ceremony.moduleId === access.moduleId &&
   ceremony.generation === access.generation &&
   ceremony.purpose === access.purpose &&
@@ -64,7 +47,7 @@ const matches = (ceremony: PasskeyCeremony, access: PasskeyAccess) =>
   ceremony.requestBindingVerifier === access.requestBindingVerifier &&
   ceremony.requestBindingExpiresAtMillis === access.requestBindingExpiresAtMillis;
 
-const exactSubject = (state: Readonly<State>, snapshot: typeof PasskeyRevision.Type) =>
+const exactSubject = (state: Readonly<State>, snapshot: typeof Passkey.PasskeyRevision.Type) =>
   current(state, snapshot) &&
   credentials(state, snapshot.subjectId).length === snapshot.credentials.length &&
   new Set(snapshot.credentials.map((item) => item.credentialId)).size ===
@@ -89,7 +72,7 @@ const credentialFor = (state: Readonly<State>, rpId: string, protocolId: string)
       };
 };
 
-const sameCredential = (a: PasskeyCredential, b: PasskeyCredential) =>
+const sameCredential = (a: Passkey.PasskeyCredential, b: Passkey.PasskeyCredential) =>
   a.credentialId === b.credentialId &&
   a.rpId === b.rpId &&
   a.protocolCredentialId === b.protocolCredentialId &&
@@ -124,7 +107,7 @@ export const PasskeysLive = Layer.effectContext(
           ? enrollmentPolicy
           : undefined;
 
-    const compatible = (ceremony: PasskeyCeremony, policy: PasskeyMethodPolicy) => {
+    const compatible = (ceremony: Passkey.PasskeyCeremony, policy: Passkey.PasskeyMethodPolicy) => {
       const configured = policyFor(ceremony.moduleId);
 
       return (
@@ -155,7 +138,7 @@ export const PasskeysLive = Layer.effectContext(
         Schema.fromJsonString(Schema.toCodecJson(Schema.toType(schema))),
       )(value);
 
-      return TokenDigest.make(
+      return AuthSchema.TokenDigest.make(
         Encoding.encodeBase64Url(
           yield* crypto.digest("SHA-256", new TextEncoder().encode(encoded)),
         ),
@@ -164,13 +147,13 @@ export const PasskeysLive = Layer.effectContext(
 
     const authorize = Effect.fn("Customers.passkeyAuthorization")(function* (
       state: Readonly<State>,
-      auth: PasskeyActionAuthorization,
+      auth: Passkey.PasskeyActionAuthorization,
       expected: {
-        readonly action: PasskeyActionAuthorization["challenge"]["action"];
+        readonly action: Passkey.PasskeyActionAuthorization["challenge"]["action"];
         readonly commandId: string;
         readonly flowId: string;
         readonly digest: string;
-        readonly revision: typeof PasskeyRevision.Type;
+        readonly revision: typeof Passkey.PasskeyRevision.Type;
       },
       maximumAge: number,
     ) {
@@ -203,8 +186,8 @@ export const PasskeysLive = Layer.effectContext(
 
     const admitted = (
       state: State,
-      ceremony: PasskeyCeremony,
-      policy: PasskeyMethodPolicy,
+      ceremony: Passkey.PasskeyCeremony,
+      policy: Passkey.PasskeyMethodPolicy,
       now: number,
     ) => {
       if (
@@ -248,7 +231,7 @@ export const PasskeysLive = Layer.effectContext(
       );
     };
 
-    const exactClaim = (state: Readonly<State>, claim: PasskeyClaim) =>
+    const exactClaim = (state: Readonly<State>, claim: Passkey.PasskeyClaim) =>
       state.ceremonies.find(
         (row) =>
           row.state === "claimed" &&
@@ -262,7 +245,7 @@ export const PasskeysLive = Layer.effectContext(
       );
     };
 
-    const persistence = PasskeyPersistence.of({
+    const persistence = Passkey.PasskeyPersistence.of({
       issue: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -286,7 +269,7 @@ export const PasskeysLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       context: (access) =>
         store
           .read((state, now) =>
@@ -302,7 +285,7 @@ export const PasskeysLive = Layer.effectContext(
               return row?.ceremony;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       claim: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -366,7 +349,7 @@ export const PasskeysLive = Layer.effectContext(
                 return prepare({ _tag: "Rejected" }, journal);
               }
 
-              const claim = PasskeyClaim.make({
+              const claim = Passkey.PasskeyClaim.make({
                 ceremony: row.ceremony,
                 claimId: input.claimId,
                 claimedAtMillis: now,
@@ -394,7 +377,7 @@ export const PasskeysLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       settle: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -462,7 +445,7 @@ export const PasskeysLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       cleanup: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -504,19 +487,22 @@ export const PasskeysLive = Layer.effectContext(
               return prepare({ terminalized, removed, hasMore }, journal);
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
     });
 
-    const metadataAllowed = (state: Readonly<State>, moduleId: string, subjectId: SubjectId) =>
-      moduleId === managementId && customer(state, subjectId) !== undefined;
+    const metadataAllowed = (
+      state: Readonly<State>,
+      moduleId: string,
+      subjectId: AuthSchema.SubjectId,
+    ) => moduleId === managementId && customer(state, subjectId) !== undefined;
 
-    const manager = PasskeyManagementPersistence.of({
+    const manager = Passkey.PasskeyManagementPersistence.of({
       list: (input) =>
         store
           .read((state) =>
             Effect.gen(function* () {
               if (!metadataAllowed(state, input.moduleId, input.subjectId))
-                return yield* PasskeyUnavailable.make({});
+                return yield* Passkey.PasskeyUnavailable.make({});
 
               const rows = state.passkeys
                 .filter(
@@ -537,7 +523,7 @@ export const PasskeysLive = Layer.effectContext(
               };
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       issueEnrollment: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -569,13 +555,13 @@ export const PasskeysLive = Layer.effectContext(
 
               const expectedDigest = yield* digest(
                 Schema.Tuple([
-                  PasskeyModuleId,
+                  Passkey.PasskeyModuleId,
                   Schema.Literal("enrollment"),
-                  Schema.Struct({ ...PasskeyBegin.fields, name: PasskeyLabel }),
-                  PasskeyProfile,
-                  PasskeyRevision,
-                  PasskeyUserHandle,
-                  Schema.Array(PasskeyDescriptor),
+                  Schema.Struct({ ...Passkey.PasskeyBegin.fields, name: Passkey.PasskeyLabel }),
+                  Passkey.PasskeyProfile,
+                  Passkey.PasskeyRevision,
+                  Passkey.PasskeyUserHandle,
+                  Schema.Array(Passkey.PasskeyDescriptor),
                 ]),
                 [
                   ceremony.moduleId,
@@ -661,7 +647,7 @@ export const PasskeysLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.mapError(() => PasskeyUnavailable.make({}))),
+          .pipe(Effect.mapError(() => Passkey.PasskeyUnavailable.make({}))),
       completeEnrollment: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -722,7 +708,7 @@ export const PasskeysLive = Layer.effectContext(
                     action: "enroll-complete",
                     commandId: ceremony.commandId,
                     flowId: ceremony.flowId,
-                    digest: yield* digest(PasskeyCeremony, ceremony),
+                    digest: yield* digest(Passkey.PasskeyCeremony, ceremony),
                     revision: context.revision,
                   },
                   Math.min(
@@ -734,7 +720,7 @@ export const PasskeysLive = Layer.effectContext(
                 return reject();
               const id = nextId(state, "passkey");
 
-              const credential = PasskeyCredential.make({
+              const credential = Passkey.PasskeyCredential.make({
                 credentialId: id,
                 rpId: ceremony.profile.rpId,
                 protocolCredentialId: verified.protocolCredentialId,
@@ -747,7 +733,7 @@ export const PasskeysLive = Layer.effectContext(
                   credentials: [
                     {
                       credentialId: id,
-                      revision: SecurityRevision.make(nextId(state, "passkey-revision")),
+                      revision: Sessions.SecurityRevision.make(nextId(state, "passkey-revision")),
                     },
                   ],
                 },
@@ -789,7 +775,7 @@ export const PasskeysLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.mapError(() => PasskeyUnavailable.make({}))),
+          .pipe(Effect.mapError(() => Passkey.PasskeyUnavailable.make({}))),
       rename: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -847,26 +833,26 @@ export const PasskeysLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       // Removal is deliberately not an operation of this app's public contract.
       inspectRemove: () => Effect.succeed({ _tag: "Rejected" }),
       remove: (_input, prepare) =>
         store
           .transaction((_state, journal) => Effect.succeed(prepare({ _tag: "Rejected" }, journal)))
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
     });
 
-    return Context.make(PasskeyPersistence, persistence).pipe(
-      Context.add(PasskeyManagementPersistence, manager),
-      Context.add(PasskeyCredentials, {
+    return Context.make(Passkey.PasskeyPersistence, persistence).pipe(
+      Context.add(Passkey.PasskeyManagementPersistence, manager),
+      Context.add(Passkey.PasskeyCredentials, {
         lookup: (input) =>
           store
             .read((state) =>
               Effect.succeed(credentialFor(state, input.rpId, input.protocolCredentialId)),
             )
-            .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+            .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       }),
-      Context.add(PasskeyEnrollmentContext, {
+      Context.add(Passkey.PasskeyEnrollmentContext, {
         capture: (input) =>
           store
             .read((state) =>
@@ -896,7 +882,7 @@ export const PasskeysLive = Layer.effectContext(
                 };
               }),
             )
-            .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+            .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       }),
       Context.add(AppAuth.strategies.passkey.ClaimsForPasskey, {
         resolve: (credential) =>
@@ -906,12 +892,12 @@ export const PasskeysLive = Layer.effectContext(
                 const account = customer(state, credential.revision.subjectId);
 
                 if (account === undefined || !current(state, credential.revision))
-                  return yield* PasskeyUnavailable.make({});
+                  return yield* Passkey.PasskeyUnavailable.make({});
 
                 return claims(account);
               }),
             )
-            .pipe(Effect.catchTag("StoreUnavailable", () => PasskeyUnavailable.make({}))),
+            .pipe(Effect.catchTag("StoreUnavailable", () => Passkey.PasskeyUnavailable.make({}))),
       }),
     );
   }),

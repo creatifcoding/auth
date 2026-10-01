@@ -1,8 +1,5 @@
+import { Hooks, Passkey, Password, WebCrypto } from "@yielded/auth";
 import { layer as layerSimpleWebAuthnPasskeyProtocol } from "@yielded/auth-simplewebauthn/Server";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
-import { PasskeyConfig } from "@yielded/auth/Passkey";
-import { defaultPasswordPolicy, NewPasswordCheck } from "@yielded/auth/Password";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { Layer } from "effect";
 
 import { sessionConfiguration } from "../../shared/account/auth";
@@ -48,17 +45,20 @@ const WorkflowsLive = AccountMethodsLive.pipe(
 export const AuthLive = AppAuth.layer.pipe(
   Layer.provideMerge(WorkflowsLive),
   Layer.provide(
-    NewPasswordCheck.layer({ ...defaultPasswordPolicy, minimumCodePoints: minimumPasswordLength }),
+    Password.NewPasswordCheck.layer({
+      ...Password.defaultPasswordPolicy,
+      minimumCodePoints: minimumPasswordLength,
+    }),
   ),
   Layer.provideMerge(HashingLive),
   Layer.provide(layerSimpleWebAuthnPasskeyProtocol),
   Layer.provide(
-    PasskeyConfig.layer({
+    Passkey.PasskeyConfig.layer({
       id: "localhost",
       name: "Yielded Auth · Example 04",
       origins: ["http://localhost:4184"],
       developmentLocalhost: true,
     }),
   ),
-  Layer.provide([layerWebCrypto, LifecycleHooks.empty]),
+  Layer.provide([WebCrypto.layerWebCrypto, Hooks.LifecycleHooks.empty]),
 );

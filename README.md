@@ -9,19 +9,24 @@ identity authority, persistence, protocol verification, and credential delivery.
 Companion packages provide Cloudflare, OAuth/OIDC, WebAuthn, and maintained cryptography.
 Core has only Effect as a runtime peer; applications supply adapter Layers.
 
+Use generated auth tables and migrations, bring your own schema, or replace
+individual services. [Choose how much you own](docs/src/content/docs/guide/storage.mdx); four [runnable account apps](docs/src/content/docs/guide/examples.md#run-an-account-app)
+show how much control you can take.
+
 For an app using GitHub, [managed OAuth](docs/src/content/docs/guide/oauth.md#sign-in-and-connect-provider-access)
 handles sign-in, encrypted provider tokens, refresh, and stateless session cookies
 without a session repository. Supply your provider configuration, account policy,
 keys, and SQL connection; see the [runnable example](examples/auth/src/github-app.ts).
-
-See the [persistence examples](docs/src/content/docs/reference/adapters.md#runnable-examples) for
-managed Drizzle, application-owned Drizzle, raw SQL, and custom service implementations.
 
 Install the beta release with Effect:
 
 ```sh
 bun add @yielded/auth@beta effect
 ```
+
+Prefer named namespace imports from `@yielded/auth`. Direct module paths such as
+`@yielded/auth/AuthContract` remain available; see the
+[import guide](docs/src/content/docs/reference/modules.md#imports-and-tree-shaking).
 
 ## One API, server and client
 
@@ -31,7 +36,7 @@ Define the shared contract in `auth-contract.ts`:
 
 ```ts [auth-contract.ts]
 import { Schema } from "effect";
-import { AuthContract } from "@yielded/auth/contracts";
+import { AuthContract } from "@yielded/auth";
 
 export const AuthApi = AuthContract.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
@@ -46,8 +51,7 @@ Bind the server implementation and mount its HTTP routes:
 <!-- #region auth-server -->
 
 ```ts [auth.ts]
-import { Auth, Http, Sessions } from "@yielded/auth";
-import { Password } from "@yielded/auth/strategies";
+import { Auth, Http, Password, Sessions } from "@yielded/auth";
 
 import { AuthApi } from "./auth-contract";
 
@@ -82,8 +86,7 @@ Create the client and its atoms from the same contract:
 <!-- #region auth-client -->
 
 ```ts [auth-client.ts]
-import * as AuthAtom from "@yielded/auth/Atom";
-import * as Client from "@yielded/auth/Client";
+import { Atom as AuthAtom, Client } from "@yielded/auth";
 
 import { AuthApi } from "./auth-contract";
 

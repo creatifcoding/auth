@@ -191,7 +191,7 @@ Declare the actions for `OAuth` inside `Auth.make`:
 
 ```ts title="auth-contract.ts"
 import { Schema } from "effect";
-import { AuthContract } from "@yielded/auth/contracts";
+import { AuthContract } from "@yielded/auth";
 
 export const AuthApi = AuthContract.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
@@ -208,7 +208,7 @@ With `AppAuth` from the guide and `AuthRoutes` from a provider page:
 
 ```ts title="oauth-live.ts"
 import { Layer } from "effect";
-import { OAuth } from "@yielded/auth/strategies";
+import { OAuth } from "@yielded/auth";
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
 import { AppAuth } from "./auth";
 import { AuthDependencies } from "./auth-dependencies";

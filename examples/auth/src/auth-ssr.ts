@@ -1,5 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
-import * as AuthAtom from "@yielded/auth/Atom";
+import { Atom as AuthAtom } from "@yielded/auth";
 import { Effect, Schema } from "effect";
 import { AtomRegistry } from "effect/unstable/reactivity";
 import { createElement } from "react";

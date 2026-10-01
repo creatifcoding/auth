@@ -1,12 +1,4 @@
-import {
-  AuthenticationAuthority,
-  SecurityRevision,
-  SessionConflict,
-  SessionId,
-  SessionInvalid,
-  SessionUnavailable,
-  StaleAuthentication,
-} from "@yielded/auth/Sessions";
+import { Sessions } from "@yielded/auth";
 import { Context, DateTime, Effect, Layer } from "effect";
 
 import { requirement } from "../../shared/account/auth";
@@ -34,7 +26,7 @@ export const SessionsLive = Layer.effectContext(
   Effect.gen(function* () {
     const store = yield* AccountStore;
 
-    const authority = AuthenticationAuthority.of({
+    const authority = Sessions.AuthenticationAuthority.of({
       capture: (id, ids) =>
         store
           .read((state) =>
@@ -47,25 +39,25 @@ export const SessionsLive = Layer.effectContext(
                   credentials(state, account.id).some((item) => item.credentialId === id),
                 )
               )
-                return yield* StaleAuthentication.make({});
+                return yield* Sessions.StaleAuthentication.make({});
 
               return revision(state, account, ids);
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => SessionUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Sessions.SessionUnavailable.make({}))),
       requirements: (evidence) =>
         store
           .read((state) =>
             Effect.gen(function* () {
               if (!(yield* satisfies(state, evidence, requirement)))
-                return yield* StaleAuthentication.make({});
+                return yield* Sessions.StaleAuthentication.make({});
 
               return requirement;
             }),
           )
           .pipe(
             Effect.catchTag(["StoreUnavailable", "SessionConfigurationError"], () =>
-              SessionUnavailable.make({}),
+              Sessions.SessionUnavailable.make({}),
             ),
           ),
       approve: (input, prepare) =>
@@ -81,7 +73,7 @@ export const SessionsLive = Layer.effectContext(
                     DateTime.toEpochMillis(input.absoluteExpiresAt),
                   )
               )
-                return yield* StaleAuthentication.make({});
+                return yield* Sessions.StaleAuthentication.make({});
               journal.beforeCommit(
                 (fresh) =>
                   fresh >= now &&
@@ -98,7 +90,7 @@ export const SessionsLive = Layer.effectContext(
           )
           .pipe(
             Effect.catchTag(["StoreUnavailable", "SessionConfigurationError"], () =>
-              SessionUnavailable.make({}),
+              Sessions.SessionUnavailable.make({}),
             ),
           ),
     });
@@ -119,19 +111,19 @@ export const SessionsLive = Layer.effectContext(
                     DateTime.toEpochMillis(input.session.absoluteExpiresAt),
                   )
               )
-                return yield* StaleAuthentication.make({});
+                return yield* Sessions.StaleAuthentication.make({});
               if (
                 state.flows.some(
                   (row) => row.id === input.evidence.flowId && row.expiresAt > now,
                 ) ||
                 state.sessions.some((row) => row.digest === input.session.digest)
               )
-                return yield* SessionConflict.make({});
+                return yield* Sessions.SessionConflict.make({});
 
               const row: Session = {
                 ...input.session,
-                sessionId: SessionId.make(nextId(state, "session")),
-                version: SecurityRevision.make(nextId(state, "session-version")),
+                sessionId: Sessions.SessionId.make(nextId(state, "session")),
+                version: Sessions.SecurityRevision.make(nextId(state, "session-version")),
               };
 
               const receipt = prepare(row, journal);
@@ -160,7 +152,7 @@ export const SessionsLive = Layer.effectContext(
           )
           .pipe(
             Effect.catchTag(["StoreUnavailable", "SessionConfigurationError"], () =>
-              SessionUnavailable.make({}),
+              Sessions.SessionUnavailable.make({}),
             ),
           ),
       verify: (input) =>
@@ -171,12 +163,12 @@ export const SessionsLive = Layer.effectContext(
               const account = row === undefined ? undefined : customer(state, row.subjectId);
 
               if (row === undefined || account === undefined || !validSession(state, row, now))
-                return yield* SessionInvalid.make({});
+                return yield* Sessions.SessionInvalid.make({});
 
               return { ...row, claims: claims(account) };
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => SessionUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Sessions.SessionUnavailable.make({}))),
       rotate: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -194,7 +186,7 @@ export const SessionsLive = Layer.effectContext(
                   DateTime.toEpochMillis(row.absoluteExpiresAt) ||
                 state.sessions.some((other) => other.digest === input.nextDigest)
               )
-                return yield* SessionConflict.make({});
+                return yield* Sessions.SessionConflict.make({});
 
               const next: Session = {
                 ...row,
@@ -202,7 +194,7 @@ export const SessionsLive = Layer.effectContext(
                 credentialVersion: input.nextCredentialVersion,
                 issuedAt: DateTime.makeUnsafe(now),
                 expiresAt: input.nextExpiresAt,
-                version: SecurityRevision.make(nextId(state, "session-version")),
+                version: Sessions.SecurityRevision.make(nextId(state, "session-version")),
               };
 
               const receipt = prepare(next, journal);
@@ -220,7 +212,7 @@ export const SessionsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => SessionUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Sessions.SessionUnavailable.make({}))),
       revokeDigest: (digest, prepare) =>
         store
           .transaction((state, journal) =>
@@ -233,7 +225,7 @@ export const SessionsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => SessionUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Sessions.SessionUnavailable.make({}))),
       revoke: (input, prepare) =>
         store
           .transaction((state, journal) =>
@@ -242,7 +234,7 @@ export const SessionsLive = Layer.effectContext(
                 customer(state, input.subjectId)?.securityRevision !==
                 input.expectedSecurityRevision
               )
-                return yield* StaleAuthentication.make({});
+                return yield* Sessions.StaleAuthentication.make({});
               const receipt = prepare(undefined, journal);
 
               state.sessions = state.sessions.filter(
@@ -252,7 +244,7 @@ export const SessionsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => SessionUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Sessions.SessionUnavailable.make({}))),
       revokeAll: (input, prepare) =>
         store
           .transaction((state, journal) =>
@@ -261,7 +253,7 @@ export const SessionsLive = Layer.effectContext(
                 customer(state, input.subjectId)?.securityRevision !==
                 input.expectedSecurityRevision
               )
-                return yield* StaleAuthentication.make({});
+                return yield* Sessions.StaleAuthentication.make({});
               const receipt = prepare(undefined, journal);
 
               invalidate(state, input.subjectId);
@@ -269,10 +261,10 @@ export const SessionsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => SessionUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Sessions.SessionUnavailable.make({}))),
     });
 
-    return Context.make(AuthenticationAuthority, authority).pipe(
+    return Context.make(Sessions.AuthenticationAuthority, authority).pipe(
       Context.add(AppAuth.sessions.StatefulSessionPersistence, sessions),
       Context.add(AppAuth.sessions.SessionRepository, {
         list: (input) =>
@@ -316,7 +308,7 @@ export const SessionsLive = Layer.effectContext(
                 };
               }),
             )
-            .pipe(Effect.catchTag("StoreUnavailable", () => SessionUnavailable.make({}))),
+            .pipe(Effect.catchTag("StoreUnavailable", () => Sessions.SessionUnavailable.make({}))),
       }),
     );
   }),

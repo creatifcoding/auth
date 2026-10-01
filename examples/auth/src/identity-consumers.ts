@@ -1,9 +1,4 @@
-import {
-  IdentityRepository,
-  numericSubjectId,
-  stringSubjectId,
-  SubjectSnapshot,
-} from "@yielded/auth/Identity";
+import { Identity } from "@yielded/auth";
 import { Effect, Layer, Option } from "effect";
 
 /**
@@ -16,15 +11,18 @@ const staff = new Map([
   ["01991ac9-e630-7ef2-9577-af4d762fa102", { suspended: true }],
 ]);
 
-export const staffIdentity = Layer.succeed(IdentityRepository, {
+export const staffIdentity = Layer.succeed(Identity.IdentityRepository, {
   findSubject: Effect.fn("StaffIdentity.findSubject")(function* (subjectId) {
-    const id = yield* stringSubjectId.toNative(subjectId).pipe(Effect.orDie);
+    const id = yield* Identity.stringSubjectId.toNative(subjectId).pipe(Effect.orDie);
     const row = staff.get(id);
 
     return row === undefined
       ? Option.none()
       : Option.some(
-          SubjectSnapshot.make({ subjectId, status: row.suspended ? "disabled" : "active" }),
+          Identity.SubjectSnapshot.make({
+            subjectId,
+            status: row.suspended ? "disabled" : "active",
+          }),
         );
   }),
   findIdentifier: () => Effect.succeed(Option.none()),
@@ -35,15 +33,15 @@ export const staffIdentity = Layer.succeed(IdentityRepository, {
 
 const shoppers = new Map([[42, { enabled: true }]]);
 
-export const shopperIdentity = Layer.succeed(IdentityRepository, {
+export const shopperIdentity = Layer.succeed(Identity.IdentityRepository, {
   findSubject: Effect.fn("ShopperIdentity.findSubject")(function* (subjectId) {
-    const id = yield* numericSubjectId.toNative(subjectId).pipe(Effect.orDie);
+    const id = yield* Identity.numericSubjectId.toNative(subjectId).pipe(Effect.orDie);
     const row = shoppers.get(id);
 
     return row === undefined
       ? Option.none()
       : Option.some(
-          SubjectSnapshot.make({ subjectId, status: row.enabled ? "active" : "disabled" }),
+          Identity.SubjectSnapshot.make({ subjectId, status: row.enabled ? "active" : "disabled" }),
         );
   }),
   findIdentifier: () => Effect.succeed(Option.none()),

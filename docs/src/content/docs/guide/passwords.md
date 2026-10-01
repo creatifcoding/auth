@@ -10,8 +10,7 @@ recovery to enable full password management.
 
 ```ts title="auth.ts"
 import { Schema } from "effect";
-import { Auth, Sessions } from "@yielded/auth";
-import { Password } from "@yielded/auth/strategies";
+import { Auth, Password, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
@@ -91,10 +90,8 @@ remain application-owned:
 
 ```ts title="password-live.ts"
 import { Layer } from "effect";
-import { Password } from "@yielded/auth/strategies";
+import { Password, Proofs, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
-import { EmailProofDelivery } from "@yielded/auth/Proofs";
 
 import { AppAuth } from "./auth";
 import { AuthDependencies } from "./auth-dependencies";
@@ -106,7 +103,7 @@ import { emailVendor, sendEmail } from "./email";
 export const PasswordLive = Layer.mergeAll(
   PasswordCrypto.layer().pipe(
     Layer.provide(Password.PasswordKdfAdmission.layer()),
-    Layer.provide(layerWebCrypto),
+    Layer.provide(WebCrypto.layerWebCrypto),
   ),
   PasswordPersistenceLive,
   ProofPersistenceLive,
@@ -114,7 +111,7 @@ export const PasswordLive = Layer.mergeAll(
   Layer.succeed(AppAuth.strategies.password.RegistrationAuthority, { register: registerAccount }),
   Layer.succeed(Password.CompromisedPasswords, { check: checkPassword }),
   Layer.succeed(Password.PasswordActionEvidence, { verify: authorizePasswordChange }),
-  EmailProofDelivery.layer(emailVendor, sendEmail),
+  Proofs.EmailProofDelivery.layer(emailVendor, sendEmail),
 );
 
 export const AuthLive = AppAuth.layer.pipe(

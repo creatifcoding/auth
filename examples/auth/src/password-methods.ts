@@ -1,11 +1,6 @@
 import { BunRuntime } from "@effect/platform-bun";
+import { Auth, Hooks, Operations, Password, Proofs, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";
-import { AuthRequest } from "@yielded/auth/Auth";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
-import { guest, type AuthCredentialCommand } from "@yielded/auth/Operations";
-import { CompromisedPasswords, PasswordKdfAdmission } from "@yielded/auth/Password";
-import { EmailProofDelivery, type ProofDeliveryMessage } from "@yielded/auth/Proofs";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { DateTime, Effect, Encoding, Layer, Redacted } from "effect";
 
 import {
@@ -16,13 +11,13 @@ import {
 } from "./password-method-consumer";
 
 const hashing = PasswordCrypto.layer().pipe(
-  Layer.provide(PasswordKdfAdmission.layer()),
-  Layer.provide(layerWebCrypto),
+  Layer.provide(Password.PasswordKdfAdmission.layer()),
+  Layer.provide(WebCrypto.layerWebCrypto),
 );
 
-const base = Layer.mergeAll(layerWebCrypto, LifecycleHooks.empty, hashing);
+const base = Layer.mergeAll(WebCrypto.layerWebCrypto, Hooks.LifecycleHooks.empty, hashing);
 
-const screening = Layer.succeed(CompromisedPasswords, {
+const screening = Layer.succeed(Password.CompromisedPasswords, {
   // Public local fixture only; production must supply a maintained corpus/checker.
   check: (password) =>
     Effect.succeed(
@@ -34,12 +29,12 @@ const screening = Layer.succeed(CompromisedPasswords, {
 
 const program = Effect.gen(function* () {
   const model = yield* makePasswordConsumer;
-  const deliveries: ProofDeliveryMessage[] = [];
-  const collector: AuthCredentialCommand[] = [];
+  const deliveries: Proofs.ProofDeliveryMessage[] = [];
+  const collector: Operations.AuthCredentialCommand[] = [];
 
   const call = {
     credentials: {},
-    credentialCommandSink: (commands: readonly AuthCredentialCommand[]) =>
+    credentialCommandSink: (commands: readonly Operations.AuthCredentialCommand[]) =>
       Effect.sync(() => {
         collector.push(...commands);
       }),
@@ -61,7 +56,7 @@ const program = Effect.gen(function* () {
     .completionLayer()
     .pipe(Layer.provide(Layer.mergeAll(strategy, model.layer)), Layer.provide(base));
 
-  const delivery = EmailProofDelivery.layer(
+  const delivery = Proofs.EmailProofDelivery.layer(
     { vendorId: "local-fixture", idempotencyMillis: 0 },
     (message) =>
       Effect.sync(() => {
@@ -135,12 +130,12 @@ const program = Effect.gen(function* () {
         currentPassword: original,
         newPassword: changed,
       })
-      .pipe(Effect.provideService(AuthRequest, { ...call, invocation: caller }));
+      .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: caller }));
 
     if (changedResult.invalidation.existingSessions !== "original-absolute-expiry")
       return yield* Effect.die("stateless window misreported");
     // Pure stateless old credentials retain their original bound, honestly reported above.
-    yield* sessions.operations.Verify.invoke(guest, {
+    yield* sessions.operations.Verify.invoke(Operations.guest, {
       credential: Redacted.value(firstToken.credential),
     });
     const old = yield* auth.signIn({ email, password: original }).pipe(Effect.result);
@@ -205,7 +200,7 @@ const program = Effect.gen(function* () {
       sessionId: recovered.session.sessionId,
     };
 
-    const asFresh = Effect.provideService(AuthRequest, { ...call, invocation: fresh });
+    const asFresh = Effect.provideService(Auth.AuthRequest, { ...call, invocation: fresh });
 
     yield* model.requireMfaFixture(email);
     const mfaLogin = yield* auth.signIn({ email, password: resetPassword }).pipe(Effect.result);
@@ -240,7 +235,7 @@ const program = Effect.gen(function* () {
       .pipe(asFresh);
     const addedSubject = yield* model.addSubjectFixture("external@example.invalid");
     const addedCaller = { ...fresh, subjectId: addedSubject };
-    const asAdded = Effect.provideService(AuthRequest, { ...call, invocation: addedCaller });
+    const asAdded = Effect.provideService(Auth.AuthRequest, { ...call, invocation: addedCaller });
 
     yield* auth
       .addPassword({
@@ -262,7 +257,7 @@ const program = Effect.gen(function* () {
     });
   }).pipe(
     Effect.scoped,
-    Effect.provideService(AuthRequest, { ...call, invocation: guest }),
+    Effect.provideService(Auth.AuthRequest, { ...call, invocation: Operations.guest }),
     Effect.provide(
       Layer.mergeAll(sessionHandlers, model.layer, strategy, completion, delivery, screening),
     ),

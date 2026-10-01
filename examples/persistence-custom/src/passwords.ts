@@ -1,12 +1,4 @@
-import {
-  PasswordAttemptId,
-  PasswordCredentialSnapshot,
-  PasswordPersistence,
-  PasswordUnavailable,
-  type PasswordMutationInput,
-} from "@yielded/auth/Password";
-import { Email, SubjectId } from "@yielded/auth/Schema";
-import { SecurityRevision } from "@yielded/auth/Sessions";
+import { Password, Schema as AuthSchema, Sessions } from "@yielded/auth";
 import { Context, Effect, Layer, Option, Redacted, Schema } from "effect";
 
 import {
@@ -24,11 +16,14 @@ import { completionCurrent, consumeCompletion } from "./proofs";
 import { AccountStore } from "./store";
 
 const moduleId = AppAuth.strategies.password.persistence.moduleId;
-const encodeCredential = Schema.encodeSync(Schema.fromJsonString(PasswordCredentialSnapshot));
+
+const encodeCredential = Schema.encodeSync(
+  Schema.fromJsonString(Password.PasswordCredentialSnapshot),
+);
 
 const mutationCurrent = Effect.fn("Customers.passwordMutationCurrent")(function* (
   state: Readonly<State>,
-  input: PasswordMutationInput,
+  input: Password.PasswordMutationInput,
 ) {
   const { authorization: auth } = input;
   const account = customer(state, input.expectedRevision.subjectId);
@@ -55,14 +50,14 @@ const mutationCurrent = Effect.fn("Customers.passwordMutationCurrent")(function*
   );
 });
 
-const replace = (state: State, input: PasswordMutationInput) => {
+const replace = (state: State, input: Password.PasswordMutationInput) => {
   state.passwords = state.passwords.map((item) =>
     item.credentialId === input.credential?.credentialId
       ? {
           ...item,
           replacement: input.replacement,
-          revision: SecurityRevision.make(nextId(state, "password-revision")),
-          verifierVersion: SecurityRevision.make(nextId(state, "verifier")),
+          revision: Sessions.SecurityRevision.make(nextId(state, "password-revision")),
+          verifierVersion: Sessions.SecurityRevision.make(nextId(state, "verifier")),
         }
       : item,
   );
@@ -73,7 +68,7 @@ export const PasswordsLive = Layer.effectContext(
   Effect.gen(function* () {
     const store = yield* AccountStore;
 
-    const passwords = PasswordPersistence.of({
+    const passwords = Password.PasswordPersistence.of({
       admitAttempt: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -117,7 +112,7 @@ export const PasswordsLive = Layer.effectContext(
                   input.policy.maximumPending
               )
                 return prepare({ _tag: "Denied" }, journal);
-              const attemptId = PasswordAttemptId.make(nextId(state, "attempt"));
+              const attemptId = Password.PasswordAttemptId.make(nextId(state, "attempt"));
 
               const receipt = prepare(
                 {
@@ -149,7 +144,7 @@ export const PasswordsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       settleAttempt: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -198,7 +193,7 @@ export const PasswordsLive = Layer.effectContext(
                     ? {
                         ...item,
                         replacement: { ...item.replacement, verifier: rehash.nextVerifier },
-                        verifierVersion: SecurityRevision.make(nextId(state, "verifier")),
+                        verifierVersion: Sessions.SecurityRevision.make(nextId(state, "verifier")),
                       }
                     : item,
                 );
@@ -206,7 +201,7 @@ export const PasswordsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       readForSubject: (input) =>
         store
           .read((state) =>
@@ -219,7 +214,7 @@ export const PasswordsLive = Layer.effectContext(
               );
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       recoveryTarget: (input) =>
         store
           .read((state) =>
@@ -239,9 +234,9 @@ export const PasswordsLive = Layer.effectContext(
               );
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       // Every customer in this application registers a password; adding another is unsupported.
-      addIfAbsent: () => Effect.fail(PasswordUnavailable.make({})),
+      addIfAbsent: () => Effect.fail(Password.PasswordUnavailable.make({})),
       replaceIfCurrent: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -277,11 +272,11 @@ export const PasswordsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.mapError(() => PasswordUnavailable.make({}))),
+          .pipe(Effect.mapError(() => Password.PasswordUnavailable.make({}))),
       checkReset: (input) =>
         store
           .read((state, now) => Effect.succeed(completionCurrent(state, input, now)))
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       resetWithProof: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -336,7 +331,7 @@ export const PasswordsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.mapError(() => PasswordUnavailable.make({}))),
+          .pipe(Effect.mapError(() => Password.PasswordUnavailable.make({}))),
       cleanupAttempts: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -357,17 +352,17 @@ export const PasswordsLive = Layer.effectContext(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
     });
 
-    return Context.make(PasswordPersistence, passwords).pipe(
+    return Context.make(Password.PasswordPersistence, passwords).pipe(
       Context.add(AppAuth.strategies.password.RegistrationAuthority, {
         register: (input, prepare) =>
           store
             .transaction((state, journal) =>
               Effect.gen(function* () {
                 if (input.moduleId !== moduleId || input.identifier.namespace !== "email")
-                  return yield* PasswordUnavailable.make({});
+                  return yield* Password.PasswordUnavailable.make({});
                 // A public request ID never adopts an old subject or replaces its password.
                 if (
                   state.registrations.some((item) => item.requestId === input.requestId) ||
@@ -378,11 +373,11 @@ export const PasswordsLive = Layer.effectContext(
                   )
                 )
                   return prepare({ _tag: "Suppressed" }, journal);
-                const subjectId = SubjectId.make(nextId(state, "customer"));
+                const subjectId = AuthSchema.SubjectId.make(nextId(state, "customer"));
 
-                const email = yield* Schema.decodeEffect(Email)(input.identifier.value).pipe(
-                  Effect.mapError(() => PasswordUnavailable.make({})),
-                );
+                const email = yield* Schema.decodeEffect(AuthSchema.Email)(
+                  input.identifier.value,
+                ).pipe(Effect.mapError(() => Password.PasswordUnavailable.make({})));
 
                 const receipt = prepare({ _tag: "Created", subjectId }, journal);
 
@@ -394,8 +389,8 @@ export const PasswordsLive = Layer.effectContext(
                     active: true,
                     displayName: input.registration.displayName,
                     username: input.registration.username,
-                    securityRevision: SecurityRevision.make(nextId(state, "security")),
-                    identifierRevision: SecurityRevision.make(nextId(state, "identifier")),
+                    securityRevision: Sessions.SecurityRevision.make(nextId(state, "security")),
+                    identifierRevision: Sessions.SecurityRevision.make(nextId(state, "identifier")),
                   },
                 ];
                 state.passwords = [
@@ -404,8 +399,8 @@ export const PasswordsLive = Layer.effectContext(
                     subjectId,
                     credentialId: nextId(state, "password"),
                     replacement: input.replacement,
-                    revision: SecurityRevision.make(nextId(state, "password-revision")),
-                    verifierVersion: SecurityRevision.make(nextId(state, "verifier")),
+                    revision: Sessions.SecurityRevision.make(nextId(state, "password-revision")),
+                    verifierVersion: Sessions.SecurityRevision.make(nextId(state, "verifier")),
                   },
                 ];
                 state.registrations = [
@@ -421,7 +416,7 @@ export const PasswordsLive = Layer.effectContext(
                 return receipt;
               }),
             )
-            .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+            .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       }),
       Context.add(AppAuth.strategies.password.ClaimsForPassword, {
         resolve: (snapshot) =>
@@ -431,12 +426,12 @@ export const PasswordsLive = Layer.effectContext(
                 const account = customer(state, snapshot.revision.subjectId);
 
                 if (account === undefined || !current(state, snapshot.revision))
-                  return yield* PasswordUnavailable.make({});
+                  return yield* Password.PasswordUnavailable.make({});
 
                 return claims(account);
               }),
             )
-            .pipe(Effect.catchTag("StoreUnavailable", () => PasswordUnavailable.make({}))),
+            .pipe(Effect.catchTag("StoreUnavailable", () => Password.PasswordUnavailable.make({}))),
       }),
     );
   }),

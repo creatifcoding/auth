@@ -1,28 +1,12 @@
 import { BunRuntime } from "@effect/platform-bun";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
-import {
-  type AuthCredentialCommand,
-  AuthCredentialCommandCollector,
-} from "@yielded/auth/Operations";
-import {
-  ProofKeys,
-  EmailProofDelivery,
-  IdentifierProofBinding,
-  make as makeProofs,
-  ProofPurpose,
-  ProofRequestId,
-  SmsProofDelivery,
-  type ProofDeliveryMessage,
-  type ProofPolicy,
-} from "@yielded/auth/Proofs";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Hooks, Operations, Proofs, WebCrypto } from "@yielded/auth";
 import { Effect, Encoding, Layer, Redacted } from "effect";
 
 import { makeExampleProofAuthority } from "./proof-consumer";
 
 const budget = { limit: 20, windowMillis: 60_000 };
 
-const policy: ProofPolicy = {
+const policy: Proofs.ProofPolicy = {
   lifetimeMillis: 60_000,
   continuationLifetimeMillis: 30_000,
   maximumFailedAttempts: 3,
@@ -42,9 +26,9 @@ const policy: ProofPolicy = {
 };
 
 const base = Layer.mergeAll(
-  layerWebCrypto,
-  LifecycleHooks.empty,
-  ProofKeys.layer({
+  WebCrypto.layerWebCrypto,
+  Hooks.LifecycleHooks.empty,
+  Proofs.ProofKeys.layer({
     activeKeyId: "current",
     keys: [
       {
@@ -61,10 +45,10 @@ const invocation = { _tag: "System", authority: "example-method" } as const;
 
 const program = Effect.gen(function* () {
   for (const channel of ["email", "sms"] as const) {
-    const delivered: ProofDeliveryMessage[] = [];
-    const commands: AuthCredentialCommand[] = [];
+    const delivered: Proofs.ProofDeliveryMessage[] = [];
+    const commands: Operations.AuthCredentialCommand[] = [];
 
-    const sender = (message: ProofDeliveryMessage) =>
+    const sender = (message: Proofs.ProofDeliveryMessage) =>
       Effect.sync(() => {
         delivered.push(message);
 
@@ -73,10 +57,10 @@ const program = Effect.gen(function* () {
 
     const vendor = { vendorId: `example-${channel}`, idempotencyMillis: 0 };
 
-    const proofs = makeProofs({
+    const proofs = Proofs.make({
       namespace: `example/${channel}`,
-      purpose: ProofPurpose.make(`${channel}-verification`),
-      binding: IdentifierProofBinding,
+      purpose: Proofs.ProofPurpose.make(`${channel}-verification`),
+      binding: Proofs.IdentifierProofBinding,
       channel,
       template: "verify-identifier",
       secret: channel === "email" ? { _tag: "NumericCode", digits: 6 } : { _tag: "Token" },
@@ -85,8 +69,8 @@ const program = Effect.gen(function* () {
 
     const capability = (
       channel === "email"
-        ? proofs.emailLayer.pipe(Layer.provide(EmailProofDelivery.layer(vendor, sender)))
-        : proofs.smsLayer.pipe(Layer.provide(SmsProofDelivery.layer(vendor, sender)))
+        ? proofs.emailLayer.pipe(Layer.provide(Proofs.EmailProofDelivery.layer(vendor, sender)))
+        : proofs.smsLayer.pipe(Layer.provide(Proofs.SmsProofDelivery.layer(vendor, sender)))
     ).pipe(Layer.provide(authority), Layer.provide(base));
 
     const handlers = proofs.handlersLayer.pipe(Layer.provide(capability));
@@ -102,7 +86,7 @@ const program = Effect.gen(function* () {
     } as const;
 
     const call = {
-      credentialCommandSink: (batch: ReadonlyArray<AuthCredentialCommand>) =>
+      credentialCommandSink: (batch: ReadonlyArray<Operations.AuthCredentialCommand>) =>
         Effect.sync(() => {
           commands.push(...batch);
         }),
@@ -110,14 +94,14 @@ const program = Effect.gen(function* () {
 
     yield* Effect.gen(function* () {
       const receipt = yield* proofs.operations.Request.invoke(invocation, {
-        requestId: ProofRequestId.make(`${channel}-request`),
+        requestId: Proofs.ProofRequestId.make(`${channel}-request`),
         binding,
         locale: "en-ZA",
         eligible: true,
       });
 
       const duplicate = yield* proofs.operations.Request.invoke(invocation, {
-        requestId: ProofRequestId.make(`${channel}-request`),
+        requestId: Proofs.ProofRequestId.make(`${channel}-request`),
         binding,
         locale: "en-ZA",
         eligible: true,
@@ -129,7 +113,7 @@ const program = Effect.gen(function* () {
         );
 
       const resent = yield* proofs.operations.Resend.invoke(invocation, {
-        requestId: ProofRequestId.make(`${channel}-resend`),
+        requestId: Proofs.ProofRequestId.make(`${channel}-resend`),
         supersedes: receipt.reference.proofId,
         binding,
         locale: "en-ZA",
@@ -146,7 +130,10 @@ const program = Effect.gen(function* () {
         binding,
         credential: Redacted.value(first.secret),
       }).pipe(
-        Effect.provideService(AuthCredentialCommandCollector, call.credentialCommandSink),
+        Effect.provideService(
+          Operations.AuthCredentialCommandCollector,
+          call.credentialCommandSink,
+        ),
         Effect.result,
       );
 
@@ -156,7 +143,12 @@ const program = Effect.gen(function* () {
         reference: resent.reference,
         binding,
         credential: Redacted.value(latest.secret),
-      }).pipe(Effect.provideService(AuthCredentialCommandCollector, call.credentialCommandSink));
+      }).pipe(
+        Effect.provideService(
+          Operations.AuthCredentialCommandCollector,
+          call.credentialCommandSink,
+        ),
+      );
 
       const issued = commands.find(
         (command) => command._tag === "Issue" && command.slot === "proof-continuation",
@@ -169,14 +161,22 @@ const program = Effect.gen(function* () {
         continuationId: accepted.continuation.continuationId,
         binding,
         credential: Redacted.value(issued.credential),
-      }).pipe(Effect.provideService(AuthCredentialCommandCollector, call.credentialCommandSink));
+      }).pipe(
+        Effect.provideService(
+          Operations.AuthCredentialCommandCollector,
+          call.credentialCommandSink,
+        ),
+      );
 
       const replay = yield* proofs.operations.Complete.invoke(invocation, {
         continuationId: accepted.continuation.continuationId,
         binding,
         credential: Redacted.value(issued.credential),
       }).pipe(
-        Effect.provideService(AuthCredentialCommandCollector, call.credentialCommandSink),
+        Effect.provideService(
+          Operations.AuthCredentialCommandCollector,
+          call.credentialCommandSink,
+        ),
         Effect.result,
       );
 

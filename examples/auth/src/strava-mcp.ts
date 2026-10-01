@@ -1,13 +1,15 @@
 import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
+import {
+  OAuth,
+  OAuthApp,
+  OAuthServer,
+  Schema as AuthSchema,
+  Strava,
+  WebCrypto,
+} from "@yielded/auth";
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
 import { OAuthAppPersistence, OAuthServerPersistence } from "@yielded/auth-persistence";
-import { OAuthRejected } from "@yielded/auth/OAuth";
-import * as OAuthApp from "@yielded/auth/OAuthApp";
-import * as OAuthServer from "@yielded/auth/OAuthServer";
-import { SubjectId } from "@yielded/auth/Schema";
-import * as Strava from "@yielded/auth/Strava";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { Config, Effect, Layer, Redacted, Schema } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import {
@@ -87,13 +89,16 @@ const runtime = Layer.unwrap(
       .pipe(
         Layer.provide(OAuthCrypto.transactionLayer(keyring(transactionKey))),
         Layer.provide(OAuthCrypto.connectedTokenLayer(keyring(tokenKey))),
-        Layer.provide(layerWebCrypto),
+        Layer.provide(WebCrypto.layerWebCrypto),
         Layer.provide(
           Layer.succeed(app.Accounts, {
             resolve: ({ identity }) =>
               identity.subject === athleteId
-                ? Effect.succeed({ subjectId: SubjectId.make(`strava:${athleteId}`), claims: {} })
-                : Effect.fail(OAuthRejected.make({})),
+                ? Effect.succeed({
+                    subjectId: AuthSchema.SubjectId.make(`strava:${athleteId}`),
+                    claims: {},
+                  })
+                : Effect.fail(OAuth.OAuthRejected.make({})),
           }),
         ),
         Layer.provide(OAuthAppPersistence.layer.pipe(Layer.provide(database))),

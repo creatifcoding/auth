@@ -1,7 +1,13 @@
-import { Auth, Http, Sessions } from "@yielded/auth";
-import type { RequestBindingConfiguration } from "@yielded/auth/Operations";
-import { ProofKeys, type ProofKeyring } from "@yielded/auth/Proofs";
-import { Password, Passkey, PhoneOtp } from "@yielded/auth/strategies";
+import {
+  Auth,
+  Http,
+  type Operations,
+  Passkey,
+  Password,
+  PhoneOtp,
+  Proofs,
+  Sessions,
+} from "@yielded/auth";
 import { Effect, Layer, Schema } from "effect";
 
 const AccountClaims = Schema.Struct({
@@ -19,8 +25,8 @@ export const makeApplicationAuth = (configuration: {
     readonly name: string;
     readonly origins: readonly string[];
   };
-  readonly phoneKeys: ProofKeyring;
-  readonly requestBinding: RequestBindingConfiguration;
+  readonly phoneKeys: Proofs.ProofKeyring;
+  readonly requestBinding: Operations.RequestBindingConfiguration;
   readonly sessions: Sessions.SessionOptions;
   readonly origin: string;
 }) => {
@@ -38,7 +44,7 @@ export const makeApplicationAuth = (configuration: {
   const AuthLive = AppAuth.layer.pipe(
     Layer.provide([
       Auth.RequestBindingConfig.layer(configuration.requestBinding),
-      ProofKeys.layer(configuration.phoneKeys),
+      Proofs.ProofKeys.layer(configuration.phoneKeys),
       Passkey.PasskeyConfig.layer(configuration.relyingParty),
     ]),
   );
@@ -48,7 +54,7 @@ export const makeApplicationAuth = (configuration: {
   const AuthRoutes = Http.layer(AppAuth, { origin: configuration.origin }).pipe(
     Layer.provide([
       Auth.RequestBindingConfig.layer(configuration.requestBinding),
-      ProofKeys.layer(configuration.phoneKeys),
+      Proofs.ProofKeys.layer(configuration.phoneKeys),
       Passkey.PasskeyConfig.layer(configuration.relyingParty),
     ]),
   );

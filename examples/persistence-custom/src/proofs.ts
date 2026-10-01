@@ -1,12 +1,4 @@
-import {
-  ProofBinding,
-  type ProofCompletionInput,
-  ProofPersistence,
-  ProofRequestConflict,
-  ProofUnavailable,
-  ProofVersion,
-  type ProofPolicy,
-} from "@yielded/auth/Proofs";
+import { Proofs } from "@yielded/auth";
 import { Effect, Layer, Schema } from "effect";
 
 import { bindingCurrent } from "./accounts";
@@ -14,11 +6,13 @@ import { AppAuth } from "./auth";
 import { charge, nextId, type State } from "./model";
 import { AccountStore } from "./store";
 
-const bindingJson = Schema.encodeSync(Schema.fromJsonString(ProofBinding));
+const bindingJson = Schema.encodeSync(Schema.fromJsonString(Proofs.ProofBinding));
 const tuple = Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)));
-const sameBinding = (a: ProofBinding, b: ProofBinding) => bindingJson(a) === bindingJson(b);
 
-const seriesKey = (moduleId: string, purpose: string, binding: ProofBinding) =>
+const sameBinding = (a: Proofs.ProofBinding, b: Proofs.ProofBinding) =>
+  bindingJson(a) === bindingJson(b);
+
+const seriesKey = (moduleId: string, purpose: string, binding: Proofs.ProofBinding) =>
   tuple([moduleId, purpose, binding.identifier.namespace, binding.identifier.value]);
 
 const supported = (moduleId: string, purpose: string) =>
@@ -30,9 +24,9 @@ const supported = (moduleId: string, purpose: string) =>
 const budgets = (
   moduleId: string,
   purpose: string,
-  binding: ProofBinding,
+  binding: Proofs.ProofBinding,
   action: "issue" | "attempt",
-  policy: ProofPolicy,
+  policy: Proofs.ProofPolicy,
 ) => {
   const key = tuple(["proof", moduleId, purpose, action]);
 
@@ -59,7 +53,7 @@ const budgets = (
 /** Used directly by password/email writes while holding the same store transaction. */
 export const completionCurrent = (
   state: Readonly<State>,
-  input: ProofCompletionInput,
+  input: Proofs.ProofCompletionInput,
   now: number,
 ) => {
   if (
@@ -90,7 +84,7 @@ export const completionCurrent = (
   );
 };
 
-export const consumeCompletion = (state: State, input: ProofCompletionInput) => {
+export const consumeCompletion = (state: State, input: Proofs.ProofCompletionInput) => {
   state.continuations = state.continuations.map((item) =>
     item.moduleId === input.moduleId && item.id === input.continuationId
       ? { ...item, consumed: true }
@@ -99,11 +93,11 @@ export const consumeCompletion = (state: State, input: ProofCompletionInput) => 
 };
 
 export const ProofsLive = Layer.effect(
-  ProofPersistence,
+  Proofs.ProofPersistence,
   Effect.gen(function* () {
     const store = yield* AccountStore;
 
-    return ProofPersistence.of({
+    return Proofs.ProofPersistence.of({
       issue: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -111,7 +105,7 @@ export const ProofsLive = Layer.effect(
               const { record, policy } = input;
 
               if (!supported(record.moduleId, record.purpose))
-                return yield* ProofUnavailable.make({});
+                return yield* Proofs.ProofUnavailable.make({});
 
               const previous = state.proofRequests.find(
                 (item) =>
@@ -122,7 +116,7 @@ export const ProofsLive = Layer.effect(
 
               if (previous !== undefined) {
                 if (previous.fingerprint !== record.fingerprint)
-                  return yield* ProofRequestConflict.make({});
+                  return yield* Proofs.ProofRequestConflict.make({});
 
                 return prepare({ _tag: "Existing", receipt: previous.receipt }, journal);
               }
@@ -210,13 +204,13 @@ export const ProofsLive = Layer.effect(
               return result;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => ProofUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Proofs.ProofUnavailable.make({}))),
       attempt: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
             Effect.gen(function* () {
               if (!supported(input.moduleId, input.purpose))
-                return yield* ProofUnavailable.make({});
+                return yield* Proofs.ProofUnavailable.make({});
 
               const row = state.proofs.find(
                 (item) =>
@@ -311,7 +305,7 @@ export const ProofsLive = Layer.effect(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => ProofUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Proofs.ProofUnavailable.make({}))),
       complete: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -332,7 +326,7 @@ export const ProofsLive = Layer.effect(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => ProofUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Proofs.ProofUnavailable.make({}))),
       claimDelivery: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -367,7 +361,7 @@ export const ProofsLive = Layer.effect(
                 )
               )
                 return prepare({ _tag: "Declined" }, journal);
-              const claimVersion = ProofVersion.make(nextId(state, "delivery"));
+              const claimVersion = Proofs.ProofVersion.make(nextId(state, "delivery"));
               const receipt = prepare({ _tag: "Claimed", claimVersion }, journal);
               const expiresAt = row.record.expiresAtMillis;
 
@@ -391,7 +385,7 @@ export const ProofsLive = Layer.effect(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => ProofUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Proofs.ProofUnavailable.make({}))),
       settleDelivery: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -425,7 +419,7 @@ export const ProofsLive = Layer.effect(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => ProofUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Proofs.ProofUnavailable.make({}))),
       cancel: (input, prepare) =>
         store
           .transaction((state, journal) =>
@@ -445,7 +439,7 @@ export const ProofsLive = Layer.effect(
               return receipt;
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => ProofUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Proofs.ProofUnavailable.make({}))),
       cleanup: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -478,7 +472,7 @@ export const ProofsLive = Layer.effect(
               return prepare({ removed, hasMore }, journal);
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => ProofUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Proofs.ProofUnavailable.make({}))),
     });
   }),
 );

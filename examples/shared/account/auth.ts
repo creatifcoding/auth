@@ -1,5 +1,4 @@
-import { Auth, Sessions } from "@yielded/auth";
-import { Email, Passkey, Password } from "@yielded/auth/strategies";
+import { Auth, Email, Passkey, Password, Sessions } from "@yielded/auth";
 
 import { AuthApi, emailProofPolicy, Registration } from "./contract";
 

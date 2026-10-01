@@ -1,18 +1,5 @@
 import { BunRuntime } from "@effect/platform-bun";
-import { Auth } from "@yielded/auth";
-import { AuthRequest } from "@yielded/auth/Auth";
-import {
-  EmailIdentifierNotifier,
-  EmailReturnTargets,
-  emailIdentifierNotifications,
-  magicLinkLandingHeaders,
-  makeMagicLinkRenderer,
-  parseMagicLinkFragment,
-} from "@yielded/auth/Email";
-import { composeHooks } from "@yielded/auth/Hooks";
-import { guest, type AuthCredentialCommand } from "@yielded/auth/Operations";
-import { EmailProofDelivery, type ProofDeliveryMessage } from "@yielded/auth/Proofs";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Auth, Email, Hooks, Operations, Proofs, WebCrypto } from "@yielded/auth";
 import { Effect, Encoding, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 
@@ -20,23 +7,23 @@ import { emailAuth, makeEmailConsumer, sessions, sessionPolicy } from "./email-m
 
 const program = Effect.gen(function* () {
   for (const mode of ["stateless", "stateful"] as const) {
-    const deliveries: ProofDeliveryMessage[] = [];
+    const deliveries: Proofs.ProofDeliveryMessage[] = [];
     const notifications: string[] = [];
-    const commands: AuthCredentialCommand[] = [];
-    const notify = emailIdentifierNotifications("example/email");
+    const commands: Operations.AuthCredentialCommand[] = [];
+    const notify = Email.emailIdentifierNotifications("example/email");
 
-    const notifier = Layer.succeed(EmailIdentifierNotifier, {
+    const notifier = Layer.succeed(Email.EmailIdentifierNotifier, {
       notify: (input) =>
         Effect.sync(() => {
           notifications.push(input.eventId);
         }),
     });
 
-    const hooks = composeHooks(notify.contribution).pipe(
+    const hooks = Hooks.composeHooks(notify.contribution).pipe(
       Layer.provide(notify.layer.pipe(Layer.provide(notifier))),
     );
 
-    const base = Layer.mergeAll(layerWebCrypto, hooks);
+    const base = Layer.mergeAll(WebCrypto.layerWebCrypto, hooks);
 
     yield* Effect.gen(function* () {
       const model = yield* makeEmailConsumer;
@@ -77,7 +64,7 @@ const program = Effect.gen(function* () {
         .completionLayer()
         .pipe(Layer.provide(Layer.mergeAll(strategy, model.layer)), Layer.provide(base));
 
-      const sender = EmailProofDelivery.layer(
+      const sender = Proofs.EmailProofDelivery.layer(
         { vendorId: "local-fixture", idempotencyMillis: 0 },
         (message) =>
           Effect.sync(() => {
@@ -87,7 +74,7 @@ const program = Effect.gen(function* () {
           }),
       );
 
-      const returns = EmailReturnTargets.exactRoutes(["/account", "/settings"]);
+      const returns = Email.EmailReturnTargets.exactRoutes(["/account", "/settings"]);
 
       const capabilities = Layer.mergeAll(
         model.layer,
@@ -108,7 +95,7 @@ const program = Effect.gen(function* () {
 
       const call = {
         credentials: {},
-        credentialCommandSink: (batch: readonly AuthCredentialCommand[]) =>
+        credentialCommandSink: (batch: readonly Operations.AuthCredentialCommand[]) =>
           Effect.sync(() => {
             commands.push(...batch);
           }),
@@ -239,7 +226,7 @@ const program = Effect.gen(function* () {
           locale: "en",
         });
 
-        const render = yield* makeMagicLinkRenderer("https://example.invalid/email");
+        const render = yield* Email.makeMagicLinkRenderer("https://example.invalid/email");
         const linkUrl = yield* render(delivered());
         const parsedUrl = new URL(Redacted.value(linkUrl));
         // A link preview performs only this static GET. The proof lives in the
@@ -255,7 +242,7 @@ const program = Effect.gen(function* () {
                 "/email",
                 HttpServerResponse.text(
                   "<!doctype html><button type=button>Confirm sign-in in the originating client</button>",
-                  { contentType: "text/html", headers: magicLinkLandingHeaders },
+                  { contentType: "text/html", headers: Email.magicLinkLandingHeaders },
                 ),
               ),
               { disableLogger: true },
@@ -276,7 +263,7 @@ const program = Effect.gen(function* () {
         const fragment = Redacted.make(parsedUrl.hash);
 
         parsedUrl.hash = ""; // Browser history.replaceState performs this before UI work.
-        const extracted = yield* parseMagicLinkFragment(fragment);
+        const extracted = yield* Email.parseMagicLinkFragment(fragment);
         const otherDevice = yield* begin("link-sign-in");
 
         const crossDevice = yield* auth
@@ -322,7 +309,7 @@ const program = Effect.gen(function* () {
             locale: "en",
             actionProof: "fixture:verify-request",
           })
-          .pipe(Effect.provideService(AuthRequest, { ...call, invocation: caller }));
+          .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: caller }));
 
         const verifyCode = Redacted.value(delivered().secret);
 
@@ -332,7 +319,7 @@ const program = Effect.gen(function* () {
             reference: verifyRequest.reference,
             secret: verifyCode,
           })
-          .pipe(Effect.provideService(AuthRequest, { ...call, invocation: caller }));
+          .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: caller }));
 
         const beforeVerification = commands.filter(
           (c) => c._tag === "Issue" && c.slot === "session",
@@ -345,7 +332,7 @@ const program = Effect.gen(function* () {
             credential: latest("proof-continuation"),
             actionProof: "fixture:verify-complete",
           })
-          .pipe(Effect.provideService(AuthRequest, { ...call, invocation: caller }));
+          .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: caller }));
 
         if (verified.invalidation === undefined)
           return yield* Effect.die("adding a new address must invalidate existing authentication");
@@ -356,7 +343,7 @@ const program = Effect.gen(function* () {
         )
           return yield* Effect.die("verified identifier silently became authentication");
 
-        const oldSession = yield* sessions.operations.Verify.invoke(guest, {
+        const oldSession = yield* sessions.operations.Verify.invoke(Operations.guest, {
           credential: firstSessionToken,
         }).pipe(Effect.result);
 
@@ -419,7 +406,7 @@ const program = Effect.gen(function* () {
             locale: "en",
             actionProof: "fixture:change-request",
           })
-          .pipe(Effect.provideService(AuthRequest, { ...call, invocation: changeCaller }));
+          .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: changeCaller }));
 
         const changeProof = yield* auth
           .verifyEmailChange("addresses", {
@@ -427,7 +414,7 @@ const program = Effect.gen(function* () {
             reference: changeRequest.reference,
             secret: Redacted.value(delivered().secret),
           })
-          .pipe(Effect.provideService(AuthRequest, { ...call, invocation: changeCaller }));
+          .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: changeCaller }));
 
         const changeInput = {
           ...changeBase,
@@ -438,11 +425,11 @@ const program = Effect.gen(function* () {
 
         yield* auth
           .completeEmailChange("addresses", changeInput)
-          .pipe(Effect.provideService(AuthRequest, { ...call, invocation: changeCaller }));
+          .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: changeCaller }));
 
         const replay = yield* auth
           .completeEmailChange("addresses", changeInput)
-          .pipe(Effect.provideService(AuthRequest, { ...call, invocation: changeCaller }))
+          .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: changeCaller }))
           .pipe(Effect.result);
 
         if (replay._tag !== "Failure" || notifications.length !== 1)
@@ -486,7 +473,7 @@ const program = Effect.gen(function* () {
         });
       }).pipe(
         Effect.scoped,
-        Effect.provideService(AuthRequest, { ...call, invocation: guest }),
+        Effect.provideService(Auth.AuthRequest, { ...call, invocation: Operations.guest }),
         Effect.provide(handlers),
       );
     }).pipe(Effect.provide(base));

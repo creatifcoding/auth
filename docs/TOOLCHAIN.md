@@ -35,6 +35,9 @@ from formatting and marked as generated in Git; SQL remains available for review
 Use explicit, flat source exports with matching `vp pack` entries. Root namespaces,
 the lowercase `contracts` and `strategies` groups, and direct subpaths identify the
 same public modules. Group exports retain distinct contract and strategy names.
+Guides and consumer examples prefer named namespace imports from `@yielded/auth`,
+including types and services accessed through their module namespace. Keep direct
+paths for adapter entrypoints, test helpers, and examples of subpath or lazy imports.
 Internal imports go directly to their owning implementation, without routing
 through self-barrels.
 

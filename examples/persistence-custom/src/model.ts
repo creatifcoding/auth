@@ -1,80 +1,55 @@
-import { LoginIdentifier } from "@yielded/auth/Identity";
 import {
-  PasskeyCeremony,
-  PasskeyClaim,
-  PasskeyCredential,
-  PasskeyCredentialSummary,
-  PasskeyMethodPolicy,
-  PasskeyRemoved,
-  PasskeyUserHandle,
-} from "@yielded/auth/Passkey";
-import {
-  PasswordAttemptId,
-  PasswordCredentialSnapshot,
-  PasswordReplacement,
-} from "@yielded/auth/Password";
-import {
-  ProofBinding,
-  ProofContinuationId,
-  ProofDeliveryId,
-  ProofId,
-  ProofPolicy,
-  ProofPurpose,
-  ProofRequestId,
-  ProofRequestReceipt,
-  ProofVersion,
-} from "@yielded/auth/Proofs";
-import { Email, SubjectId, TokenDigest } from "@yielded/auth/Schema";
-import {
-  SecurityRevision,
-  SessionAuthenticationProvenance,
-  SessionCredentialVersion,
-  SessionMetadata,
-} from "@yielded/auth/Sessions";
+  Identity,
+  Passkey as AuthPasskey,
+  Password as AuthPassword,
+  Proofs,
+  Schema as AuthSchema,
+  Sessions,
+} from "@yielded/auth";
 import { Schema } from "effect";
 
 import { Claims, Registration, Username } from "./contract";
 
 export const Customer = Schema.Struct({
-  id: SubjectId,
+  id: AuthSchema.SubjectId,
   active: Schema.Boolean,
-  securityRevision: SecurityRevision,
+  securityRevision: Sessions.SecurityRevision,
   displayName: Schema.String,
   username: Username,
-  email: Email,
-  identifierRevision: SecurityRevision,
+  email: AuthSchema.Email,
+  identifierRevision: Sessions.SecurityRevision,
   verifiedAtMillis: Schema.optionalKey(Schema.Int),
   emailCredential: Schema.optionalKey(
-    Schema.Struct({ id: Schema.NonEmptyString, revision: SecurityRevision }),
+    Schema.Struct({ id: Schema.NonEmptyString, revision: Sessions.SecurityRevision }),
   ),
 });
 
 export type Customer = typeof Customer.Type;
 
 const Password = Schema.Struct({
-  subjectId: SubjectId,
+  subjectId: AuthSchema.SubjectId,
   credentialId: Schema.NonEmptyString,
-  revision: SecurityRevision,
-  verifierVersion: SecurityRevision,
-  replacement: PasswordReplacement,
+  revision: Sessions.SecurityRevision,
+  verifierVersion: Sessions.SecurityRevision,
+  replacement: AuthPassword.PasswordReplacement,
 });
 
 export const Session = Schema.Struct({
-  ...SessionMetadata.fields,
+  ...Sessions.SessionMetadata.fields,
   claims: Claims,
-  digest: TokenDigest,
-  version: SecurityRevision,
-  provenance: SessionAuthenticationProvenance,
-  credentialVersion: SessionCredentialVersion,
+  digest: AuthSchema.TokenDigest,
+  version: Sessions.SecurityRevision,
+  provenance: Sessions.SessionAuthenticationProvenance,
+  credentialVersion: Sessions.SessionCredentialVersion,
 });
 
 export type Session = typeof Session.Type;
 
 const Attempt = Schema.Struct({
-  id: PasswordAttemptId,
+  id: AuthPassword.PasswordAttemptId,
   moduleId: Schema.NonEmptyString,
   action: Schema.Literals(["sign-in", "change"]),
-  captured: Schema.optionalKey(PasswordCredentialSnapshot),
+  captured: Schema.optionalKey(AuthPassword.PasswordCredentialSnapshot),
   pending: Schema.Boolean,
   deadline: Schema.Int,
   retentionUntil: Schema.Int,
@@ -82,51 +57,54 @@ const Attempt = Schema.Struct({
 
 export const ProofRecord = Schema.Struct({
   moduleId: Schema.NonEmptyString,
-  purpose: ProofPurpose,
-  proofId: ProofId,
-  requestId: ProofRequestId,
-  fingerprint: TokenDigest,
-  deliveryId: ProofDeliveryId,
-  binding: ProofBinding,
-  verifier: Schema.Struct({ keyId: Schema.NonEmptyString, digest: TokenDigest }),
+  purpose: Proofs.ProofPurpose,
+  proofId: Proofs.ProofId,
+  requestId: Proofs.ProofRequestId,
+  fingerprint: AuthSchema.TokenDigest,
+  deliveryId: Proofs.ProofDeliveryId,
+  binding: Proofs.ProofBinding,
+  verifier: Schema.Struct({ keyId: Schema.NonEmptyString, digest: AuthSchema.TokenDigest }),
   issuedAtMillis: Schema.Int,
   expiresAtMillis: Schema.Int,
-  version: ProofVersion,
+  version: Proofs.ProofVersion,
 });
 
 const Proof = Schema.Struct({
   record: ProofRecord,
-  policy: ProofPolicy,
+  policy: Proofs.ProofPolicy,
   series: Schema.String,
   state: Schema.Literals(["active", "consumed", "superseded", "cancelled"]),
   retentionUntil: Schema.Int,
   sendCount: Schema.Natural,
   deliveryState: Schema.Literals(["new", "claimed", "accepted", "failed", "ambiguous"]),
-  claimVersion: Schema.optionalKey(ProofVersion),
+  claimVersion: Schema.optionalKey(Proofs.ProofVersion),
   claimDeadline: Schema.optionalKey(Schema.Int),
   retryAt: Schema.optionalKey(Schema.Int),
 });
 
 const Continuation = Schema.Struct({
   moduleId: Schema.NonEmptyString,
-  purpose: ProofPurpose,
-  id: ProofContinuationId,
-  digest: TokenDigest,
-  proofId: ProofId,
-  binding: ProofBinding,
+  purpose: Proofs.ProofPurpose,
+  id: Proofs.ProofContinuationId,
+  digest: AuthSchema.TokenDigest,
+  proofId: Proofs.ProofId,
+  binding: Proofs.ProofBinding,
   expiresAt: Schema.Int,
   consumed: Schema.Boolean,
   retentionUntil: Schema.Int,
 });
 
-const Passkey = Schema.Struct({ credential: PasskeyCredential, summary: PasskeyCredentialSummary });
+const Passkey = Schema.Struct({
+  credential: AuthPasskey.PasskeyCredential,
+  summary: AuthPasskey.PasskeyCredentialSummary,
+});
 
 const Ceremony = Schema.Struct({
-  ceremony: PasskeyCeremony,
-  policy: PasskeyMethodPolicy,
+  ceremony: AuthPasskey.PasskeyCeremony,
+  policy: AuthPasskey.PasskeyMethodPolicy,
   state: Schema.Literals(["pending", "claimed", "verified", "rejected", "ambiguous"]),
-  claim: Schema.optionalKey(PasskeyClaim),
-  credential: Schema.optionalKey(PasskeyCredential),
+  claim: Schema.optionalKey(AuthPasskey.PasskeyClaim),
+  credential: Schema.optionalKey(AuthPasskey.PasskeyCredential),
 });
 
 /** Application records, not SQL roles. Every disk value is decoded before use. */
@@ -141,9 +119,9 @@ export const Database = Schema.Struct({
   registrations: Schema.Array(
     Schema.Struct({
       requestId: Schema.String,
-      identifier: LoginIdentifier,
+      identifier: Identity.LoginIdentifier,
       registration: Registration,
-      replacement: PasswordReplacement,
+      replacement: AuthPassword.PasswordReplacement,
     }),
   ),
   charges: Schema.Array(
@@ -152,8 +130,8 @@ export const Database = Schema.Struct({
   proofRequests: Schema.Array(
     Schema.Struct({
       moduleId: Schema.String,
-      fingerprint: TokenDigest,
-      receipt: ProofRequestReceipt,
+      fingerprint: AuthSchema.TokenDigest,
+      receipt: Proofs.ProofRequestReceipt,
       retentionUntil: Schema.Int,
     }),
   ),
@@ -161,16 +139,20 @@ export const Database = Schema.Struct({
   continuations: Schema.Array(Continuation),
   passkeys: Schema.Array(Passkey),
   handles: Schema.Array(
-    Schema.Struct({ rpId: Schema.String, subjectId: SubjectId, handle: PasskeyUserHandle }),
+    Schema.Struct({
+      rpId: Schema.String,
+      subjectId: AuthSchema.SubjectId,
+      handle: AuthPasskey.PasskeyUserHandle,
+    }),
   ),
   ceremonies: Schema.Array(Ceremony),
   renames: Schema.Array(
     Schema.Struct({
       moduleId: Schema.String,
       commandId: Schema.String,
-      subjectId: SubjectId,
+      subjectId: AuthSchema.SubjectId,
       name: Schema.String,
-      result: PasskeyCredentialSummary,
+      result: AuthPasskey.PasskeyCredentialSummary,
       retentionUntil: Schema.Int,
     }),
   ),
@@ -178,8 +160,8 @@ export const Database = Schema.Struct({
     Schema.Struct({
       moduleId: Schema.String,
       commandId: Schema.String,
-      subjectId: SubjectId,
-      result: PasskeyRemoved,
+      subjectId: AuthSchema.SubjectId,
+      result: AuthPasskey.PasskeyRemoved,
       retentionUntil: Schema.Int,
     }),
   ),
@@ -187,7 +169,7 @@ export const Database = Schema.Struct({
     Schema.Struct({
       moduleId: Schema.String,
       commandId: Schema.String,
-      subjectId: SubjectId,
+      subjectId: AuthSchema.SubjectId,
       kind: Schema.Literals(["email", "password"]),
       retentionUntil: Schema.Int,
     }),

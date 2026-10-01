@@ -1,12 +1,9 @@
 import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
+import { OAuth, OAuthApp, Schema as AuthSchema, WebCrypto } from "@yielded/auth";
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
 import { OAuthAppPersistence } from "@yielded/auth-persistence";
-import { OAuthRejected } from "@yielded/auth/OAuth";
-import * as OAuthApp from "@yielded/auth/OAuthApp";
-import { SubjectId } from "@yielded/auth/Schema";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { Config, Effect, Layer, Redacted, Schema } from "effect";
 import {
   HttpMiddleware,
@@ -55,10 +52,10 @@ const runtime = Layer.unwrap(
 
     const accounts = Layer.succeed(app.Accounts, {
       resolve: Effect.fn("GitHubApp.resolveAccount")(function* (verified) {
-        if (verified.identity.subject !== githubUserId) return yield* OAuthRejected.make({});
+        if (verified.identity.subject !== githubUserId) return yield* OAuth.OAuthRejected.make({});
 
         return {
-          subjectId: SubjectId.make(`github:${githubUserId}`),
+          subjectId: AuthSchema.SubjectId.make(`github:${githubUserId}`),
           claims: { role: "owner" as const },
         };
       }),
@@ -74,7 +71,7 @@ const runtime = Layer.unwrap(
       .pipe(
         Layer.provide(OAuthCrypto.transactionLayer(keyring(transactionKey))),
         Layer.provide(OAuthCrypto.connectedTokenLayer(keyring(tokenKey))),
-        Layer.provide(layerWebCrypto),
+        Layer.provide(WebCrypto.layerWebCrypto),
         Layer.provide(accounts),
         Layer.provide(OAuthAppPersistence.layer.pipe(Layer.provide(migrated))),
       );

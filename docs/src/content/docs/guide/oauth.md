@@ -51,10 +51,9 @@ in one auth table; provider tokens refresh when your app needs them.
 
 ```ts title="auth.ts"
 import { OAuthAppPersistence } from "@yielded/auth-persistence";
-import * as OAuthApp from "@yielded/auth/OAuthApp";
+import { OAuthApp, WebCrypto } from "@yielded/auth";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { Layer, Schema } from "effect";
 import { config, keys, resolveAccount, DatabaseLive } from "./app-services";
 
@@ -76,7 +75,7 @@ const live = app
   .pipe(
     Layer.provide(OAuthCrypto.transactionLayer(keys.transaction)),
     Layer.provide(OAuthCrypto.connectedTokenLayer(keys.token)),
-    Layer.provide(layerWebCrypto),
+    Layer.provide(WebCrypto.layerWebCrypto),
     Layer.provide(Layer.succeed(app.Accounts, { resolve: resolveAccount })),
     Layer.provide(OAuthAppPersistence.layer),
     Layer.provide(DatabaseLive),
@@ -177,8 +176,7 @@ the setup and token lifecycle.
 Add an OAuth strategy when users share sessions across several sign-in methods:
 
 ```ts title="auth.ts"
-import { Auth, Sessions } from "@yielded/auth";
-import { OAuth } from "@yielded/auth/strategies";
+import { Auth, OAuth, Sessions } from "@yielded/auth";
 import { AuthApi } from "./auth-contract";
 
 export const AppAuth = Auth.make(AuthApi, {

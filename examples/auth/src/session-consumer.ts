@@ -1,20 +1,4 @@
-import { coordinateCommit, type CommitJournal, LifecycleHooks } from "@yielded/auth/Hooks";
-import { SubjectId } from "@yielded/auth/Schema";
-import {
-  AuthenticationAuthority,
-  type AuthenticationEvidence,
-  type AuthenticationRequirement,
-  make as makeSessionModule,
-  SecurityRevision,
-  SessionConflict,
-  type SessionError,
-  SessionId,
-  SessionInvalid,
-  type SessionPolicy,
-  SessionUnavailable,
-  StaleAuthentication,
-  type StatefulSessionRecord,
-} from "@yielded/auth/Sessions";
+import { Hooks, Schema as AuthSchema, Sessions } from "@yielded/auth";
 import { DateTime, Effect, Layer, Schema } from "effect";
 
 export const StaffClaims = Schema.Struct({
@@ -22,9 +6,9 @@ export const StaffClaims = Schema.Struct({
   staffNumber: Schema.FiniteFromString,
 });
 
-export const staffSessions = makeSessionModule(StaffClaims, { namespace: "example/staff" });
+export const staffSessions = Sessions.make(StaffClaims, { namespace: "example/staff" });
 
-export const policy: SessionPolicy = {
+export const policy: Sessions.SessionPolicy = {
   issuer: "example-auth",
   audience: "example-staff",
   generation: 1,
@@ -36,10 +20,10 @@ export const policy: SessionPolicy = {
   requireImmediateInvalidation: false,
 };
 
-export const subjectId = SubjectId.make("staff:42");
-export const initialRevision = SecurityRevision.make("1");
+export const subjectId = AuthSchema.SubjectId.make("staff:42");
+export const initialRevision = Sessions.SecurityRevision.make("1");
 
-const requirement: AuthenticationRequirement = {
+const requirement: Sessions.AuthenticationRequirement = {
   alternatives: [
     {
       factors: ["possession"],
@@ -53,19 +37,24 @@ const requirement: AuthenticationRequirement = {
 
 /** A disposable consumer authority for this runnable example; real adapters own durable transactions. */
 export const exampleAuthority = Effect.gen(function* () {
-  const hooks = yield* LifecycleHooks;
+  const hooks = yield* Hooks.LifecycleHooks;
   let revision = initialRevision;
   let sequence = 0;
-  const rows = new Map<SessionId, StatefulSessionRecord<typeof StaffClaims.Type>>();
+
+  const rows = new Map<
+    Sessions.SessionId,
+    Sessions.StatefulSessionRecord<typeof StaffClaims.Type>
+  >();
+
   const flows = new Map<string, number>();
 
-  const current = (evidence: AuthenticationEvidence) =>
+  const current = (evidence: Sessions.AuthenticationEvidence) =>
     evidence.revision.subjectId === subjectId &&
     evidence.revision.securityRevision === revision &&
     evidence.revision.credentials.every((credential) => credential.revision === revision);
 
   const checkEvidence = Effect.fn("Example.checkEvidence")(function* (
-    evidence: AuthenticationEvidence,
+    evidence: Sessions.AuthenticationEvidence,
   ) {
     const now = DateTime.toEpochMillis(yield* DateTime.now);
 
@@ -75,24 +64,24 @@ export const exampleAuthority = Effect.gen(function* () {
         (proof) => now - DateTime.toEpochMillis(proof.verifiedAt) >= requirement.maximumAgeMillis,
       )
     )
-      return yield* StaleAuthentication.make({});
+      return yield* Sessions.StaleAuthentication.make({});
   });
 
-  const atomic = <A, E extends SessionError>(
-    body: (journal: CommitJournal) => Effect.Effect<A, E>,
+  const atomic = <A, E extends Sessions.SessionError>(
+    body: (journal: Hooks.CommitJournal) => Effect.Effect<A, E>,
   ) =>
-    coordinateCommit(body, { mode: "interactive" }).pipe(
+    Hooks.coordinateCommit(body, { mode: "interactive" }).pipe(
       Effect.map((result) => result.value),
       Effect.mapError((error) =>
-        error._tag === "HookConfigurationError" ? SessionUnavailable.make({}) : error,
+        error._tag === "HookConfigurationError" ? Sessions.SessionUnavailable.make({}) : error,
       ),
-      Effect.provideService(LifecycleHooks, hooks),
+      Effect.provideService(Hooks.LifecycleHooks, hooks),
     );
 
-  const authority = Layer.succeed(AuthenticationAuthority, {
+  const authority = Layer.succeed(Sessions.AuthenticationAuthority, {
     capture: (id, credentialIds) =>
       id !== subjectId || credentialIds.some((id) => id !== "device-1")
-        ? Effect.fail(StaleAuthentication.make({}))
+        ? Effect.fail(Sessions.StaleAuthentication.make({}))
         : Effect.succeed({
             subjectId,
             securityRevision: revision,
@@ -103,11 +92,11 @@ export const exampleAuthority = Effect.gen(function* () {
       atomic((journal) =>
         Effect.gen(function* () {
           yield* checkEvidence(input.evidence);
-          if (input.pending !== undefined) return yield* StaleAuthentication.make({});
+          if (input.pending !== undefined) return yield* Sessions.StaleAuthentication.make({});
           if (
             DateTime.toEpochMillis(yield* DateTime.now) >= DateTime.toEpochMillis(input.expiresAt)
           )
-            return yield* StaleAuthentication.make({});
+            return yield* Sessions.StaleAuthentication.make({});
 
           return prepare(undefined, journal);
         }),
@@ -121,14 +110,15 @@ export const exampleAuthority = Effect.gen(function* () {
           yield* checkEvidence(input.evidence);
           const now = DateTime.toEpochMillis(yield* DateTime.now);
 
-          if ((flows.get(input.evidence.flowId) ?? 0) > now) return yield* SessionConflict.make({});
+          if ((flows.get(input.evidence.flowId) ?? 0) > now)
+            return yield* Sessions.SessionConflict.make({});
           if (input.pending !== undefined || now >= DateTime.toEpochMillis(input.session.expiresAt))
-            return yield* StaleAuthentication.make({});
+            return yield* Sessions.StaleAuthentication.make({});
 
           const row = {
             ...input.session,
-            sessionId: SessionId.make(String(++sequence)),
-            version: SecurityRevision.make(String(sequence)),
+            sessionId: Sessions.SessionId.make(String(++sequence)),
+            version: Sessions.SecurityRevision.make(String(sequence)),
           };
 
           const receipt = prepare(row, journal);
@@ -151,7 +141,7 @@ export const exampleAuthority = Effect.gen(function* () {
               DateTime.toEpochMillis(row.absoluteExpiresAt),
             )
           ? Effect.succeed(row)
-          : Effect.fail(SessionInvalid.make({}));
+          : Effect.fail(Sessions.SessionInvalid.make({}));
       }),
     rotate: (input, prepare) =>
       atomic((journal) =>
@@ -166,13 +156,13 @@ export const exampleAuthority = Effect.gen(function* () {
             row.securityRevision !== input.expectedSecurityRevision ||
             DateTime.toEpochMillis(input.now) >= DateTime.toEpochMillis(row.expiresAt)
           )
-            return Effect.fail(SessionConflict.make({}));
+            return Effect.fail(Sessions.SessionConflict.make({}));
 
           const next = {
             ...row,
             digest: input.nextDigest,
             credentialVersion: input.nextCredentialVersion,
-            version: SecurityRevision.make(String(++sequence)),
+            version: Sessions.SecurityRevision.make(String(++sequence)),
             issuedAt: input.now,
             expiresAt: input.nextExpiresAt,
           };
@@ -199,7 +189,7 @@ export const exampleAuthority = Effect.gen(function* () {
       atomic((journal) =>
         Effect.suspend(() => {
           if (input.subjectId !== subjectId || input.expectedSecurityRevision !== revision)
-            return Effect.fail(StaleAuthentication.make({}));
+            return Effect.fail(Sessions.StaleAuthentication.make({}));
           const receipt = prepare(undefined, journal);
 
           rows.delete(input.sessionId);
@@ -211,10 +201,10 @@ export const exampleAuthority = Effect.gen(function* () {
       atomic((journal) =>
         Effect.suspend(() => {
           if (input.subjectId !== subjectId || input.expectedSecurityRevision !== revision)
-            return Effect.fail(StaleAuthentication.make({}));
+            return Effect.fail(Sessions.StaleAuthentication.make({}));
           const receipt = prepare(undefined, journal);
 
-          revision = SecurityRevision.make(String(Number(revision) + 1));
+          revision = Sessions.SecurityRevision.make(String(Number(revision) + 1));
           rows.clear();
 
           return Effect.succeed(receipt);
@@ -231,5 +221,7 @@ export const exampleAuthority = Effect.gen(function* () {
       }),
   });
 
-  return Layer.mergeAll(authority, store, repository).pipe(Layer.provide(LifecycleHooks.empty));
+  return Layer.mergeAll(authority, store, repository).pipe(
+    Layer.provide(Hooks.LifecycleHooks.empty),
+  );
 });

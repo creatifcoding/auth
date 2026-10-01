@@ -1,9 +1,7 @@
-import { Auth, Http, Sessions } from "@yielded/auth";
+import { Auth, Email, Http, OAuth, Sessions } from "@yielded/auth";
 import * as OAuthCrypto from "@yielded/auth-crypto/OAuth";
 import * as OpenIdClient from "@yielded/auth-openid-client";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
-import type { SessionSigningKeyring } from "@yielded/auth/Sessions";
-import { Email, OAuth } from "@yielded/auth/strategies";
 import { Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 
@@ -50,7 +48,7 @@ const origin = "https://app.example.com";
  * Every unsupplied service remains visible in the returned Layer type. */
 export const makeServer = (config: {
   readonly email: Email.EmailCodeOptions;
-  readonly binding: SessionSigningKeyring;
+  readonly binding: Sessions.SessionSigningKeyring;
   readonly transactions: OAuth.OAuthTransactionKeyring;
   readonly github: GitHub.ProviderOptions;
   readonly google?: Pick<GitHub.ProviderRegistration, "clientId" | "clientSecret">;

@@ -1,6 +1,4 @@
-import * as AuthAtom from "@yielded/auth/Atom";
-import * as Client from "@yielded/auth/Client";
-import type { ProofReference } from "@yielded/auth/Proofs";
+import { Atom as AuthAtom, Client, type Proofs } from "@yielded/auth";
 import { Effect, Redacted, Schema } from "effect";
 
 import { LoginApi } from "./login-contract";
@@ -75,7 +73,7 @@ export const sendEmailCode = auth.runtime.fn<string>()(
 export const confirmEmailCode = auth.runtime.fn<{
   readonly flowId: string;
   readonly email: string;
-  readonly reference: typeof ProofReference.Encoded;
+  readonly reference: typeof Proofs.ProofReference.Encoded;
   readonly code: string;
 }>()(
   Effect.fn("example.confirmEmailCode")(function* (input) {

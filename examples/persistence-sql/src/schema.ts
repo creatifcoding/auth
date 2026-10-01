@@ -1,5 +1,5 @@
+import { Schema as AuthSchema } from "@yielded/auth";
 import { AuthPersistence } from "@yielded/auth-persistence";
-import { SubjectId } from "@yielded/auth/Schema";
 import { Effect } from "effect";
 
 import {
@@ -21,7 +21,7 @@ export const storage = Persistence.map({
     status: "enabled",
     activeValue: true,
     securityRevision: "securityRevision",
-    idCodec: SubjectId,
+    idCodec: AuthSchema.SubjectId,
     requirements: () => Effect.succeed(requirement),
     actionRequirements: (_row, action) =>
       Effect.succeed(
