@@ -3,10 +3,8 @@ title: Examples
 description: Run a complete account app or explore focused authentication and client examples.
 ---
 
-For the fastest start, [run the downloadable starter](./getting-started#run-the-starter).
-It includes local email delivery and persistent SQLite storage. The account apps
-below show each storage level, and the source references after them cover
-individual features. All examples use the package's public API.
+The account apps below show each storage level, and the source references after
+them cover individual features. All examples use the package's public API.
 
 ## Run an account app
 
