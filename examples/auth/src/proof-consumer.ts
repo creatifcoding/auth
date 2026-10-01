@@ -1,36 +1,17 @@
-import {
-  coordinateCommit,
-  hasCommitScope,
-  type CommitJournal,
-  LifecycleHooks,
-} from "@yielded/auth/Hooks";
-import {
-  ProofPersistence,
-  ProofRequestConflict,
-  ProofUnavailable,
-  type ProofRecord,
-  type ProofRequestReceipt,
-  type ProofBinding,
-  type ProofPolicy,
-  type ProofBudget,
-  type ProofVersion,
-  ProofVersion as VersionSchema,
-  type ProofContinuationId,
-  ProofBinding as ProofBindingSchema,
-} from "@yielded/auth/Proofs";
+import { Hooks, Proofs } from "@yielded/auth";
 import { DateTime, Effect, Layer, Schema } from "effect";
 
 interface Row {
-  record: ProofRecord;
+  record: Proofs.ProofRecord;
   state: "active" | "consumed" | "cancelled";
   sends: number;
   delivery: "new" | "claimed" | "accepted" | "failed" | "ambiguous";
-  claim: ProofVersion;
+  claim: Proofs.ProofVersion;
   retryAt: number;
   claimUntil: number;
 }
 interface Continuation {
-  readonly binding: ProofBinding;
+  readonly binding: Proofs.ProofBinding;
   readonly moduleId: string;
   readonly purpose: string;
   readonly digest: string;
@@ -39,12 +20,15 @@ interface Continuation {
 }
 interface State {
   rows: Map<string, Row>;
-  requests: Map<string, { fingerprint: string; receipt: ProofRequestReceipt; expires: number }>;
+  requests: Map<
+    string,
+    { fingerprint: string; receipt: Proofs.ProofRequestReceipt; expires: number }
+  >;
   active: Map<string, string>;
   windows: Map<string, number[]>;
   failures: Map<string, number[]>;
   lastIssue: Map<string, number>;
-  continuations: Map<ProofContinuationId, Continuation>;
+  continuations: Map<Proofs.ProofContinuationId, Continuation>;
 }
 
 const empty = (): State => ({
@@ -70,23 +54,23 @@ const copy = (s: State): State => ({
 
 const Key = Schema.fromJsonString(Schema.Array(Schema.String));
 const key = (...parts: string[]) => Schema.encodeSync(Key)(parts);
-const subject = (b: ProofBinding) => (b._tag === "Identifier" ? "" : b.revision.subjectId);
+const subject = (b: Proofs.ProofBinding) => (b._tag === "Identifier" ? "" : b.revision.subjectId);
 
-const series = (moduleId: string, purpose: string, b: ProofBinding) =>
+const series = (moduleId: string, purpose: string, b: Proofs.ProofBinding) =>
   key(moduleId, purpose, b.identifier.namespace, b.identifier.value, subject(b));
 
-const binding = (b: ProofBinding) =>
-  Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(Schema.toType(ProofBindingSchema))))(
+const binding = (b: Proofs.ProofBinding) =>
+  Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(Schema.toType(Proofs.ProofBinding))))(
     b,
   );
 
 const bucketKeys = (
   moduleId: string,
   purpose: string,
-  b: ProofBinding,
-  policy: ProofPolicy,
+  b: Proofs.ProofBinding,
+  policy: Proofs.ProofPolicy,
   action: "issues" | "attempts",
-): ReadonlyArray<readonly [string, ProofBudget]> => [
+): ReadonlyArray<readonly [string, Proofs.ProofBudget]> => [
   [
     key(moduleId, purpose, action, "action"),
     action === "issues" ? policy.abuse.actionIssues : policy.abuse.actionAttempts,
@@ -107,7 +91,7 @@ const bucketKeys = (
 
 const charge = (
   state: State,
-  buckets: ReadonlyArray<readonly [string, ProofBudget]>,
+  buckets: ReadonlyArray<readonly [string, Proofs.ProofBudget]>,
   now: number,
 ) => {
   const values = buckets.map(([key, policy]) => ({
@@ -127,14 +111,14 @@ const charge = (
  * No persistence, distributed limits, subject-revision authority, or outer transaction API.
  */
 export const makeExampleProofAuthority = Effect.gen(function* () {
-  const hooks = yield* LifecycleHooks;
+  const hooks = yield* Hooks.LifecycleHooks;
   let committed = empty();
 
-  const own = <A>(body: (state: State, journal: CommitJournal, now: number) => A) =>
+  const own = <A>(body: (state: State, journal: Hooks.CommitJournal, now: number) => A) =>
     Effect.gen(function* () {
-      if (yield* hasCommitScope) return yield* ProofUnavailable.make({});
+      if (yield* Hooks.hasCommitScope) return yield* Proofs.ProofUnavailable.make({});
 
-      return yield* coordinateCommit(
+      return yield* Hooks.coordinateCommit(
         (journal) =>
           Effect.gen(function* () {
             const now = DateTime.toEpochMillis(yield* DateTime.now);
@@ -149,23 +133,26 @@ export const makeExampleProofAuthority = Effect.gen(function* () {
                 return value;
               },
               catch: (error) =>
-                Schema.is(ProofRequestConflict)(error) ? error : ProofUnavailable.make({}),
+                Schema.is(Proofs.ProofRequestConflict)(error)
+                  ? error
+                  : Proofs.ProofUnavailable.make({}),
             });
           }),
         { mode: "synchronous" },
       ).pipe(
         Effect.map((result) => result.value),
         Effect.mapError((error) =>
-          Schema.is(ProofRequestConflict)(error) ? error : ProofUnavailable.make({}),
+          Schema.is(Proofs.ProofRequestConflict)(error) ? error : Proofs.ProofUnavailable.make({}),
         ),
-        Effect.provideService(LifecycleHooks, hooks),
+        Effect.provideService(Hooks.LifecycleHooks, hooks),
       );
     });
 
-  const available = <A>(effect: Effect.Effect<A, ProofRequestConflict | ProofUnavailable>) =>
-    effect.pipe(Effect.mapError(() => ProofUnavailable.make({})));
+  const available = <A>(
+    effect: Effect.Effect<A, Proofs.ProofRequestConflict | Proofs.ProofUnavailable>,
+  ) => effect.pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({})));
 
-  const store = ProofPersistence.of({
+  const store = Proofs.ProofPersistence.of({
     issue: (input, prepare) =>
       own((state, journal, now) => {
         const r = input.record;
@@ -173,7 +160,7 @@ export const makeExampleProofAuthority = Effect.gen(function* () {
         const previous = state.requests.get(requestKey);
 
         if (previous && previous.expires > now) {
-          if (previous.fingerprint !== r.fingerprint) throw ProofRequestConflict.make({});
+          if (previous.fingerprint !== r.fingerprint) throw Proofs.ProofRequestConflict.make({});
 
           return prepare({ _tag: "Existing", receipt: previous.receipt }, journal);
         }
@@ -339,7 +326,7 @@ export const makeExampleProofAuthority = Effect.gen(function* () {
             (row.delivery === "new" || (row.delivery === "ambiguous" && input.allowAmbiguousRetry));
 
           if (!valid) return prepare({ _tag: "Declined" }, journal);
-          const claimVersion = VersionSchema.make(String(row.sends + 1));
+          const claimVersion = Proofs.ProofVersion.make(String(row.sends + 1));
           const result = prepare({ _tag: "Claimed", claimVersion }, journal);
 
           row.claim = claimVersion;
@@ -418,5 +405,5 @@ export const makeExampleProofAuthority = Effect.gen(function* () {
       ),
   });
 
-  return Layer.succeed(ProofPersistence, store);
+  return Layer.succeed(Proofs.ProofPersistence, store);
 });

@@ -15,31 +15,11 @@ their driver.
 
 ## Runnable examples
 
-| Example                                                                                               | Schema and migration owner                 | Backend                          |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------- |
-| [Managed Drizzle](https://github.com/yielded-dev/auth/tree/main/examples/persistence-drizzle-managed) | Application customers; library auth tables | SQLite                           |
-| [Custom Drizzle](https://github.com/yielded-dev/auth/tree/main/examples/persistence-drizzle-custom)   | Application                                | SQLite                           |
-| [Effect SQL](https://github.com/yielded-dev/auth/tree/main/examples/persistence-sql)                  | Application                                | SQLite or PostgreSQL, no Drizzle |
-| [Custom services](https://github.com/yielded-dev/auth/tree/main/examples/persistence-custom)          | Application implementations                | Local file store, no SQL         |
-
-All four examples are account apps with registration,
-email verification, passkey enrollment and sign-in, password recovery, and Cloudflare
-delivery. They keep separate data across restarts, on ports 4181–4184 respectively.
-All use application-owned subjects and custom hashing. The custom-service example
-also replaces registration planning and implements username-or-email sign-in.
-The three SQL examples import the same
-[`AuthApi`](https://github.com/yielded-dev/auth/blob/main/examples/shared/account/contract.ts)
-and [`AppAuth`](https://github.com/yielded-dev/auth/blob/main/examples/shared/account/auth.ts).
-Their `live.ts` files provide different persistence and account Layers to that definition.
-The custom-service example extends the shared fields and actions with username inputs
-and binds registration and sign-in to its `AccountMethods` service. Email, recovery,
-passkey, and session contracts retain the common definitions.
-Hashing, Cloudflare delivery, forms, styles, and Atom workflows also live in
-[`examples/shared/account`](https://github.com/yielded-dev/auth/tree/main/examples/shared/account).
-Each app creates its own client and runtime.
-The custom app's single-writer file store provides the public persistence services directly;
-see its [Layer wiring](https://github.com/yielded-dev/auth/blob/main/examples/persistence-custom/src/live.ts)
-and [method replacement](https://github.com/yielded-dev/auth/blob/main/examples/persistence-custom/src/password-methods.ts).
+[Choose how much you own](../guide/storage) explains the three storage levels. The [four account apps](../guide/examples#run-an-account-app)
+show managed Drizzle tables, an application-owned Drizzle schema, direct Effect
+SQL, and custom services. Start there to compare ownership and composition, or
+[run an example](../guide/examples#run-an-account-app) for the complete setup.
+This reference covers the persistence APIs and their transaction requirements.
 
 ## Compose persistence once
 
@@ -54,7 +34,7 @@ Bind it to the Auth definition and map the existing customer table:
 
 ```ts title="schema.ts"
 import { AuthPersistence } from "@yielded/auth-persistence-drizzle/SqliteBun";
-import { SubjectId } from "@yielded/auth/Schema";
+import { Schema as AuthSchema } from "@yielded/auth";
 import { Effect } from "effect";
 import { AppAuth, requirement } from "./auth";
 import { customers } from "./customers";
@@ -67,7 +47,7 @@ export const storage = Persistence.managed({
     status: "enabled",
     activeValue: true,
     securityRevision: "securityRevision",
-    idCodec: SubjectId,
+    idCodec: AuthSchema.SubjectId,
     requirements: () => Effect.succeed(requirement),
   },
 });
@@ -178,7 +158,7 @@ import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Effect, Layer } from "effect";
 import { makePasswordPersistenceServices } from "@yielded/auth-persistence-drizzle/SqliteBun";
-import { PasswordPersistence } from "@yielded/auth/Password";
+import { Password } from "@yielded/auth";
 
 import { passwordMapping } from "./schema";
 
@@ -187,7 +167,7 @@ export const PasswordPersistenceLive = Layer.unwrap(
     const db = yield* Drizzle.makeWithDefaults({});
     const services = yield* makePasswordPersistenceServices(db, passwordMapping);
 
-    return Layer.succeed(PasswordPersistence, services.passwordPersistence);
+    return Layer.succeed(Password.PasswordPersistence, services.passwordPersistence);
   }),
 ).pipe(Layer.provide(SqliteClient.layer({ filename: "auth.sqlite" })));
 ```
@@ -200,10 +180,7 @@ Supply `LifecycleHooks` and your other account/session Layers at the composition
 
 ```ts title="auth-dependencies.ts"
 import { Layer } from "effect";
-import { Auth } from "@yielded/auth";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
-import { ProofKeys } from "@yielded/auth/Proofs";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Auth, Hooks, Proofs, WebCrypto } from "@yielded/auth";
 
 import { AccountsLive } from "./auth-accounts";
 import { requestBinding, proofKeys } from "./auth-config";
@@ -211,11 +188,11 @@ import { SessionPersistenceLive } from "./session-persistence";
 
 export const AuthDependencies = Layer.mergeAll(
   Auth.RequestBindingConfig.layer(requestBinding),
-  ProofKeys.layer(proofKeys),
+  Proofs.ProofKeys.layer(proofKeys),
   SessionPersistenceLive,
   AccountsLive,
-  layerWebCrypto,
-  LifecycleHooks.empty,
+  WebCrypto.layerWebCrypto,
+  Hooks.LifecycleHooks.empty,
 );
 ```
 
@@ -350,7 +327,7 @@ import {
   makePhonePersistenceServices,
   makeProofPersistenceServices,
 } from "@yielded/auth-persistence-drizzle/SqliteBun";
-import { ProofPersistence } from "@yielded/auth/Proofs";
+import { Proofs } from "@yielded/auth";
 
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import { phoneMapping, proofMapping } from "./schema";
@@ -365,7 +342,7 @@ export const PhonePersistenceLive = phonePersistenceLayer(
 ).pipe(Layer.provide(DatabaseLive));
 
 export const ProofPersistenceLive = Layer.effect(
-  ProofPersistence,
+  Proofs.ProofPersistence,
   Effect.gen(function* () {
     const db = yield* Drizzle.makeWithDefaults({});
     const services = yield* makeProofPersistenceServices(db, proofMapping);

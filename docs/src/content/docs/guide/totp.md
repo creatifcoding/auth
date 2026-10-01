@@ -11,8 +11,7 @@ request handlers, with `AppAuth` and the HTTP request boundary provided.
 
 ```ts title="auth.ts"
 import { Schema } from "effect";
-import { Auth } from "@yielded/auth";
-import { Password, Totp } from "@yielded/auth/strategies";
+import { Auth, Password, Totp } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
@@ -112,7 +111,7 @@ Use the pure TOTP contracts to add named actions:
 
 ```ts title="totp-contract.ts"
 import { Schema } from "effect";
-import { AuthContract, TotpContract } from "@yielded/auth/contracts";
+import { AuthContract, TotpContract } from "@yielded/auth";
 
 export const TotpApi = AuthContract.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),

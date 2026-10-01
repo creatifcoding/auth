@@ -1,5 +1,5 @@
+import { Schema as AuthSchema } from "@yielded/auth";
 import { AuthPersistence } from "@yielded/auth-persistence-drizzle/SqliteBun";
-import { SubjectId } from "@yielded/auth/Schema";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { Effect } from "effect";
 
@@ -27,7 +27,7 @@ export const storage = Persistence.managed({
     status: "enabled",
     activeValue: true,
     securityRevision: "securityRevision",
-    idCodec: SubjectId,
+    idCodec: AuthSchema.SubjectId,
     requirements: () => Effect.succeed(requirement),
     actionRequirements: (_row, action) =>
       Effect.succeed(

@@ -1,5 +1,4 @@
-import * as AuthAtom from "@yielded/auth/Atom";
-import * as Client from "@yielded/auth/Client";
+import { Atom as AuthAtom, Client } from "@yielded/auth";
 import { Effect } from "effect";
 
 import { AuthApi } from "./auth-contract";

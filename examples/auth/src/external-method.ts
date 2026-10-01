@@ -1,17 +1,4 @@
-import {
-  coordinateCommit,
-  HookConfigurationError,
-  HookDenied,
-  LifecycleEventId,
-  LifecycleHooks,
-  lifecycleEvent,
-  lifecycleSnapshot,
-  pluginContributions,
-  type LifecycleSnapshot,
-} from "@yielded/auth/Hooks";
-import type { LoginIdentifier } from "@yielded/auth/Identity";
-import { makeOperation } from "@yielded/auth/Operations";
-import { SubjectId } from "@yielded/auth/Schema";
+import { Hooks, type Identity, Operations, Schema as AuthSchema } from "@yielded/auth";
 import type { Redacted } from "effect";
 import { Context, DateTime, Effect, Schema } from "effect";
 
@@ -26,15 +13,15 @@ export class ExternalProofVerifier extends Context.Service<
   {
     readonly verify: (
       proof: Redacted.Redacted<string>,
-    ) => Effect.Effect<LoginIdentifier, ExternalProofRejected>;
+    ) => Effect.Effect<Identity.LoginIdentifier, ExternalProofRejected>;
   }
 >()("example/ExternalProofVerifier") {}
 
 export class RegistrationTransaction extends Context.Service<
   RegistrationTransaction,
   {
-    readonly register: (identifier: LoginIdentifier) => SubjectId;
-    readonly recordOnboarding: (subjectId: SubjectId) => void;
+    readonly register: (identifier: Identity.LoginIdentifier) => AuthSchema.SubjectId;
+    readonly recordOnboarding: (subjectId: AuthSchema.SubjectId) => void;
   }
 >()("example/RegistrationTransaction") {}
 
@@ -48,13 +35,16 @@ export class RegistrationAuthority extends Context.Service<
   }
 >()("example/RegistrationAuthority") {}
 
-export const ExternalRegistration = makeOperation("example.external.register", {
-  payload: Schema.Struct({ proof: Schema.Redacted(Schema.String), eventId: LifecycleEventId }),
+export const ExternalRegistration = Operations.makeOperation("example.external.register", {
+  payload: Schema.Struct({
+    proof: Schema.Redacted(Schema.String),
+    eventId: Hooks.LifecycleEventId,
+  }),
   success: Schema.Struct({
-    subjectId: SubjectId,
+    subjectId: AuthSchema.SubjectId,
     commit: Schema.Literals(["Committed", "PendingCommit"]),
   }),
-  error: Schema.Union([ExternalProofRejected, HookDenied, HookConfigurationError]),
+  error: Schema.Union([ExternalProofRejected, Hooks.HookDenied, Hooks.HookConfigurationError]),
   access: "any",
   exposure: "public",
   replay: "non-idempotent",
@@ -63,21 +53,21 @@ export const ExternalRegistration = makeOperation("example.external.register", {
 export interface RegistrationContribution<E = never, R = never> {
   readonly id: string;
   readonly mode: "interactive";
-  readonly run: (snapshot: LifecycleSnapshot) => Effect.Effect<void, E, R>;
+  readonly run: (snapshot: Hooks.LifecycleSnapshot) => Effect.Effect<void, E, R>;
 }
 
 /** This ordinary Layer is the method implementation. No registry or table declarations are needed. */
 export const externalMethodLayer = <R = never>(
-  contributions: ReadonlyArray<RegistrationContribution<HookDenied, R>> = [],
+  contributions: ReadonlyArray<RegistrationContribution<Hooks.HookDenied, R>> = [],
 ) =>
   ExternalRegistration.handlerLayer(
     Effect.fn("ExternalRegistration.handle")(function* (input) {
       const verifier = yield* ExternalProofVerifier;
       const authority = yield* RegistrationAuthority;
-      const hooks = yield* LifecycleHooks;
+      const hooks = yield* Hooks.LifecycleHooks;
       const identifier = yield* verifier.verify(input.proof);
 
-      const before = lifecycleSnapshot({
+      const before = Hooks.lifecycleSnapshot({
         action: "registration",
         operation: ExternalRegistration.rpc._tag,
         method: "external-proof",
@@ -87,17 +77,17 @@ export const externalMethodLayer = <R = never>(
       yield* hooks.before(before);
       const occurredAt = yield* DateTime.now;
 
-      const result = yield* coordinateCommit(
+      const result = yield* Hooks.coordinateCommit(
         (journal) =>
           authority.transaction(
             Effect.gen(function* () {
               const transaction = yield* RegistrationTransaction;
               const subjectId = transaction.register(identifier);
-              const snapshot = lifecycleSnapshot({ ...before, subjectId });
+              const snapshot = Hooks.lifecycleSnapshot({ ...before, subjectId });
 
               for (const contribution of contributions) yield* contribution.run(snapshot);
               journal.stage(
-                lifecycleEvent({
+                Hooks.lifecycleEvent({
                   id: input.eventId,
                   occurredAtMillis: DateTime.toEpochMillis(occurredAt),
                   snapshot,
@@ -115,7 +105,7 @@ export const externalMethodLayer = <R = never>(
   );
 
 /** Metadata is needed only when aggregating operations with other plugins. */
-export const externalMethodContributions = pluginContributions({
+export const externalMethodContributions = Hooks.pluginContributions({
   id: "example/external-method",
   operations: [ExternalRegistration],
   hooks: [],

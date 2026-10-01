@@ -1,4 +1,4 @@
-import { AuthContract } from "@yielded/auth/contracts";
+import { AuthContract } from "@yielded/auth";
 import { Schema, SchemaGetter } from "effect";
 
 import {

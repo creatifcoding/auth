@@ -1,11 +1,8 @@
+import { type Atom as AuthAtom, Passkey, Proofs, Schema as AuthSchema } from "@yielded/auth";
 import {
   PasskeyBrowser,
   layer as layerSimpleWebAuthnPasskeyBrowser,
 } from "@yielded/auth-simplewebauthn/Browser";
-import type * as AuthAtom from "@yielded/auth/Atom";
-import { PasskeyActionRequired } from "@yielded/auth/Passkey";
-import { ProofContinuation, ProofRequestReceipt } from "@yielded/auth/Proofs";
-import { Email } from "@yielded/auth/Schema";
 import { DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import type { KeyValueStore } from "effect/unstable/persistence";
 import { Atom, type AsyncResult } from "effect/unstable/reactivity";
@@ -14,13 +11,13 @@ import type { AuthApi, emailProofPolicy } from "./contract";
 
 // Public flow metadata only. Codes, passwords, and HttpOnly credentials stay out of storage.
 const Challenge = Schema.Struct({
-  ...ProofRequestReceipt.fields,
-  email: Email,
+  ...Proofs.ProofRequestReceipt.fields,
+  email: AuthSchema.Email,
   flowId: Schema.NonEmptyString,
   commandId: Schema.NonEmptyString,
   expiresAtMillis: Schema.Int,
   resendAtMillis: Schema.Int,
-  continuation: Schema.optionalKey(ProofContinuation),
+  continuation: Schema.optionalKey(Proofs.ProofContinuation),
 });
 
 export class FlowExpired extends Schema.TaggedError<FlowExpired>()("FlowExpired", {}) {}
@@ -131,7 +128,7 @@ export const makeAccountClient = <Auth extends AccountAuth>(
 
   const sendVerification = runtime.fn<string>()(
     Effect.fn("Customers.sendVerification")(function* (input: string, get: Atom.FnContext) {
-      const email = yield* Schema.decodeEffect(Email)(input);
+      const email = yield* Schema.decodeEffect(AuthSchema.Email)(input);
 
       get.set(notice, null);
       const current = yield* get.result(verification);
@@ -248,7 +245,7 @@ export const makeAccountClient = <Auth extends AccountAuth>(
       get.set(notice, null);
       const current = yield* get.result(auth.session);
 
-      if (current === null) return yield* PasskeyActionRequired.make({});
+      if (current === null) return yield* Passkey.PasskeyActionRequired.make({});
       const browser = yield* PasskeyBrowser;
 
       const started = yield* get.setResult(auth.enrollPasskey, {
@@ -317,7 +314,7 @@ export const makeAccountClient = <Auth extends AccountAuth>(
 
   const requestReset = runtime.fn<string>()(
     Effect.fn("Customers.requestReset")(function* (input, get) {
-      const email = yield* Schema.decodeEffect(Email)(input);
+      const email = yield* Schema.decodeEffect(AuthSchema.Email)(input);
 
       get.set(notice, null);
       const current = yield* get.result(recovery);

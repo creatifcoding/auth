@@ -1,6 +1,5 @@
 import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
-import { Http } from "@yielded/auth";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
+import { Hooks, Http } from "@yielded/auth";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http";
 
@@ -46,7 +45,7 @@ const PageRoutes = Layer.unwrap(
 
 const ApplicationLive = AuthLive.pipe(
   Layer.provide([
-    AccountStore.layer.pipe(Layer.provide(LifecycleHooks.empty)),
+    AccountStore.layer.pipe(Layer.provide(Hooks.LifecycleHooks.empty)),
     KeysLive,
     DeliveryLive,
     ScreeningLive,

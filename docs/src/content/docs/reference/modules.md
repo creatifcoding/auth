@@ -8,25 +8,33 @@ individual modules for your methods, session strategy, and integration boundarie
 
 ## Imports and tree shaking
 
-Choose imports by role:
+Prefer named namespace imports from the package root:
 
 ```ts
-import { Auth, Http, Sessions } from "@yielded/auth";
-import { AuthContract, PasskeyContract } from "@yielded/auth/contracts";
-import { Passkey, Password } from "@yielded/auth/strategies";
+import { Auth, AuthContract, Client, Http, Password, Sessions } from "@yielded/auth";
 ```
 
-`contracts` contains shared actions and schemas: `AuthContract`, `SessionContract`,
-`PasskeyContract`, and `TotpContract`. `strategies` contains server authentication
-methods: `Email`, `OAuth`, `Passkey`, `Password`, `PhoneOtp`, and `Totp`.
-Distinct names let contracts and strategies appear in the same file.
+Contracts, strategies, and client helpers use the same root import. Distinct
+names such as `PasskeyContract` and `Passkey` keep their roles clear.
+Lower-level modules such as `HttpServer`, `Rpc`, `Strava`, and `WebCrypto` are
+also root namespaces. Access individual exports through the module, for example
+`Proofs.ProofKeys` or `WebCrypto.layerWebCrypto`.
 
-Every module also has a direct path, such as `@yielded/auth/PasskeyContract`.
-Use direct paths for smaller esbuild bundles and lazy loading; esbuild can retain
-unused members of re-exported namespaces. Both styles support `PasskeyContract.make`.
+Direct module paths remain available and expose the same namespaces:
 
-Native ESM loads the root's static dependencies. Direct paths also keep that
-module-loading boundary narrow when running without a bundler.
+```ts
+import * as AuthContract from "@yielded/auth/AuthContract";
+import * as Client from "@yielded/auth/Client";
+```
+
+Use direct paths for lazy loading or tighter bundle boundaries; esbuild can
+retain unused members of re-exported namespaces. Native ESM loads the root's
+static dependencies, so direct paths also narrow loading without a bundler.
+
+The optional `@yielded/auth/contracts` group exports `AuthContract`,
+`SessionContract`, `PasskeyContract`, and `TotpContract`.
+`@yielded/auth/strategies` groups `Email`, `OAuth`, `Passkey`, `Password`,
+`PhoneOtp`, and `Totp`. These are the same modules exposed at the root.
 
 Optional adapters are direct imports, for example `@yielded/auth-persistence-drizzle/Postgres`,
 `@yielded/auth-openid-client`, `@yielded/auth-simplewebauthn/Browser`, or
@@ -35,7 +43,7 @@ required by the selected adapters.
 
 ## Application composition
 
-Use the root for application composition and `@yielded/auth/strategies` for methods:
+Import application services and authentication methods from the root:
 
 | Modules                       | Purpose                                                                |
 | ----------------------------- | ---------------------------------------------------------------------- |
@@ -46,6 +54,7 @@ Use the root for application composition and `@yielded/auth/strategies` for meth
 | `Password`                    | Password registration, sign-in, and account changes.                   |
 | `Email`, `PhoneOtp`, `Proofs` | Email and phone methods, bound proofs, and private delivery.           |
 | `Totp`, `Passkey`             | Additional factors and passkey workflows.                              |
+| `PasskeyPassword`             | Password-backed authority for passkey workflows.                       |
 | `OAuth`                       | Provider sign-in, registration, linked accounts, and connected grants. |
 
 ## Browser and transport boundaries
@@ -63,8 +72,13 @@ helpers separately from server verifiers and persistence adapters.
 | `OperationHttpClient`, `OperationHttpServer`         | Client execution and server routing.                                |
 | `Atom`                                               | Effect Atom queries, mutations, and client workflows.               |
 
-Use `@yielded/auth/contracts` for shared definitions. Browser helpers use direct
-`@yielded/auth/Client` and `@yielded/auth/Atom` imports.
+Import shared contracts, `Client`, and `Atom` from the root. Alias `Atom` as
+`AuthAtom` when also using Effect's `Atom` module:
+
+```ts
+import { Atom as AuthAtom, AuthContract, Client } from "@yielded/auth";
+```
+
 React applications use `@effect/atom-react` with the same importable atoms;
 Yielded Auth has no React-specific export.
 
@@ -88,7 +102,6 @@ you use.
 | `@yielded/auth-persistence`             | Direct Effect SQL persistence; requires an application-provided SQL client.                     |
 | `@yielded/auth-persistence-drizzle`     | Drizzle mappings and explicit driver modules such as `/Postgres` and `/SqliteBun`.              |
 | `@yielded/auth/adapters/Twilio`         | SMS delivery through Effect HTTP; requires `TwilioConfig`.                                      |
-| `@yielded/auth/PasskeyPassword`         | Password-backed authority for passkey workflows.                                                |
 
 Core has only Effect as a runtime peer. It owns schemas, workflows, and service contracts. Adapters depend on those
 public contracts; core never imports or re-exports an SDK adapter. An application

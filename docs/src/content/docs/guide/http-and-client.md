@@ -17,7 +17,7 @@ Keep the contract safe to import in both the browser and server:
 
 ```ts title="auth-contract.ts"
 import { Schema } from "effect";
-import { AuthContract } from "@yielded/auth/contracts";
+import { AuthContract } from "@yielded/auth";
 
 export const AuthApi = AuthContract.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
@@ -43,8 +43,7 @@ and client use the same descriptors.
 Bind the contract to your methods and session configuration:
 
 ```ts title="auth.ts"
-import { Auth, Http, Sessions } from "@yielded/auth";
-import { Password } from "@yielded/auth/strategies";
+import { Auth, Http, Password, Sessions } from "@yielded/auth";
 
 import { AuthApi } from "./auth-contract";
 
@@ -103,7 +102,7 @@ or require a headers argument.
 Add the native auth group beside your application groups in the shared API:
 
 ```ts title="api.ts"
-import { AuthContract } from "@yielded/auth/contracts";
+import { AuthContract } from "@yielded/auth";
 import { HttpApi } from "effect/unstable/httpapi";
 
 import { AuthApi } from "./auth-contract";
@@ -155,7 +154,7 @@ pass matching settings to `Client.make`.
 
 `http.middleware` supplies context; it does not require every route to be signed
 in. Call `auth.requireSession()` in protected application handlers. For declarative
-HttpApi protection, define `makeSessionHttpContract` from `@yielded/auth/SessionContract`,
+HttpApi protection, define `SessionContract.makeSessionHttpContract`,
 attach its `RequireSession` middleware, and read `CurrentSession` in handlers.
 Provide `http.securityLayer(contract)` and apply `http.middleware` to the route
 Layer. Its cookie name must match the adapter. It declares 401 for absent or
@@ -203,7 +202,7 @@ example and [TOTP](./totp#expose-private-reveals-over-http) for private reveals.
 ## Call the client directly
 
 ```ts title="client-service.ts"
-import * as Client from "@yielded/auth/Client";
+import { Client } from "@yielded/auth";
 
 import { AuthApi } from "./auth-contract";
 
@@ -231,7 +230,7 @@ reveal handling, or account transition coordination.
 ## Connect client state
 
 ```ts title="auth-client.ts"
-import * as AuthAtom from "@yielded/auth/Atom";
+import { Atom as AuthAtom } from "@yielded/auth";
 
 import { AppClient } from "./client-service";
 
@@ -303,7 +302,7 @@ application data that must also refresh. Use the same runtime factory as the
 queries subscribed to those keys:
 
 ```ts title="shared-runtime.ts"
-import * as AuthAtom from "@yielded/auth/Atom";
+import { Atom as AuthAtom } from "@yielded/auth";
 import { Atom } from "effect/unstable/reactivity";
 
 import { AppClient } from "./client-service";
@@ -361,8 +360,7 @@ Neither local nor HTTP callers can supply those private fields. For new contract
 
 ```ts title="passkey-workflow.ts"
 import { Effect, Redacted } from "effect";
-import * as AuthAtom from "@yielded/auth/Atom";
-import * as Client from "@yielded/auth/Client";
+import { Atom as AuthAtom, Client } from "@yielded/auth";
 import * as PasskeyBrowser from "@yielded/auth-simplewebauthn/Browser";
 
 import { PasskeyApi } from "./passkey-contract";

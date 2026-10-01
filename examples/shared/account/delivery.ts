@@ -1,9 +1,4 @@
-import {
-  EmailProofDelivery,
-  type ProofDeliveryMessage,
-  type ProofDeliveryOutcome,
-} from "@yielded/auth/Proofs";
-import { Email } from "@yielded/auth/Schema";
+import { Proofs, Schema as AuthSchema } from "@yielded/auth";
 import { Config, Effect, Layer, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
@@ -30,12 +25,12 @@ export const DeliveryLive = Layer.unwrap(
     yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/)))(
       accountId,
     );
-    const sender = yield* Schema.decodeUnknownEffect(Email)(from);
+    const sender = yield* Schema.decodeUnknownEffect(AuthSchema.Email)(from);
     const client = yield* HttpClient.HttpClient;
 
     const send = Effect.fn("Customers.sendEmail")(function* (
-      message: ProofDeliveryMessage,
-    ): Effect.fn.Return<ProofDeliveryOutcome> {
+      message: Proofs.ProofDeliveryMessage,
+    ): Effect.fn.Return<Proofs.ProofDeliveryOutcome> {
       if (message.recipient.namespace !== "email" || message.format !== "numeric-code")
         return { _tag: "DefiniteFailure", reason: "policy" };
 
@@ -90,6 +85,6 @@ export const DeliveryLive = Layer.unwrap(
     });
 
     // Cloudflare does not promise delivery-ID deduplication. Never retry an uncertain send.
-    return EmailProofDelivery.layer({ vendorId: "cloudflare", idempotencyMillis: 0 }, send);
+    return Proofs.EmailProofDelivery.layer({ vendorId: "cloudflare", idempotencyMillis: 0 }, send);
   }),
 );

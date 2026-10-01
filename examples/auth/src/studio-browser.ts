@@ -1,6 +1,5 @@
+import { Atom as AuthAtom, OperationHttpClient as Fetch } from "@yielded/auth";
 import * as PasskeyBrowser from "@yielded/auth-simplewebauthn/Browser";
-import * as AuthAtom from "@yielded/auth/Atom";
-import * as Fetch from "@yielded/auth/OperationHttpClient";
 import { Effect, Layer, Redacted } from "effect";
 import { Atom } from "effect/unstable/reactivity";
 

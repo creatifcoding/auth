@@ -1,18 +1,20 @@
-import * as AuthAtom from "@yielded/auth/Atom";
-import * as OperationHttp from "@yielded/auth/OperationHttp";
-import * as OperationHttpClient from "@yielded/auth/OperationHttpClient";
-import * as OperationHttpServer from "@yielded/auth/OperationHttpServer";
-import { guest, makeOperation, requireAuthenticated } from "@yielded/auth/Operations";
-import { SubjectId } from "@yielded/auth/Schema";
+import {
+  Atom as AuthAtom,
+  OperationHttp,
+  OperationHttpClient,
+  OperationHttpServer,
+  Operations,
+  Schema as AuthSchema,
+} from "@yielded/auth";
 import { Effect, Layer, Schema } from "effect";
 import { Atom } from "effect/unstable/reactivity";
 
 import { staffSessions } from "./session-consumer";
 
 /** An application plugin uses the same operation boundary as built-in methods. */
-export const CurrentSubject = makeOperation("example/current-subject", {
+export const CurrentSubject = Operations.makeOperation("example/current-subject", {
   payload: Schema.Void,
-  success: Schema.Struct({ subjectId: SubjectId, method: Schema.NonEmptyString }),
+  success: Schema.Struct({ subjectId: AuthSchema.SubjectId, method: Schema.NonEmptyString }),
   error: Schema.Never,
   access: "authenticated",
   exposure: "public",
@@ -21,7 +23,7 @@ export const CurrentSubject = makeOperation("example/current-subject", {
 
 export const currentSubjectLayer = CurrentSubject.handlerLayer(
   Effect.fn("Example.CurrentSubject")(function* (_input, invocation) {
-    const caller = yield* requireAuthenticated(invocation);
+    const caller = yield* Operations.requireAuthenticated(invocation);
 
     return { subjectId: caller.subjectId, method: caller.assurance.method };
   }),
@@ -63,7 +65,7 @@ export const transportConfiguration = OperationHttpServer.configurationLayer({
 
 export const transportInvocation = OperationHttpServer.invocationLayer(
   Effect.fn("Example.HttpInvocation")(function* (_request, credentials) {
-    if (credentials.session === undefined) return guest;
+    if (credentials.session === undefined) return Operations.guest;
 
     const session = yield* (yield* staffSessions.SessionStrategy)
       .verify(credentials.session)

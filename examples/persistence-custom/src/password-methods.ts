@@ -1,4 +1,4 @@
-import { PasswordRejected } from "@yielded/auth/Password";
+import { Password } from "@yielded/auth";
 import { Effect, Layer, Schema } from "effect";
 
 import { AppAuth } from "./auth";
@@ -18,7 +18,7 @@ export const PasswordMethodsLive = Layer.effect(
         const registration = yield* Schema.decodeEffect(Registration)({
           displayName: request.registration.displayName.trim(),
           username: request.registration.username,
-        }).pipe(Effect.mapError(() => PasswordRejected.make({})));
+        }).pipe(Effect.mapError(() => Password.PasswordRejected.make({})));
 
         return yield* defaults.planRegister({ ...request, registration });
       }),

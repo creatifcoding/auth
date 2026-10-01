@@ -1,0 +1,427 @@
+---
+/**
+ * Who owns each layer of the auth stack at each storage level. The accent region is what
+ * Yielded Auth runs; the stepped rule is the boundary, which moves down one layer per level.
+ */
+type Owner = "auth" | "app";
+
+interface Level {
+  readonly name: string;
+  readonly api: string;
+  readonly examples: ReadonlyArray<{ readonly name: string; readonly href: string }>;
+}
+
+interface Layer {
+  readonly name: string;
+  readonly cells: ReadonlyArray<{ readonly owner: Owner; readonly note: string }>;
+}
+
+const repository = "https://github.com/yielded-dev/auth/tree/main/examples";
+
+const levels: ReadonlyArray<Level> = [
+  {
+    name: "Managed tables",
+    api: "Persistence.managed(…)",
+    examples: [{ name: "Managed Drizzle", href: `${repository}/persistence-drizzle-managed` }],
+  },
+  {
+    name: "Your schema",
+    api: "Persistence.map(…)",
+    examples: [
+      { name: "Custom Drizzle", href: `${repository}/persistence-drizzle-custom` },
+      { name: "Effect SQL", href: `${repository}/persistence-sql` },
+    ],
+  },
+  {
+    name: "Your services",
+    api: "Layer.mergeAll(…)",
+    examples: [{ name: "Custom services", href: `${repository}/persistence-custom` }],
+  },
+];
+
+const layers: ReadonlyArray<Layer> = [
+  {
+    name: "Account table",
+    cells: [
+      { owner: "app", note: "Your table and IDs, mapped by column." },
+      { owner: "app", note: "Your table and IDs, mapped by column." },
+      { owner: "app", note: "Your records and IDs, in any store." },
+    ],
+  },
+  {
+    name: "Auth tables and migrations",
+    cells: [
+      { owner: "auth", note: "Defined for you. Drizzle Kit generates migrations you review." },
+      { owner: "app", note: "Your table names, columns, and migrations." },
+      { owner: "app", note: "Any store, or no database at all." },
+    ],
+  },
+  {
+    name: "Queries and transactions",
+    cells: [
+      { owner: "auth", note: "Run for you." },
+      { owner: "auth", note: "Run against your tables, checked at startup." },
+      { owner: "app", note: "Your implementation of each storage service." },
+    ],
+  },
+  {
+    name: "Sign-in workflows",
+    cells: [
+      { owner: "auth", note: "Run for you." },
+      { owner: "auth", note: "Run for you." },
+      { owner: "auth", note: "Run for you, on your storage." },
+    ],
+  },
+];
+
+const ownerLabel = { auth: "Yielded Auth", app: "You" } as const;
+
+// The boundary rule runs along each Yielded Auth cell's edge that faces one of yours.
+const edges = (row: number, column: number) => {
+  const own = layers[row]!.cells[column]!.owner;
+
+  if (own !== "auth") return undefined;
+
+  const above = layers[row - 1]?.cells[column]?.owner;
+  const right = layers[row]!.cells[column + 1]?.owner;
+
+  return [above === "app" ? "top" : "", right === "app" ? "right" : ""].join(" ").trim() || undefined;
+};
+---
+
+<figure class="ladder not-content">
+  <table>
+    <caption class="sr-only">Who owns each layer of the auth stack at each storage level</caption>
+    <thead>
+      <tr>
+        <td></td>
+        {
+          levels.map(({ name, api }) => (
+            <th scope="col">
+              <span class="level">{name}</span>
+              <code class="api">{api}</code>
+            </th>
+          ))
+        }
+      </tr>
+    </thead>
+    <tbody>
+      {
+        layers.map(({ name, cells }, row) => (
+          <tr>
+            <th scope="row">{name}</th>
+            {cells.map(({ owner, note }, column) => (
+              <td data-owner={owner} data-edge={edges(row, column)}>
+                <span class="owner">{ownerLabel[owner]}</span>
+                <span class="note">{note}</span>
+              </td>
+            ))}
+          </tr>
+        ))
+      }
+      <tr class="same">
+        <th scope="row">Contract and client</th>
+        <td colspan={levels.length}>
+          <span class="owner">Unchanged</span>
+          <span class="note">
+            The same <code>AuthApi</code>, <code>AppAuth</code>, and client at every level. Only
+            Layers change.
+          </span>
+        </td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <th scope="row">Runnable app</th>
+        {
+          levels.map(({ examples }) => (
+            <td>
+              {examples.map(({ name, href }, index) => (
+                <>
+                  {index > 0 && ", "}
+                  <a {href}>{name}</a>
+                </>
+              ))}
+            </td>
+          ))
+        }
+      </tr>
+    </tfoot>
+  </table>
+
+  <ol class="stacked">
+    {
+      levels.map(({ name, api, examples }, column) => (
+        <li>
+          <p class="level">{name}</p>
+          <code class="api">{api}</code>
+          <dl>
+            {layers.map((layer) => {
+              const cell = layer.cells[column]!;
+              return (
+                <div data-owner={cell.owner}>
+                  <dt>{layer.name}</dt>
+                  <dd>
+                    <span class="owner">{ownerLabel[cell.owner]}</span> {cell.note}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+          <p class="apps">
+            {examples.map(({ name, href }, index) => (
+              <>
+                {index > 0 && ", "}
+                <a {href}>{name}</a>
+              </>
+            ))}
+          </p>
+        </li>
+      ))
+    }
+    <li class="same">
+      The same <code>AuthApi</code>, <code>AppAuth</code>, and client at every level. Only Layers
+      change.
+    </li>
+  </ol>
+</figure>
+
+<style>
+  .ladder {
+    --auth: var(--sl-color-accent);
+    --auth-fill: color-mix(in srgb, var(--auth) 9%, var(--yl-bg-raised));
+    --rule: 2px solid var(--auth);
+
+    margin: 1.75rem 0 0;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+  }
+
+  figure.ladder :is(th, td) {
+    padding: 0.85rem 1rem;
+    border: 0;
+    background: none;
+    vertical-align: top;
+    text-align: left;
+  }
+
+  thead th {
+    padding-bottom: 1rem;
+  }
+
+  thead td,
+  tbody th,
+  tfoot th {
+    width: 22%;
+  }
+
+  .level {
+    display: block;
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-base);
+    font-weight: 620;
+    letter-spacing: -0.015em;
+  }
+
+  .ladder .api,
+  .ladder .note code,
+  .stacked .same code {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--sl-color-gray-3);
+    font-family: var(--sl-font-mono);
+    font-size: var(--sl-text-xs);
+  }
+
+  .ladder .note code,
+  .stacked .same code {
+    color: var(--sl-color-white);
+  }
+
+  tbody th,
+  tfoot th {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+    font-weight: 500;
+  }
+
+  .ladder tbody td {
+    border-top: 1px solid var(--yl-border);
+    border-left: 1px solid var(--yl-border);
+  }
+
+  .ladder tbody tr > td:last-child {
+    border-right: 1px solid var(--yl-border);
+  }
+
+  tbody tr:first-child td:first-of-type {
+    border-top-left-radius: 0.6rem;
+  }
+
+  tbody tr:first-child td:last-child {
+    border-top-right-radius: 0.6rem;
+  }
+
+  .owner {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-sm);
+    font-weight: 600;
+  }
+
+  .note {
+    display: block;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+    line-height: 1.5;
+  }
+
+  .ladder td[data-owner="app"] {
+    background: var(--yl-bg-raised);
+  }
+
+  .ladder td[data-owner="auth"] {
+    background: var(--auth-fill);
+  }
+
+  td[data-owner="auth"] .owner {
+    color: var(--auth);
+  }
+
+  /* The stepped boundary between your layers and the ones Yielded Auth runs. */
+  .ladder td[data-edge~="top"] {
+    border-top: var(--rule);
+  }
+
+  td[data-edge~="right"] {
+    box-shadow: inset -2px 0 0 var(--auth);
+  }
+
+  .ladder tr.same td {
+    border: 1px solid var(--yl-border-strong);
+    border-radius: 0 0 0.6rem 0.6rem;
+    background: var(--yl-bg);
+    text-align: center;
+  }
+
+  tr.same .owner {
+    display: inline;
+    margin-right: 0.5rem;
+  }
+
+  tr.same .note {
+    display: inline;
+  }
+
+  .ladder tfoot td,
+  .ladder tfoot th {
+    padding-top: 0.9rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  .ladder a {
+    color: var(--sl-color-white);
+    text-decoration-color: color-mix(in srgb, var(--auth) 70%, transparent);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.2em;
+  }
+
+  .ladder a:hover {
+    text-decoration-color: var(--auth);
+  }
+
+  .ladder a:focus-visible {
+    outline: 2px solid var(--auth);
+    outline-offset: 2px;
+  }
+
+  /* Narrow screens: one block per level. */
+  .stacked {
+    display: none;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .stacked > li {
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--yl-border-strong);
+  }
+
+  .stacked p {
+    margin: 0;
+  }
+
+  .stacked dl {
+    margin: 0.85rem 0 0;
+  }
+
+  .stacked dl > div {
+    padding: 0.55rem 0.75rem;
+    border-left: 2px solid var(--yl-border-strong);
+  }
+
+  .stacked dl > div[data-owner="auth"] {
+    border-left-color: var(--auth);
+    background: var(--auth-fill);
+  }
+
+  .stacked dl > div + div {
+    margin-top: 0.25rem;
+  }
+
+  .stacked dt {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+  }
+
+  .stacked dd {
+    margin: 0.1rem 0 0;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+  }
+
+  .stacked dd .owner {
+    display: inline;
+  }
+
+  .stacked [data-owner="auth"] .owner {
+    color: var(--auth);
+  }
+
+  .stacked .apps {
+    margin-top: 0.75rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  .stacked .same {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+  }
+
+  @media (max-width: 44rem) {
+    figure.ladder table {
+      display: none;
+    }
+
+    .stacked {
+      display: block;
+    }
+  }
+</style>

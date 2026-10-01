@@ -1,6 +1,4 @@
-import { RequestBindingConfig } from "@yielded/auth/Auth";
-import { ProofKeys } from "@yielded/auth/Proofs";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Auth, Proofs, WebCrypto } from "@yielded/auth";
 import { Crypto, Effect, Encoding, FileSystem, Layer, Path, Redacted, Schema } from "effect";
 
 import { DataDirectory } from "./store";
@@ -45,12 +43,12 @@ export const KeysLive = Layer.unwrap(
     );
 
     return Layer.mergeAll(
-      ProofKeys.layer({ activeKeyId: "v1", keys: [{ id: "v1", material: keys.proof }] }),
-      RequestBindingConfig.layer({
+      Proofs.ProofKeys.layer({ activeKeyId: "v1", keys: [{ id: "v1", material: keys.proof }] }),
+      Auth.RequestBindingConfig.layer({
         keyring: { activeKeyId: "v1", keys: [{ id: "v1", material: keys.binding }] },
         lifetimeMillis: 300_000,
         generation: 1,
       }),
     );
   }),
-).pipe(Layer.provide(DataDirectory.layer), Layer.provide(layerWebCrypto));
+).pipe(Layer.provide(DataDirectory.layer), Layer.provide(WebCrypto.layerWebCrypto));

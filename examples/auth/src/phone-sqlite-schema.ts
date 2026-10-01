@@ -1,3 +1,4 @@
+import { type PhoneOtp, Proofs, Schema as AuthSchema, type Sessions } from "@yielded/auth";
 import {
   PersistenceMappingError,
   requiredProofConstraints,
@@ -6,19 +7,6 @@ import {
   requiredPhoneConstraints,
   type PhoneMapping,
 } from "@yielded/auth-persistence-drizzle";
-import type { PhoneLifecyclePolicy, PhoneAdmissionPolicy } from "@yielded/auth/PhoneOtp";
-import {
-  ProofBinding,
-  ProofPurpose,
-  ProofId,
-  ProofRequestId,
-  ProofDeliveryId,
-  ProofVersion,
-  ProofRequestReceipt,
-  ProofContinuationId,
-} from "@yielded/auth/Proofs";
-import { SubjectId, TokenDigest } from "@yielded/auth/Schema";
-import type { AuthenticationRequirement } from "@yielded/auth/Sessions";
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { Effect, Schema } from "effect";
@@ -213,7 +201,7 @@ export const decodeInstant = (value: unknown) =>
         }),
       );
 
-export const nativeSubject = (id: SubjectId) => {
+export const nativeSubject = (id: AuthSchema.SubjectId) => {
   if (!/^customer:[1-9][0-9]*$/.test(id))
     throw PersistenceMappingError.make({
       operation: "phone-example-codec",
@@ -231,7 +219,7 @@ export const nativeSubject = (id: SubjectId) => {
 };
 
 export const subjectId = {
-  toNative: (id: SubjectId) =>
+  toNative: (id: AuthSchema.SubjectId) =>
     Effect.try({
       try: () => nativeSubject(id),
       catch: () =>
@@ -240,12 +228,12 @@ export const subjectId = {
           cause: "invalid consumer value",
         }),
     }),
-  toSubject: (id: number) => Effect.succeed(SubjectId.make(`customer:${id}`)),
+  toSubject: (id: number) => Effect.succeed(AuthSchema.SubjectId.make(`customer:${id}`)),
   equals: (a: number, b: number) => a === b,
 };
 
-const bindingCodec = Schema.fromJsonString(ProofBinding),
-  receiptCodec = Schema.fromJsonString(ProofRequestReceipt);
+const bindingCodec = Schema.fromJsonString(Proofs.ProofBinding),
+  receiptCodec = Schema.fromJsonString(Proofs.ProofRequestReceipt);
 
 const decodeBinding = (value: string) =>
   Schema.decodeEffect(bindingCodec)(value).pipe(
@@ -257,7 +245,7 @@ const decodeBinding = (value: string) =>
     ),
   );
 
-export const requirement: AuthenticationRequirement = {
+export const requirement: Sessions.AuthenticationRequirement = {
   maximumAgeMillis: 300_000,
   alternatives: [
     {
@@ -297,7 +285,7 @@ export const proofs: ProofPersistenceMapping<
   constraints: requiredProofConstraints,
   encodeInstant,
   decodeInstant,
-  allocateVersionSync: () => ProofVersion.make(crypto.randomUUID()),
+  allocateVersionSync: () => Proofs.ProofVersion.make(crypto.randomUUID()),
   d1: clock,
   isRequestConflict: () => false,
   isSeriesConflict: () => false,
@@ -448,16 +436,19 @@ export const proofs: ProofPersistenceMapping<
       Effect.gen(function* () {
         return {
           moduleId: row.moduleId,
-          purpose: ProofPurpose.make(row.purpose),
-          proofId: ProofId.make(row.proofId),
-          requestId: ProofRequestId.make(row.requestId),
-          fingerprint: TokenDigest.make(row.fingerprint),
-          deliveryId: ProofDeliveryId.make(row.deliveryId),
+          purpose: Proofs.ProofPurpose.make(row.purpose),
+          proofId: Proofs.ProofId.make(row.proofId),
+          requestId: Proofs.ProofRequestId.make(row.requestId),
+          fingerprint: AuthSchema.TokenDigest.make(row.fingerprint),
+          deliveryId: Proofs.ProofDeliveryId.make(row.deliveryId),
           binding: yield* decodeBinding(row.binding),
-          verifier: { keyId: row.verifierKeyId, digest: TokenDigest.make(row.verifierDigest) },
+          verifier: {
+            keyId: row.verifierKeyId,
+            digest: AuthSchema.TokenDigest.make(row.verifierDigest),
+          },
           issuedAtMillis: yield* decodeInstant(row.issuedAt),
           expiresAtMillis: yield* decodeInstant(row.expiresAt),
-          version: ProofVersion.make(row.version),
+          version: Proofs.ProofVersion.make(row.version),
         };
       }),
   },
@@ -485,14 +476,14 @@ export const proofs: ProofPersistenceMapping<
       Effect.gen(function* () {
         return {
           moduleId: row.moduleId,
-          purpose: ProofPurpose.make(row.purpose),
-          continuationId: ProofContinuationId.make(row.continuationId),
-          digest: TokenDigest.make(row.digest),
-          proofId: ProofId.make(row.proofId),
+          purpose: Proofs.ProofPurpose.make(row.purpose),
+          continuationId: Proofs.ProofContinuationId.make(row.continuationId),
+          digest: AuthSchema.TokenDigest.make(row.digest),
+          proofId: Proofs.ProofId.make(row.proofId),
           seriesKey: row.seriesKey,
           binding: yield* decodeBinding(row.binding),
           expiresAtMillis: yield* decodeInstant(row.expiresAt),
-          version: ProofVersion.make(row.version),
+          version: Proofs.ProofVersion.make(row.version),
         };
       }),
   },
@@ -549,12 +540,12 @@ export const proofs: ProofPersistenceMapping<
   },
 };
 
-export const lifecyclePolicy: PhoneLifecyclePolicy = {
+export const lifecyclePolicy: PhoneOtp.PhoneLifecyclePolicy = {
   maximumEvidenceAgeMillis: 60_000,
   requireImmediateInvalidation: false,
 };
 
-export const admissionPolicy: PhoneAdmissionPolicy = {
+export const admissionPolicy: PhoneOtp.PhoneAdmissionPolicy = {
   windowMillis: 60_000,
   networkRequests: 30,
   networkAttempts: 100,
@@ -578,7 +569,7 @@ export const mapping: PhoneMapping<
   encodeInstant,
   subjectIds: {
     toNative: nativeSubject,
-    toSubject: (id) => SubjectId.make(`customer:${id}`),
+    toSubject: (id) => AuthSchema.SubjectId.make(`customer:${id}`),
     allocate: () => 1 + crypto.getRandomValues(new Uint32Array(1))[0]!,
   },
   subject: {

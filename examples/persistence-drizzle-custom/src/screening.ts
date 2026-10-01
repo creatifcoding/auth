@@ -1,5 +1,4 @@
-import { CompromisedPasswords, PasswordCheckUnavailable } from "@yielded/auth/Password";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Password, WebCrypto } from "@yielded/auth";
 import { Crypto, Effect, Encoding, Layer, Redacted, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
 
@@ -8,12 +7,12 @@ const Suffixes = Schema.Array(Schema.String.check(Schema.isPattern(/^[A-F0-9]{35
 // Only the first five SHA-1 hex characters leave the server. The password,
 // remaining hash, and account hints are never sent to Pwned Passwords or tracing.
 export const ScreeningLive = Layer.effect(
-  CompromisedPasswords,
+  Password.CompromisedPasswords,
   Effect.gen(function* () {
     const crypto = yield* Crypto.Crypto;
     const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
 
-    return CompromisedPasswords.of({
+    return Password.CompromisedPasswords.of({
       check: Effect.fn("Customers.screenPassword")(
         function* (password, context) {
           const value = Redacted.value(password);
@@ -53,8 +52,8 @@ export const ScreeningLive = Layer.effect(
         },
         Effect.timeout("8 seconds"),
         Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-        Effect.mapError(() => PasswordCheckUnavailable.make({})),
+        Effect.mapError(() => Password.PasswordCheckUnavailable.make({})),
       ),
     });
   }),
-).pipe(Layer.provide(layerWebCrypto));
+).pipe(Layer.provide(WebCrypto.layerWebCrypto));

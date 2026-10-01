@@ -1,6 +1,4 @@
-import * as Auth from "@yielded/auth/Auth";
-import * as Passkey from "@yielded/auth/Passkey";
-import * as Totp from "@yielded/auth/Totp";
+import { Auth, Passkey, Totp } from "@yielded/auth";
 
 import {
   StudioClaims,

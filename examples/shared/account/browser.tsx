@@ -1,19 +1,12 @@
 /// <reference types="vite/client" />
 
 import { RegistryProvider, useAtom, useAtomValue } from "@effect/atom-react";
+import { Email, Passkey, Password } from "@yielded/auth";
 import {
   PasskeyBrowserNotCompleted,
   PasskeyBrowserUnsupported,
   PasskeyBrowserBusy,
 } from "@yielded/auth-simplewebauthn/Browser";
-import { EmailActionRequired, EmailRejected } from "@yielded/auth/Email";
-import { PasskeyActionRequired, PasskeyRejected } from "@yielded/auth/Passkey";
-import {
-  NewPasswordRejected,
-  PasswordActionRequired,
-  PasswordCheckUnavailable,
-  PasswordRejected,
-} from "@yielded/auth/Password";
 import { Cause, Schema } from "effect";
 import type { AsyncResult } from "effect/unstable/reactivity";
 import { useState } from "react";
@@ -69,7 +62,7 @@ export const mountAccountApp = (client: AccountClient, options: AccountAppOption
       if (!Cause.isFailReason(reason)) continue;
       const error = reason.error;
 
-      if (Schema.is(NewPasswordRejected)(error)) {
+      if (Schema.is(Password.NewPasswordRejected)(error)) {
         message =
           error.reason === "too-short"
             ? `Use at least ${minimumPasswordLength} characters for your password.`
@@ -78,15 +71,18 @@ export const mountAccountApp = (client: AccountClient, options: AccountAppOption
               : error.reason === "contextual"
                 ? "Choose a password that does not contain your account name."
                 : "Choose a different password.";
-      } else if (Schema.is(PasswordCheckUnavailable)(error))
+      } else if (Schema.is(Password.PasswordCheckUnavailable)(error))
         message = "Password screening is unavailable. Please try again shortly.";
-      else if (Schema.is(PasswordActionRequired)(error) || Schema.is(EmailActionRequired)(error))
+      else if (
+        Schema.is(Password.PasswordActionRequired)(error) ||
+        Schema.is(Email.EmailActionRequired)(error)
+      )
         message = "Please sign in again before continuing.";
-      else if (Schema.is(EmailRejected)(error))
+      else if (Schema.is(Email.EmailRejected)(error))
         message = "That code is incorrect or expired. Try again, or request a new code.";
       else if (Schema.is(FlowExpired)(error))
         message = "This code has expired. Request a new code.";
-      else if (Schema.is(PasswordRejected)(error)) message = fallback;
+      else if (Schema.is(Password.PasswordRejected)(error)) message = fallback;
       else if (Schema.is(PasskeyBrowserNotCompleted)(error))
         message = "The passkey prompt was closed or timed out. You can try again.";
       else if (Schema.is(PasskeyBrowserUnsupported)(error))
@@ -94,9 +90,9 @@ export const mountAccountApp = (client: AccountClient, options: AccountAppOption
           "Passkeys aren’t available in this browser. Try a browser or device that supports them.";
       else if (Schema.is(PasskeyBrowserBusy)(error))
         message = "Finish the open passkey prompt first.";
-      else if (Schema.is(PasskeyActionRequired)(error))
+      else if (Schema.is(Passkey.PasskeyActionRequired)(error))
         message = "Your session could not authorize this request. Sign in again to continue.";
-      else if (Schema.is(PasskeyRejected)(error))
+      else if (Schema.is(Passkey.PasskeyRejected)(error))
         message = "That passkey request could not be completed. Please try again.";
     }
 

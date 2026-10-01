@@ -17,7 +17,9 @@ export default defineConfig({
           label: "Start",
           items: [
             { label: "Getting started", slug: "guide/getting-started" },
-            { label: "How it fits together", slug: "guide/authentication" },
+            { label: "Choose how much you own", slug: "guide/storage" },
+            { label: "How sign-in works", slug: "guide/authentication" },
+            { label: "Examples", slug: "guide/examples" },
           ],
         },
         {
@@ -46,7 +48,6 @@ export default defineConfig({
             { label: "MCP authorization", link: "/guide/oauth/#authorize-mcp-clients" },
             { label: "HTTP & client state", slug: "guide/http-and-client" },
             { label: "Adapters & persistence", slug: "reference/adapters" },
-            { label: "Examples", slug: "guide/examples" },
           ],
         },
         {

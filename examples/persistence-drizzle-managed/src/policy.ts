@@ -1,23 +1,4 @@
-import { AuthRequest } from "@yielded/auth/Auth";
-import { EmailActionEvidence, EmailActionRequired, EmailUnavailable } from "@yielded/auth/Email";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
-import {
-  PasskeyActionEvidence,
-  PasskeyActionRequired,
-  PasskeyUnavailable,
-} from "@yielded/auth/Passkey";
-import {
-  PasswordActionEvidence,
-  PasswordActionRequired,
-  PasswordPersistence,
-  PasswordUnavailable,
-} from "@yielded/auth/Password";
-import {
-  AuthenticationAuthority,
-  AuthenticationFlowId,
-  SecurityRevision,
-} from "@yielded/auth/Sessions";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Auth, Email, Hooks, Passkey, Password, Sessions, WebCrypto } from "@yielded/auth";
 import { and, eq, getTableColumns } from "drizzle-orm";
 import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
@@ -33,21 +14,21 @@ import { authSchema } from "./schema";
 
 const SessionReader = AppAuth.sessions
   .statefulLayer(sessionConfiguration.policy(AppAuth.sessions.moduleId))
-  .pipe(Layer.provide([layerWebCrypto, LifecycleHooks.empty]));
+  .pipe(Layer.provide([WebCrypto.layerWebCrypto, Hooks.LifecycleHooks.empty]));
 
 const EmailActions = Layer.effect(
-  EmailActionEvidence,
+  Email.EmailActionEvidence,
   Effect.gen(function* () {
     const sessions = yield* AppAuth.sessions.SessionStrategy;
 
-    return EmailActionEvidence.of({
+    return Email.EmailActionEvidence.of({
       verify: Effect.fn("Customers.authorizeEmailVerification")(
         function* ({ invocation, challenge }) {
-          const request = yield* Effect.serviceOption(AuthRequest);
+          const request = yield* Effect.serviceOption(Auth.AuthRequest);
           const token = Option.isSome(request) ? request.value.credentials.session : undefined;
 
           if (invocation._tag !== "Authenticated" || token === undefined)
-            return yield* EmailActionRequired.make({});
+            return yield* Email.EmailActionRequired.make({});
           const source = yield* sessions.inspect(token);
           const original = source.provenance.evidence;
 
@@ -71,21 +52,21 @@ const EmailActions = Layer.effect(
                 ),
             )
           )
-            return yield* EmailActionRequired.make({});
+            return yield* Email.EmailActionRequired.make({});
 
           // Preserve the original authentication time and factors, including for an older valid session.
           return {
             evidence: {
               ...original,
               revision: challenge.revision,
-              flowId: AuthenticationFlowId.make(challenge.commandId),
+              flowId: Sessions.AuthenticationFlowId.make(challenge.commandId),
               bindingDigest: challenge.bindingDigest,
             },
             requirement: confirmsRegisteredAddress ? sessionRequirement : requirement,
           };
         },
         Effect.mapError((error) =>
-          Schema.is(EmailActionRequired)(error) ? error : EmailUnavailable.make({}),
+          Schema.is(Email.EmailActionRequired)(error) ? error : Email.EmailUnavailable.make({}),
         ),
       ),
     });
@@ -94,26 +75,26 @@ const EmailActions = Layer.effect(
 
 const RecoveryCredential = Schema.Struct({
   credentialId: Schema.NonEmptyString,
-  credentialRevision: SecurityRevision,
+  credentialRevision: Sessions.SecurityRevision,
 });
 
 const PasswordActions = Layer.effect(
-  PasswordActionEvidence,
+  Password.PasswordActionEvidence,
   Effect.gen(function* () {
-    const passwords = yield* PasswordPersistence;
-    const authority = yield* AuthenticationAuthority;
+    const passwords = yield* Password.PasswordPersistence;
+    const authority = yield* Sessions.AuthenticationAuthority;
     const db = yield* Drizzle.makeWithDefaults({});
     const emails = authSchema.emailCredentials;
     const columns = getTableColumns(emails);
 
-    return PasswordActionEvidence.of({
+    return Password.PasswordActionEvidence.of({
       verify: Effect.fn("Customers.authorizePasswordChange")(
         function* ({ challenge, currentPasswordEvidence, recovery }) {
           if (challenge.action === "change-password" && currentPasswordEvidence !== undefined) {
             return {
               evidence: {
                 ...currentPasswordEvidence,
-                flowId: AuthenticationFlowId.make(challenge.commandId),
+                flowId: Sessions.AuthenticationFlowId.make(challenge.commandId),
                 bindingDigest: challenge.bindingDigest,
               },
               requirement,
@@ -127,7 +108,7 @@ const PasswordActions = Layer.effect(
             recovery.binding.revision.subjectId !== challenge.revision.subjectId ||
             !(yield* passwords.checkReset(recovery))
           )
-            return yield* PasswordActionRequired.make({});
+            return yield* Password.PasswordActionRequired.make({});
 
           // This app's single-factor recovery policy requires its independently verified email credential.
           const rows = yield* db
@@ -143,7 +124,7 @@ const PasswordActions = Layer.effect(
               ),
             );
 
-          if (rows.length !== 1) return yield* PasswordActionRequired.make({});
+          if (rows.length !== 1) return yield* Password.PasswordActionRequired.make({});
           const email = yield* Schema.decodeUnknownEffect(RecoveryCredential)(rows[0]);
 
           const revision = yield* authority.capture(challenge.revision.subjectId, [
@@ -152,12 +133,12 @@ const PasswordActions = Layer.effect(
           ]);
 
           if (revision.securityRevision !== challenge.revision.securityRevision)
-            return yield* PasswordActionRequired.make({});
+            return yield* Password.PasswordActionRequired.make({});
 
           return {
             evidence: {
               revision,
-              flowId: AuthenticationFlowId.make(challenge.commandId),
+              flowId: Sessions.AuthenticationFlowId.make(challenge.commandId),
               bindingDigest: challenge.bindingDigest,
               proofs: [
                 {
@@ -174,7 +155,9 @@ const PasswordActions = Layer.effect(
           };
         },
         Effect.mapError((error) =>
-          Schema.is(PasswordActionRequired)(error) ? error : PasswordUnavailable.make({}),
+          Schema.is(Password.PasswordActionRequired)(error)
+            ? error
+            : Password.PasswordUnavailable.make({}),
         ),
       ),
     });
@@ -182,18 +165,18 @@ const PasswordActions = Layer.effect(
 );
 
 const PasskeyActions = Layer.effect(
-  PasskeyActionEvidence,
+  Passkey.PasskeyActionEvidence,
   Effect.gen(function* () {
     const sessions = yield* AppAuth.sessions.SessionStrategy;
 
-    return PasskeyActionEvidence.of({
+    return Passkey.PasskeyActionEvidence.of({
       verify: Effect.fn("Customers.authorizePasskey")(
         function* ({ invocation, challenge }) {
-          const request = yield* Effect.serviceOption(AuthRequest);
+          const request = yield* Effect.serviceOption(Auth.AuthRequest);
           const token = Option.isSome(request) ? request.value.credentials.session : undefined;
 
           if (invocation._tag !== "Authenticated" || token === undefined)
-            return yield* PasskeyActionRequired.make({});
+            return yield* Passkey.PasskeyActionRequired.make({});
           const source = yield* sessions.inspect(token);
           const original = source.provenance.evidence;
 
@@ -211,20 +194,22 @@ const PasskeyActions = Layer.effect(
                 ),
             )
           )
-            return yield* PasskeyActionRequired.make({});
+            return yield* Passkey.PasskeyActionRequired.make({});
 
           return {
             evidence: {
               ...original,
               revision: challenge.revision,
-              flowId: AuthenticationFlowId.make(challenge.flowId),
+              flowId: Sessions.AuthenticationFlowId.make(challenge.flowId),
               bindingDigest: challenge.bindingDigest,
             },
             requirement: challenge.action === "remove" ? requirement : sessionRequirement,
           };
         },
         Effect.mapError((error) =>
-          Schema.is(PasskeyActionRequired)(error) ? error : PasskeyUnavailable.make({}),
+          Schema.is(Passkey.PasskeyActionRequired)(error)
+            ? error
+            : Passkey.PasskeyUnavailable.make({}),
         ),
       ),
     });

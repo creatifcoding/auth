@@ -1,5 +1,4 @@
-import { Auth } from "@yielded/auth";
-import { Password } from "@yielded/auth/strategies";
+import { Auth, Password } from "@yielded/auth";
 
 import { accountStrategies, sessionConfiguration } from "../../shared/account/auth";
 import { emailProofPolicy } from "../../shared/account/contract";

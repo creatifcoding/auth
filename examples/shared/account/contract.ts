@@ -1,37 +1,17 @@
-import { AuthContract } from "@yielded/auth/contracts";
 import {
-  EmailActionRequired,
-  EmailCommandId,
-  EmailMethodUnsupported,
-  EmailRejected,
-  EmailUnavailable,
-} from "@yielded/auth/Email";
-import { RequestBindingFlowId, RequestBindingPublic } from "@yielded/auth/Operations";
-import * as PasskeyContract from "@yielded/auth/PasskeyContract";
-import {
-  NewPasswordRejected,
-  PasswordActionRequired,
-  PasswordCheckUnavailable,
-  PasswordCommandId,
-  PasswordMethodUnsupported,
-  PasswordRejected,
-  PasswordUnavailable,
-} from "@yielded/auth/Password";
-import {
-  defaultProofPolicy,
-  ProofContinuation,
-  ProofContinuationId,
-  ProofId,
-  ProofReference,
-  ProofRequestId,
-  ProofRequestReceipt,
-} from "@yielded/auth/Proofs";
-import { Email } from "@yielded/auth/Schema";
-import { AuthenticationFlowId, SessionInvalidationWindow } from "@yielded/auth/Sessions";
+  AuthContract,
+  Email,
+  Operations,
+  PasskeyContract,
+  Password,
+  Proofs,
+  Schema as AuthSchema,
+  Sessions,
+} from "@yielded/auth";
 import { Schema } from "effect";
 
 export const minimumPasswordLength = 8;
-export const emailProofPolicy = defaultProofPolicy;
+export const emailProofPolicy = Proofs.defaultProofPolicy;
 
 export const Registration = Schema.Struct({
   displayName: Schema.NonEmptyString.check(Schema.isMaxLength(80)),
@@ -39,38 +19,44 @@ export const Registration = Schema.Struct({
 
 export const Claims = Schema.Struct({
   displayName: Schema.String,
-  email: Email,
+  email: AuthSchema.Email,
   emailVerified: Schema.Boolean,
 });
 
-const email = Schema.String.check(Schema.isMaxLength(320)).pipe(Schema.decodeTo(Email));
+const email = Schema.String.check(Schema.isMaxLength(320)).pipe(Schema.decodeTo(AuthSchema.Email));
 const password = Schema.RedactedFromValue(Schema.String.check(Schema.isMaxLength(4096)));
 const secret = Schema.RedactedFromValue(Schema.String.check(Schema.isMaxLength(4096)));
 
 export const PasswordFailure = Schema.Union([
-  PasswordRejected,
-  PasswordUnavailable,
-  PasswordActionRequired,
-  PasswordMethodUnsupported,
-  NewPasswordRejected,
-  PasswordCheckUnavailable,
+  Password.PasswordRejected,
+  Password.PasswordUnavailable,
+  Password.PasswordActionRequired,
+  Password.PasswordMethodUnsupported,
+  Password.NewPasswordRejected,
+  Password.PasswordCheckUnavailable,
 ]);
 
 const EmailFailure = Schema.Union([
-  EmailRejected,
-  EmailUnavailable,
-  EmailActionRequired,
-  EmailMethodUnsupported,
+  Email.EmailRejected,
+  Email.EmailUnavailable,
+  Email.EmailActionRequired,
+  Email.EmailMethodUnsupported,
 ]);
 
-const mutationResult = Schema.Struct({ invalidation: SessionInvalidationWindow });
-const continuationResult = Schema.Struct({ continuation: ProofContinuation });
-const resetBase = { flowId: AuthenticationFlowId, email };
-const verifyBase = { flowId: RequestBindingFlowId, commandId: EmailCommandId, email };
+const mutationResult = Schema.Struct({ invalidation: Sessions.SessionInvalidationWindow });
+const continuationResult = Schema.Struct({ continuation: Proofs.ProofContinuation });
+const resetBase = { flowId: Sessions.AuthenticationFlowId, email };
+
+const verifyBase = {
+  flowId: Operations.RequestBindingFlowId,
+  commandId: Email.EmailCommandId,
+  email,
+};
+
 const passkeys = PasskeyContract.makeManagement("customers/passkeys").operations;
 
 export const RegisterInput = Schema.Struct({
-  requestId: PasswordCommandId,
+  requestId: Password.PasswordCommandId,
   email,
   newPassword: password,
   registration: Registration,
@@ -132,15 +118,19 @@ export const accountActions = <
     strategy: "password",
   }),
   requestReset: AuthContract.action({
-    payload: Schema.Struct({ ...resetBase, requestId: ProofRequestId, locale: Schema.String }),
-    success: ProofRequestReceipt,
+    payload: Schema.Struct({
+      ...resetBase,
+      requestId: Proofs.ProofRequestId,
+      locale: Schema.String,
+    }),
+    success: Proofs.ProofRequestReceipt,
     error: PasswordFailure,
     mode: "mutation",
     replay: "idempotent",
     strategy: "password",
   }),
   verifyReset: AuthContract.action({
-    payload: Schema.Struct({ ...resetBase, reference: ProofReference, secret }),
+    payload: Schema.Struct({ ...resetBase, reference: Proofs.ProofReference, secret }),
     success: continuationResult,
     error: PasswordFailure,
     mode: "mutation",
@@ -151,8 +141,8 @@ export const accountActions = <
   completeReset: AuthContract.action({
     payload: Schema.Struct({
       ...resetBase,
-      commandId: PasswordCommandId,
-      continuationId: ProofContinuationId,
+      commandId: Password.PasswordCommandId,
+      continuationId: Proofs.ProofContinuationId,
       newPassword: password,
     }),
     success: mutationResult,
@@ -164,16 +154,20 @@ export const accountActions = <
     requestFields: { credential: "proof-continuation" },
   }),
   beginEmailAddress: AuthContract.action({
-    payload: Schema.Struct({ flowId: RequestBindingFlowId }),
-    success: RequestBindingPublic,
+    payload: Schema.Struct({ flowId: Operations.RequestBindingFlowId }),
+    success: Operations.RequestBindingPublic,
     error: EmailFailure,
     mode: "mutation",
     credentials: true,
     strategy: "email",
   }),
   requestEmailVerification: AuthContract.action({
-    payload: Schema.Struct({ ...verifyBase, requestId: ProofRequestId, locale: Schema.String }),
-    success: ProofRequestReceipt,
+    payload: Schema.Struct({
+      ...verifyBase,
+      requestId: Proofs.ProofRequestId,
+      locale: Schema.String,
+    }),
+    success: Proofs.ProofRequestReceipt,
     error: EmailFailure,
     mode: "mutation",
     replay: "idempotent",
@@ -183,11 +177,11 @@ export const accountActions = <
   resendEmailVerification: AuthContract.action({
     payload: Schema.Struct({
       ...verifyBase,
-      requestId: ProofRequestId,
+      requestId: Proofs.ProofRequestId,
       locale: Schema.String,
-      supersedes: ProofId,
+      supersedes: Proofs.ProofId,
     }),
-    success: ProofRequestReceipt,
+    success: Proofs.ProofRequestReceipt,
     error: EmailFailure,
     mode: "mutation",
     replay: "idempotent",
@@ -195,7 +189,7 @@ export const accountActions = <
     requestFields: { requestBinding: "request-binding" },
   }),
   verifyEmailAddress: AuthContract.action({
-    payload: Schema.Struct({ ...verifyBase, reference: ProofReference, secret }),
+    payload: Schema.Struct({ ...verifyBase, reference: Proofs.ProofReference, secret }),
     success: continuationResult,
     error: EmailFailure,
     mode: "mutation",
@@ -205,8 +199,10 @@ export const accountActions = <
     requestFields: { requestBinding: "request-binding" },
   }),
   completeEmailVerification: AuthContract.action({
-    payload: Schema.Struct({ ...verifyBase, continuationId: ProofContinuationId }),
-    success: Schema.Struct({ invalidation: Schema.optionalKey(SessionInvalidationWindow) }),
+    payload: Schema.Struct({ ...verifyBase, continuationId: Proofs.ProofContinuationId }),
+    success: Schema.Struct({
+      invalidation: Schema.optionalKey(Sessions.SessionInvalidationWindow),
+    }),
     error: EmailFailure,
     mode: "mutation",
     replay: "single-use",

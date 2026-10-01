@@ -1,65 +1,94 @@
 ---
 title: Yielded Auth
-description: Composable authentication, sessions, and identity workflows for Effect.
+description: Authentication for Effect. Start with managed tables, then take over your schema or storage without changing your auth API.
 template: splash
 hero:
-  title: Authentication, composed with Effect.
-  tagline: Keep your identity model. Choose your methods.
+  title: Authentication you can own, one layer at a time.
+  tagline: Passwords, passkeys, one-time codes, and OAuth for Effect. Start with managed tables, then map your own schema or write the storage yourself. Your auth API stays the same.
   actions:
     - text: Get started
       link: /auth/guide/getting-started/
       icon: right-arrow
       variant: primary
-    - text: How it fits together
+    - text: How sign-in works
       link: /auth/guide/authentication/
       variant: secondary
 ---
 
-import { LinkCard, CardGrid, TabItem, Tabs } from "@astrojs/starlight/components";
 import { Snippet } from "@yielded/starlight-theme/components";
 
-<Tabs>
-  <TabItem label="auth-contract.ts">
-    <Snippet src="../README.md" region="auth-contract" title={false} />
-  </TabItem>
-  <TabItem label="auth.ts">
-    <Snippet src="../README.md" region="auth-server" title={false} />
-  </TabItem>
-  <TabItem label="auth-client.ts">
-    <Snippet src="../README.md" region="auth-client" title={false} />
-  </TabItem>
-</Tabs>
+import CallSites from "../../components/CallSites.astro";
+import MethodIndex from "../../components/MethodIndex.astro";
+import OwnershipLadder from "../../components/OwnershipLadder.astro";
 
-One shared contract. Call `auth.signIn` in a server Effect, `client.auth.signIn` in a client
-Effect, or use the generated `auth.signIn` atom. Supply your account and persistence Layers at
-the server boundary.
+## Choose how much you own
 
-## Guides
+Each level hands you one more layer of the stack. Move between them by changing
+Layers; nothing that calls auth has to change.
 
-<CardGrid>
-  <LinkCard
-    title="Sessions"
-    description="Configure session lifetimes, read a session, and sign out."
-    href="/auth/guide/sessions/"
-  />
-  <LinkCard
-    title="Passkeys"
-    description="Begin a passkey ceremony, call the browser, and verify the response."
-    href="/auth/guide/passkeys/"
-  />
-  <LinkCard
-    title="OAuth"
-    description="Understand OAuth sign-in, application sessions, and provider API access."
-    href="/auth/guide/oauth/"
-  />
-  <LinkCard
-    title="HTTP & client state"
-    description="Mount a shared auth API, configure cookies, and compose Effect Atom workflows."
-    href="/auth/guide/http-and-client/"
-  />
-  <LinkCard
-    title="Examples"
-    description="Application compositions for authentication, persistence, and HTTP clients."
-    href="/auth/guide/examples/"
-  />
-</CardGrid>
+<OwnershipLadder />
+
+## One contract, every call site
+
+Declare session claims and the actions clients may call. Your server, its HTTP
+routes, and your client all use the same definition.
+
+<CallSites
+  sites={[
+    { label: "Server handler", code: "yield* auth.signIn({ email, password })" },
+    { label: "HTTP route", code: "POST /auth/signIn" },
+    { label: "Client Effect", code: "yield* client.auth.signIn({ email, password })" },
+    { label: "React", code: "const [result, signIn] = useAtom(auth.signIn)" },
+  ]}
+>
+  <Snippet src="../README.md" region="auth-contract" />
+</CallSites>
+
+Each call takes the same input and returns the same typed result or failure.
+Clients can reach only the actions you declare.
+
+## Install the methods you need
+
+<MethodIndex
+  methods={[
+    {
+      name: "Passwords",
+      href: "/auth/guide/passwords/",
+      summary: "Registration, sign-in, and recovery.",
+    },
+    { name: "Passkeys", href: "/auth/guide/passkeys/", summary: "WebAuthn sign-in and enrollment." },
+    {
+      name: "Email codes & magic links",
+      href: "/auth/guide/codes/",
+      summary: "One-time sign-in by email.",
+    },
+    { name: "Phone codes", href: "/auth/guide/phone/", summary: "One-time sign-in by SMS." },
+    {
+      name: "Two-factor",
+      href: "/auth/guide/totp/",
+      summary: "Authenticator apps after a first factor.",
+    },
+    {
+      name: "OAuth & OIDC",
+      href: "/auth/guide/oauth/",
+      summary: "GitHub, Google, or any OpenID provider.",
+    },
+  ]}
+>
+
+```ts title="auth.ts"
+export const AppAuth = Auth.make(AuthApi, {
+  sessions: Sessions.stateful(),
+  strategies: {
+    password: Password.make(),
+    passkey: Passkey.make(),
+  },
+  defaultStrategy: "password",
+});
+```
+
+Each method adds the services it needs to the type of `AppAuth.layer`, so the
+compiler lists what your application still has to provide.
+[Sessions](/auth/guide/sessions/) can be stored, signed, or both.
+
+</MethodIndex>

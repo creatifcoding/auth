@@ -1,26 +1,21 @@
 import { BunRuntime } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
+import {
+  Auth,
+  Hooks,
+  Operations,
+  PhoneOtp,
+  Proofs,
+  Sessions,
+  SmsDelivery,
+  WebCrypto,
+} from "@yielded/auth";
 import { phonePersistenceLayer } from "@yielded/auth-persistence-drizzle";
 import {
   makeAuthenticationAuthorityServices,
   makePhonePersistenceServices,
   makeProofPersistenceServices,
 } from "@yielded/auth-persistence-drizzle/SqliteBun";
-import { AuthRequest, RequestBindingConfig } from "@yielded/auth/Auth";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
-import { guest, type AuthCredentialCommand, type AuthInvocation } from "@yielded/auth/Operations";
-import {
-  PhoneActionEvidence,
-  PhoneActionRequired,
-  PhoneDeliveryEligibility,
-  PhoneOtpUnavailable,
-  PhoneRequestContext,
-} from "@yielded/auth/PhoneOtp";
-import { ProofPersistence, ProofKeys } from "@yielded/auth/Proofs";
-import { AuthenticationAuthority } from "@yielded/auth/Sessions";
-import { SmsDelivery, type SmsMessage } from "@yielded/auth/SmsDelivery";
-import { PhoneOtp } from "@yielded/auth/strategies";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { eq } from "drizzle-orm";
 import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Effect, Layer, Redacted } from "effect";
@@ -72,10 +67,10 @@ export const phoneConsumer = Effect.gen(function* () {
     isConstraintConflict: () => false,
   });
 
-  const sent: SmsMessage[] = [];
+  const sent: SmsDelivery.SmsMessage[] = [];
   let failNext = false;
 
-  const sender = Layer.succeed(SmsDelivery, {
+  const sender = Layer.succeed(SmsDelivery.SmsDelivery, {
     send: (message) =>
       Effect.sync(() => {
         if (failNext) {
@@ -90,21 +85,21 @@ export const phoneConsumer = Effect.gen(function* () {
   });
 
   const base = Layer.mergeAll(
-    layerWebCrypto,
-    LifecycleHooks.empty,
-    RequestBindingConfig.layer({ keyring, lifetimeMillis: 120_000, generation: 1 }),
+    WebCrypto.layerWebCrypto,
+    Hooks.LifecycleHooks.empty,
+    Auth.RequestBindingConfig.layer({ keyring, lifetimeMillis: 120_000, generation: 1 }),
     sender,
-    ProofKeys.layer(keyring),
+    Proofs.ProofKeys.layer(keyring),
     PhoneOtp.Template.layer({ render: (code) => code }),
-    Layer.succeed(PhoneDeliveryEligibility, {
+    Layer.succeed(PhoneOtp.PhoneDeliveryEligibility, {
       allowed: (number) => Effect.succeed(number.startsWith("+2782")),
     }),
   );
 
   const ports = Layer.mergeAll(
     phoneStorage,
-    Layer.succeed(ProofPersistence, proofServices.proofPersistence),
-    Layer.succeed(AuthenticationAuthority, authority.authenticationAuthority),
+    Layer.succeed(Proofs.ProofPersistence, proofServices.proofPersistence),
+    Layer.succeed(Sessions.AuthenticationAuthority, authority.authenticationAuthority),
     Layer.succeed(phone.ClaimsForPhone, {
       resolve: (snapshot) =>
         database
@@ -114,7 +109,7 @@ export const phoneConsumer = Effect.gen(function* () {
           .pipe(
             Effect.flatMap((rows) =>
               rows[0] === undefined
-                ? Effect.fail(PhoneOtpUnavailable.make({}))
+                ? Effect.fail(PhoneOtp.PhoneOtpUnavailable.make({}))
                 : Effect.succeed({
                     customerNumber: rows[0].customerNo,
                     segment:
@@ -123,7 +118,7 @@ export const phoneConsumer = Effect.gen(function* () {
                         : ("retail" as const),
                   }),
             ),
-            Effect.mapError(() => PhoneOtpUnavailable.make({})),
+            Effect.mapError(() => PhoneOtp.PhoneOtpUnavailable.make({})),
           ),
     }),
   );
@@ -135,19 +130,19 @@ export const phoneConsumer = Effect.gen(function* () {
     .pipe(Layer.provide(Layer.mergeAll(ports, strategy)), Layer.provide(base));
 
   const actionEvidence = Layer.effect(
-    PhoneActionEvidence,
+    PhoneOtp.PhoneActionEvidence,
     Effect.map(sessions.SessionStrategy, (strategy) => ({
       verify: ({ invocation, challenge, proof }) =>
         Effect.gen(function* () {
           if (invocation._tag !== "Authenticated" || proof === undefined)
-            return yield* PhoneActionRequired.make({});
+            return yield* PhoneOtp.PhoneActionRequired.make({});
 
           const inspected = yield* strategy
             .inspect(proof)
-            .pipe(Effect.mapError(() => PhoneActionRequired.make({})));
+            .pipe(Effect.mapError(() => PhoneOtp.PhoneActionRequired.make({})));
 
           if (inspected.provenance.evidence.revision.subjectId !== invocation.subjectId)
-            return yield* PhoneActionRequired.make({});
+            return yield* PhoneOtp.PhoneActionRequired.make({});
 
           const evidence = {
             ...inspected.provenance.evidence,
@@ -157,7 +152,7 @@ export const phoneConsumer = Effect.gen(function* () {
 
           const current = yield* authority.authenticationAuthority
             .requirements(evidence)
-            .pipe(Effect.mapError(() => PhoneActionRequired.make({})));
+            .pipe(Effect.mapError(() => PhoneOtp.PhoneActionRequired.make({})));
 
           return { evidence, requirement: current };
         }),
@@ -170,21 +165,21 @@ export const phoneConsumer = Effect.gen(function* () {
     const auth = yield* shopAuth.make,
       sessionStrategy = yield* sessions.SessionStrategy;
 
-    const commands: AuthCredentialCommand[] = [];
+    const commands: Operations.AuthCredentialCommand[] = [];
 
-    const collect = (items: ReadonlyArray<AuthCredentialCommand>) =>
+    const collect = (items: ReadonlyArray<Operations.AuthCredentialCommand>) =>
       Effect.sync(() => {
         commands.push(...items);
       });
 
-    const as = <A, E, R>(invocation: AuthInvocation, effect: Effect.Effect<A, E, R>) =>
+    const as = <A, E, R>(invocation: Operations.AuthInvocation, effect: Effect.Effect<A, E, R>) =>
       effect.pipe(
-        Effect.provideService(AuthRequest, {
+        Effect.provideService(Auth.AuthRequest, {
           invocation,
           credentials: {},
           credentialCommandSink: collect,
         }),
-        Effect.provideService(PhoneRequestContext, {
+        Effect.provideService(PhoneOtp.PhoneRequestContext, {
           networkKey: Redacted.make("trusted-gateway/network-a"),
         }),
       );
@@ -200,7 +195,7 @@ export const phoneConsumer = Effect.gen(function* () {
     const begin = (
       action: "register" | "verify" | "change",
       number: string,
-      invocation: AuthInvocation,
+      invocation: Operations.AuthInvocation,
       sourcePhoneNumber?: string,
     ) =>
       Effect.gen(function* () {
@@ -221,7 +216,7 @@ export const phoneConsumer = Effect.gen(function* () {
 
     const complete = (
       started: Effect.Success<ReturnType<typeof begin>>,
-      invocation: AuthInvocation,
+      invocation: Operations.AuthInvocation,
       actionProof?: string,
     ) =>
       Effect.gen(function* () {
@@ -241,10 +236,10 @@ export const phoneConsumer = Effect.gen(function* () {
         );
       });
 
-    let registered = yield* begin("register", "+27820000001", guest);
+    let registered = yield* begin("register", "+27820000001", Operations.guest);
 
     const wrong = yield* as(
-      guest,
+      Operations.guest,
       auth.completeLifecycle({
         ...registered.input,
         requestBinding: registered.binding,
@@ -267,15 +262,15 @@ export const phoneConsumer = Effect.gen(function* () {
       reference: registered.challenge.reference,
     };
 
-    const resent = yield* as(guest, auth.resend(resendInput));
+    const resent = yield* as(Operations.guest, auth.resend(resendInput));
     const delivered = sent.length;
-    const duplicateResend = yield* as(guest, auth.resend(resendInput));
+    const duplicateResend = yield* as(Operations.guest, auth.resend(resendInput));
 
     assert(
       duplicateResend.reference.proofId === resent.reference.proofId && sent.length === delivered,
       "resend retry duplicated SMS",
     );
-    const superseded = yield* complete(registered, guest).pipe(Effect.result);
+    const superseded = yield* complete(registered, Operations.guest).pipe(Effect.result);
 
     assert(superseded._tag === "Failure", "superseded code accepted");
     registered = {
@@ -283,7 +278,7 @@ export const phoneConsumer = Effect.gen(function* () {
       input: { ...registered.input, requestId: resendInput.requestId },
       challenge: resent,
     };
-    const registration = yield* complete(registered, guest);
+    const registration = yield* complete(registered, Operations.guest);
 
     assert(
       registration._tag === "Registered" && registration.completion._tag === "Authenticated",
@@ -305,7 +300,7 @@ export const phoneConsumer = Effect.gen(function* () {
       assurance: initial.assurance,
     };
 
-    const replay = yield* complete(registered, guest).pipe(Effect.result);
+    const replay = yield* complete(registered, Operations.guest).pipe(Effect.result);
 
     assert(replay._tag === "Failure", "registration replay accepted");
     const verify = yield* begin("verify", "+27820000002", caller);
@@ -318,7 +313,10 @@ export const phoneConsumer = Effect.gen(function* () {
     );
 
     const signIn = Effect.fn("PhoneConsumer.signIn")(function* (number: string) {
-      const challenge = yield* as(guest, auth.signIn({ phoneNumber: number, locale: "en-ZA" }));
+      const challenge = yield* as(
+        Operations.guest,
+        auth.signIn({ phoneNumber: number, locale: "en-ZA" }),
+      );
 
       const requestBinding = token("request-binding"),
         message = sent.find((m) => m.id === challenge.reference.proofId);
@@ -326,7 +324,7 @@ export const phoneConsumer = Effect.gen(function* () {
       assert(message !== undefined, "sign-in was not delivered");
 
       const result = yield* as(
-        guest,
+        Operations.guest,
         auth.completeSignIn({
           flowId: challenge.flowId,
           phoneNumber: number,
@@ -359,10 +357,10 @@ export const phoneConsumer = Effect.gen(function* () {
     assert(after.session.subjectId === initial.subjectId, "change changed customer identity");
     const beforeConflict = sent.length;
 
-    yield* begin("register", "+27820000002", guest);
+    yield* begin("register", "+27820000002", Operations.guest);
     assert(sent.length === beforeConflict, "retired number was silently relinked");
     failNext = true;
-    const failed = yield* begin("register", "+27820000004", guest);
+    const failed = yield* begin("register", "+27820000004", Operations.guest);
 
     assert(
       !sent.some((m) => m.id === failed.challenge.reference.proofId),
@@ -406,8 +404,8 @@ phoneConsumer.pipe(
   Effect.provide(
     Layer.mergeAll(
       SqliteClient.layer({ filename: ":memory:" }),
-      LifecycleHooks.empty,
-      layerWebCrypto,
+      Hooks.LifecycleHooks.empty,
+      WebCrypto.layerWebCrypto,
     ),
   ),
   Effect.scoped,

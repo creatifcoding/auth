@@ -1,5 +1,4 @@
-import { makeStrategy } from "@yielded/auth/Auth";
-import { makeOperation, type AuthOperationResult } from "@yielded/auth/Operations";
+import { Auth, Operations } from "@yielded/auth";
 import { Context, Effect, Layer } from "effect";
 
 import { PasswordFailure, RegisterResult } from "../../shared/account/contract";
@@ -15,13 +14,13 @@ export class AccountMethods extends Context.Service<
     readonly signIn: (
       input: typeof SignInInput.Type,
     ) => Effect.Effect<
-      AuthOperationResult<typeof AuthApi.sessions.CompletionResult.Type>,
+      Operations.AuthOperationResult<typeof AuthApi.sessions.CompletionResult.Type>,
       typeof PasswordFailure.Type
     >;
   }
 >()("customers/AccountMethods") {}
 
-const Register = makeOperation("customers/account/register", {
+const Register = Operations.makeOperation("customers/account/register", {
   payload: RegisterInput,
   success: RegisterResult,
   error: PasswordFailure,
@@ -30,7 +29,7 @@ const Register = makeOperation("customers/account/register", {
   replay: "idempotent",
 });
 
-const SignIn = makeOperation("customers/account/sign-in", {
+const SignIn = Operations.makeOperation("customers/account/sign-in", {
   payload: SignInInput,
   success: AuthApi.sessions.CompletionResult,
   error: PasswordFailure,
@@ -40,7 +39,7 @@ const SignIn = makeOperation("customers/account/sign-in", {
   credentials: true,
 });
 
-export const AccountStrategy = makeStrategy(
+export const AccountStrategy = Auth.makeStrategy(
   { register: Register.invoke, signIn: SignIn.invoke },
   Layer.merge(
     Register.handlerLayer(

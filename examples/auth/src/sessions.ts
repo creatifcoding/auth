@@ -1,14 +1,5 @@
 import { BunRuntime } from "@effect/platform-bun";
-import { LifecycleHooks } from "@yielded/auth/Hooks";
-import {
-  type AuthCredentialCommand,
-  AuthCredentialCommandCollector,
-  guest,
-  remoteGroup,
-} from "@yielded/auth/Operations";
-import { TokenDigest } from "@yielded/auth/Schema";
-import { AuthenticationEvidence, AuthenticationFlowId } from "@yielded/auth/Sessions";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
+import { Hooks, Operations, Schema as AuthSchema, Sessions, WebCrypto } from "@yielded/auth";
 import { DateTime, Effect, Encoding, Layer, Redacted, Schema } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
@@ -31,7 +22,7 @@ const keyring = {
   ],
 };
 
-const base = Layer.mergeAll(layerWebCrypto, LifecycleHooks.empty);
+const base = Layer.mergeAll(WebCrypto.layerWebCrypto, Hooks.LifecycleHooks.empty);
 const authority = Layer.unwrap(exampleAuthority).pipe(Layer.provide(base));
 
 const stateful = staffSessions
@@ -60,10 +51,10 @@ const program = Effect.gen(function* () {
     const handlers = application(strategy);
 
     yield* Effect.gen(function* () {
-      const captured: AuthCredentialCommand[] = [];
+      const captured: Operations.AuthCredentialCommand[] = [];
 
       const call = {
-        credentialCommandSink: (commands: ReadonlyArray<AuthCredentialCommand>) =>
+        credentialCommandSink: (commands: ReadonlyArray<Operations.AuthCredentialCommand>) =>
           Effect.sync(() => {
             captured.push(...commands);
           }),
@@ -71,9 +62,9 @@ const program = Effect.gen(function* () {
 
       const now = yield* DateTime.now;
 
-      const evidence: AuthenticationEvidence = {
-        flowId: AuthenticationFlowId.make(`example-${mode}`),
-        bindingDigest: TokenDigest.make("example-binding"),
+      const evidence: Sessions.AuthenticationEvidence = {
+        flowId: Sessions.AuthenticationFlowId.make(`example-${mode}`),
+        bindingDigest: AuthSchema.TokenDigest.make("example-binding"),
         revision: {
           subjectId,
           securityRevision: initialRevision,
@@ -92,14 +83,19 @@ const program = Effect.gen(function* () {
       };
 
       const input = {
-        evidence: yield* Schema.encodeEffect(AuthenticationEvidence)(evidence),
+        evidence: yield* Schema.encodeEffect(Sessions.AuthenticationEvidence)(evidence),
         claims: { tenant: "acme", staffNumber: "42" },
       };
 
       const complete = yield* staffSessions.operations.Complete.invoke(
         { _tag: "System", authority: "verified-example-method" },
         input,
-      ).pipe(Effect.provideService(AuthCredentialCommandCollector, call.credentialCommandSink));
+      ).pipe(
+        Effect.provideService(
+          Operations.AuthCredentialCommandCollector,
+          call.credentialCommandSink,
+        ),
+      );
 
       if (complete._tag !== "Authenticated")
         return yield* Effect.die(new Error("Example unexpectedly required another factor"));
@@ -111,7 +107,11 @@ const program = Effect.gen(function* () {
       if (issued?._tag !== "Issue")
         return yield* Effect.die(new Error("Example collector did not receive a session"));
       const token = Redacted.value(issued.credential);
-      const verified = yield* staffSessions.operations.Verify.invoke(guest, { credential: token });
+
+      const verified = yield* staffSessions.operations.Verify.invoke(Operations.guest, {
+        credential: token,
+      });
+
       const inspected = yield* (yield* staffSessions.SessionStrategy).inspect(issued.credential);
 
       if (
@@ -134,11 +134,16 @@ const program = Effect.gen(function* () {
         limit: 20,
       }).pipe(Effect.result);
 
-      const signOut = yield* staffSessions.operations.SignOut.invoke(guest, {
+      const signOut = yield* staffSessions.operations.SignOut.invoke(Operations.guest, {
         credential: token,
-      }).pipe(Effect.provideService(AuthCredentialCommandCollector, call.credentialCommandSink));
+      }).pipe(
+        Effect.provideService(
+          Operations.AuthCredentialCommandCollector,
+          call.credentialCommandSink,
+        ),
+      );
 
-      const afterSignOut = yield* staffSessions.operations.Verify.invoke(guest, {
+      const afterSignOut = yield* staffSessions.operations.Verify.invoke(Operations.guest, {
         credential: token,
       }).pipe(Effect.result);
 
@@ -158,16 +163,21 @@ const program = Effect.gen(function* () {
           }),
         ).pipe(Layer.provide(stateless));
 
-        const independentlyVerified = yield* staffSessions.operations.Verify.invoke(guest, {
-          credential: token,
-        }).pipe(Effect.provide(pureVerify));
+        const independentlyVerified = yield* staffSessions.operations.Verify.invoke(
+          Operations.guest,
+          {
+            credential: token,
+          },
+        ).pipe(Effect.provide(pureVerify));
 
-        const group = remoteGroup([staffSessions.operations.Verify], { allowInternal: true });
+        const group = Operations.remoteGroup([staffSessions.operations.Verify], {
+          allowInternal: true,
+        });
 
         const handlersRpc = group
           .toLayer({
             "example/staff/session/verify": staffSessions.operations.Verify.rpcHandler(() =>
-              Effect.succeed(guest),
+              Effect.succeed(Operations.guest),
             ),
           })
           .pipe(Layer.provide(pureVerify));

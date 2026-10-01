@@ -1,8 +1,6 @@
 import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
-import { Http, Client } from "@yielded/auth";
-import { CompromisedPasswords } from "@yielded/auth/Password";
-import { EmailProofDelivery } from "@yielded/auth/Proofs";
+import { Client, Http, Password, Proofs } from "@yielded/auth";
 import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
@@ -25,7 +23,7 @@ const program = Effect.gen(function* () {
   const directory = yield* fs.makeTempDirectoryScoped();
   const cookies = new Map<string, string>();
 
-  const delivery = EmailProofDelivery.layer({ vendorId: "test", idempotencyMillis: 0 }, () =>
+  const delivery = Proofs.EmailProofDelivery.layer({ vendorId: "test", idempotencyMillis: 0 }, () =>
     Effect.succeed({ _tag: "Accepted" } as const),
   );
 
@@ -34,7 +32,9 @@ const program = Effect.gen(function* () {
       DatabaseLive,
       KeysLive,
       delivery,
-      Layer.succeed(CompromisedPasswords, { check: () => Effect.succeed({ _tag: "Allowed" }) }),
+      Layer.succeed(Password.CompromisedPasswords, {
+        check: () => Effect.succeed({ _tag: "Allowed" }),
+      }),
     ]),
     Layer.provide(
       Layer.succeed(

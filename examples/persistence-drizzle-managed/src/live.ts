@@ -1,14 +1,5 @@
+import { Passkey, Password, Schema as AuthSchema, Sessions, WebCrypto } from "@yielded/auth";
 import { layer as layerSimpleWebAuthnPasskeyProtocol } from "@yielded/auth-simplewebauthn/Server";
-import { PasskeyConfig, PasskeyUnavailable } from "@yielded/auth/Passkey";
-import {
-  defaultPasswordPolicy,
-  NewPasswordCheck,
-  PasswordPersistence,
-  PasswordUnavailable,
-} from "@yielded/auth/Password";
-import { SubjectId } from "@yielded/auth/Schema";
-import { SessionInvalid, SessionUnavailable } from "@yielded/auth/Sessions";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { eq } from "drizzle-orm";
 import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Crypto, Effect, Layer, Option, Schema } from "effect";
@@ -45,13 +36,13 @@ const ProvisioningLive = Layer.effect(
             displayName: registration.displayName,
           });
 
-          return yield* Schema.decodeUnknownEffect(SubjectId)(id);
+          return yield* Schema.decodeUnknownEffect(AuthSchema.SubjectId)(id);
         },
-        Effect.mapError(() => PasswordUnavailable.make({})),
+        Effect.mapError(() => Password.PasswordUnavailable.make({})),
       ),
     };
   }),
-).pipe(Layer.provide(layerWebCrypto));
+).pipe(Layer.provide(WebCrypto.layerWebCrypto));
 
 const ClaimsLive = Layer.effect(
   AppAuth.strategies.password.ClaimsForPassword,
@@ -66,7 +57,8 @@ const ClaimsLive = Layer.effect(
             .from(customers)
             .where(eq(customers.id, credential.revision.subjectId));
 
-          if (rows.length !== 1 || !rows[0].enabled) return yield* PasswordUnavailable.make({});
+          if (rows.length !== 1 || !rows[0].enabled)
+            return yield* Password.PasswordUnavailable.make({});
 
           return yield* Schema.decodeUnknownEffect(Claims)({
             displayName: rows[0].displayName,
@@ -74,7 +66,7 @@ const ClaimsLive = Layer.effect(
             emailVerified: credential.identifierVerifiedAtMillis !== undefined,
           });
         },
-        Effect.mapError(() => PasswordUnavailable.make({})),
+        Effect.mapError(() => Password.PasswordUnavailable.make({})),
       ),
     };
   }),
@@ -83,7 +75,7 @@ const ClaimsLive = Layer.effect(
 const PasskeyClaimsLive = Layer.effect(
   AppAuth.strategies.passkey.ClaimsForPasskey,
   Effect.gen(function* () {
-    const passwords = yield* PasswordPersistence;
+    const passwords = yield* Password.PasswordPersistence;
     const claims = yield* AppAuth.strategies.password.ClaimsForPassword;
 
     return {
@@ -98,11 +90,11 @@ const PasskeyClaimsLive = Layer.effect(
             Option.isNone(current) ||
             current.value.revision.securityRevision !== credential.revision.securityRevision
           )
-            return yield* PasskeyUnavailable.make({});
+            return yield* Passkey.PasskeyUnavailable.make({});
 
           return yield* claims.resolve(current.value);
         },
-        Effect.mapError(() => PasskeyUnavailable.make({})),
+        Effect.mapError(() => Passkey.PasskeyUnavailable.make({})),
       ),
     };
   }),
@@ -113,7 +105,7 @@ const SessionClaimsLive = Layer.effect(
   AppAuth.sessions.StatefulSessionPersistence,
   Effect.gen(function* () {
     const sessions = yield* AppAuth.sessions.StatefulSessionPersistence;
-    const passwords = yield* PasswordPersistence;
+    const passwords = yield* Password.PasswordPersistence;
     const claims = yield* AppAuth.strategies.password.ClaimsForPassword;
 
     return {
@@ -132,12 +124,12 @@ const SessionClaimsLive = Layer.effect(
             current.value.revision.subjectId !== session.subjectId ||
             current.value.revision.securityRevision !== session.securityRevision
           )
-            return yield* SessionInvalid.make({});
+            return yield* Sessions.SessionInvalid.make({});
 
           return { ...session, claims: yield* claims.resolve(current.value) };
         },
         Effect.mapError((error) =>
-          Schema.is(SessionInvalid)(error) ? error : SessionUnavailable.make({}),
+          Schema.is(Sessions.SessionInvalid)(error) ? error : Sessions.SessionUnavailable.make({}),
         ),
       ),
     };
@@ -154,14 +146,17 @@ const ServicesLive = Layer.mergeAll(ClaimsLive, PasskeyClaimsLive, ActionPolicie
 // The host supplies SQL, delivery, proof keys, and compromised-password screening.
 export const AuthLive = AppAuth.layer.pipe(
   Layer.provide(
-    NewPasswordCheck.layer({ ...defaultPasswordPolicy, minimumCodePoints: minimumPasswordLength }),
+    Password.NewPasswordCheck.layer({
+      ...Password.defaultPasswordPolicy,
+      minimumCodePoints: minimumPasswordLength,
+    }),
   ),
   Layer.provide(layerSimpleWebAuthnPasskeyProtocol),
   Layer.provide(ServicesLive),
   Layer.provideMerge(DatabaseReady),
   Layer.provideMerge(HashingLive),
   Layer.provide(
-    PasskeyConfig.layer({
+    Passkey.PasskeyConfig.layer({
       id: "localhost",
       name: "Yielded Auth",
       origins: ["http://localhost:4181"],

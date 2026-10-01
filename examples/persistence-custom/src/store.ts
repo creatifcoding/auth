@@ -1,9 +1,4 @@
-import {
-  coordinateCommit,
-  hasCommitScope,
-  LifecycleHooks,
-  type CommitJournal,
-} from "@yielded/auth/Hooks";
+import { Hooks } from "@yielded/auth";
 import {
   Config,
   Context,
@@ -27,7 +22,7 @@ export class StoreLocked extends Schema.TaggedError<StoreLocked>()("StoreLocked"
   message: Schema.String,
 }) {}
 
-export interface StoreJournal extends CommitJournal {
+export interface StoreJournal extends Hooks.CommitJournal {
   /** Repeat time predicates after writing the snapshot, immediately before rename. */
   readonly beforeCommit: (check: (now: number) => boolean) => void;
 }
@@ -69,7 +64,7 @@ export class AccountStore extends Context.Service<
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const directory = yield* DataDirectory;
-      const hooks = yield* LifecycleHooks;
+      const hooks = yield* Hooks.LifecycleHooks;
       const mutex = yield* Semaphore.make(1);
       const filename = path.join(directory, "accounts.json");
       const lock = path.join(directory, "writer.lock");
@@ -154,9 +149,9 @@ export class AccountStore extends Context.Service<
           ),
         transaction: (body) =>
           Effect.gen(function* () {
-            if (yield* hasCommitScope) return yield* StoreUnavailable.make({});
+            if (yield* Hooks.hasCommitScope) return yield* StoreUnavailable.make({});
 
-            const result = yield* coordinateCommit(
+            const result = yield* Hooks.coordinateCommit(
               (journal) =>
                 mutex.withPermits(1)(
                   Effect.gen(function* () {
@@ -195,7 +190,7 @@ export class AccountStore extends Context.Service<
             ).pipe(Effect.catchTag("HookConfigurationError", () => StoreUnavailable.make({})));
 
             return result.value;
-          }).pipe(Effect.provideService(LifecycleHooks, hooks)),
+          }).pipe(Effect.provideService(Hooks.LifecycleHooks, hooks)),
       });
     }),
   ).pipe(Layer.provide(DataDirectory.layer));

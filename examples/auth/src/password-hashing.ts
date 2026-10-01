@@ -1,20 +1,13 @@
 import { BunRuntime } from "@effect/platform-bun";
+import { Password, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";
-import {
-  CompromisedPasswords,
-  EncodedPasswordHash,
-  NewPasswordCheck,
-  PasswordHashing,
-  PasswordKdfAdmission,
-} from "@yielded/auth/Password";
-import { layerWebCrypto } from "@yielded/auth/WebCrypto";
 import { Effect, Layer, Redacted } from "effect";
 
 // Disposable tiny corpus demonstrates explicit offline screening. A production
 // consumer supplies a maintained compromised/common-password corpus or service.
 const fixtureScreening = Layer.succeed(
-  CompromisedPasswords,
-  CompromisedPasswords.of({
+  Password.CompromisedPasswords,
+  Password.CompromisedPasswords.of({
     check: (password) =>
       Effect.succeed(
         Redacted.value(password) === "a commonly guessed password"
@@ -25,15 +18,15 @@ const fixtureScreening = Layer.succeed(
 );
 
 const hashing = PasswordCrypto.layer().pipe(
-  Layer.provide(PasswordKdfAdmission.layer()),
-  Layer.provide(layerWebCrypto),
+  Layer.provide(Password.PasswordKdfAdmission.layer()),
+  Layer.provide(WebCrypto.layerWebCrypto),
 );
 
-const check = NewPasswordCheck.layer().pipe(Layer.provide(fixtureScreening));
+const check = Password.NewPasswordCheck.layer().pipe(Layer.provide(fixtureScreening));
 
 const program = Effect.gen(function* () {
-  const policy = yield* NewPasswordCheck;
-  const hasher = yield* PasswordHashing;
+  const policy = yield* Password.NewPasswordCheck;
+  const hasher = yield* Password.PasswordHashing;
   const checked = yield* policy.check(Redacted.make("A manager-pasted cafe\u0301 passphrase 🐈"));
   const hash = yield* hasher.hash(checked.password);
   const current = yield* hasher.verify(checked.password, hash);
@@ -58,7 +51,9 @@ const program = Effect.gen(function* () {
   ] as const) {
     // Fixed public migration fixture, independently derived with Python hashlib.
     const legacy = Redacted.make(
-      EncodedPasswordHash.make(`pbkdf2-sha256$${iterations}$cHVibGljLXNhbHQtMTIzNA$${digest}`),
+      Password.EncodedPasswordHash.make(
+        `pbkdf2-sha256$${iterations}$cHVibGljLXNhbHQtMTIzNA$${digest}`,
+      ),
     );
 
     const verified = yield* hasher.verify(legacyPassword, legacy);

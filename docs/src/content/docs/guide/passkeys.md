@@ -12,7 +12,7 @@ browser to authenticate, and verify the response on your server.
 
 ```ts title="passkey-contract.ts"
 import { Schema } from "effect";
-import { AuthContract, PasskeyContract } from "@yielded/auth/contracts";
+import { AuthContract, PasskeyContract } from "@yielded/auth";
 
 export const PasskeyApi = AuthContract.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
@@ -43,8 +43,7 @@ the named server call nor the browser payload includes that credential. The
 ## Enable passkeys
 
 ```ts title="auth.ts"
-import { Auth, Sessions } from "@yielded/auth";
-import { Passkey } from "@yielded/auth/strategies";
+import { Auth, Passkey, Sessions } from "@yielded/auth";
 
 import { PasskeyApi } from "./passkey-contract";
 
@@ -110,10 +109,10 @@ The client exposes the same calls as `client.auth.signIn(...)` and
 
 ```ts title="passkey-protocol.ts"
 import { Layer } from "effect";
-import { PasskeyConfig } from "@yielded/auth/Passkey";
+import { Passkey } from "@yielded/auth";
 import * as PasskeyServer from "@yielded/auth-simplewebauthn/Server";
 
-export const PasskeyConfigLive = PasskeyConfig.layer({
+export const PasskeyConfigLive = Passkey.PasskeyConfig.layer({
   id: "app.example.com",
   name: "My app",
   origins: ["https://app.example.com"],
@@ -159,11 +158,11 @@ The method supplies its default policy, Web Crypto, and empty hooks.
 
 ## Registration and management
 
-| Task                                   | Strategy and methods                                                               |
-| -------------------------------------- | ---------------------------------------------------------------------------------- |
-| Create an account with a passkey       | `Passkey.makeRegistration` → `register`, `completeRegistration`.                   |
-| Add, list, rename, or remove a passkey | `Passkey.makeManagement` and its authenticated operations.                         |
-| Confirm a protected password change    | `@yielded/auth/PasskeyPassword` binds the assertion to a prepared password intent. |
+| Task                                   | Strategy and methods                                                 |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| Create an account with a passkey       | `Passkey.makeRegistration` → `register`, `completeRegistration`.     |
+| Add, list, rename, or remove a passkey | `Passkey.makeManagement` and its authenticated operations.           |
+| Confirm a protected password change    | `PasskeyPassword` binds the assertion to a prepared password intent. |
 
 These require explicit application authority. A registration ceremony must not
 silently become a login ceremony or link an existing account. See

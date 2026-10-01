@@ -14,8 +14,7 @@ actions in a [shared contract](./http-and-client#expose-another-method).
 
 ```ts title="auth.ts"
 import { Schema } from "effect";
-import { Auth, Sessions } from "@yielded/auth";
-import { Email } from "@yielded/auth/strategies";
+import { Auth, Email, Sessions } from "@yielded/auth";
 
 export const AppAuth = Auth.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
@@ -102,7 +101,7 @@ to cookies so they stay out of ordinary browser payloads.
 ## Use a magic link instead
 
 ```ts title="magic-link.ts"
-import { Email } from "@yielded/auth/strategies";
+import { Email } from "@yielded/auth";
 
 export const magicLink = Email.makeLink();
 ```
@@ -116,9 +115,9 @@ history, and complete from the originating client.
 <summary>Proof expiry and rate limits</summary>
 
 ```ts title="proof-policy.ts"
-import type { ProofPolicy } from "@yielded/auth/Proofs";
+import { type Proofs } from "@yielded/auth";
 
-export const proofPolicy: ProofPolicy = {
+export const proofPolicy: Proofs.ProofPolicy = {
   lifetimeMillis: 5 * 60_000,
   continuationLifetimeMillis: 30_000,
   maximumFailedAttempts: 5,
@@ -150,8 +149,7 @@ an exact-route allowlist helper, Web Crypto, and empty lifecycle hooks:
 
 ```ts title="email-live.ts"
 import { Layer } from "effect";
-import { Email } from "@yielded/auth/strategies";
-import { EmailProofDelivery } from "@yielded/auth/Proofs";
+import { Email, Proofs } from "@yielded/auth";
 
 import { AppAuth } from "./auth";
 import { AuthDependencies } from "./auth-dependencies";
@@ -164,7 +162,7 @@ export const EmailLive = Layer.mergeAll(
   Layer.succeed(Email.EmailSignInTargets, { lookup: lookupEmail }),
   Layer.succeed(AppAuth.strategies.email.ClaimsForEmail, { resolve: resolveEmailClaims }),
   Email.EmailReturnTargets.exactRoutes(["/account"]),
-  EmailProofDelivery.layer(emailVendor, sendEmail),
+  Proofs.EmailProofDelivery.layer(emailVendor, sendEmail),
 );
 
 export const AuthLive = AppAuth.layer.pipe(

@@ -1,47 +1,12 @@
-import { Auth } from "@yielded/auth";
 import {
-  EmailAddressPersistence,
-  EmailActionEvidence,
-  EmailActionRequired,
-  EmailSignInTargets,
-  EmailUnavailable,
-  type EmailCredentialSnapshot,
-  type EmailAddressMutation,
-} from "@yielded/auth/Email";
-import {
-  coordinateCommit,
-  hasCommitScope,
-  LifecycleHooks,
-  type CommitJournal,
-  type PreparedCommit,
-} from "@yielded/auth/Hooks";
-import { LoginIdentifier } from "@yielded/auth/Identity";
-import {
-  ProofPersistence,
-  ProofKeys,
-  ProofUnavailable,
-  ProofBinding,
-  type ProofCompletionInput,
-  type ProofRecord,
-  type ProofRequestReceipt,
-} from "@yielded/auth/Proofs";
-import { SubjectId, TokenDigest } from "@yielded/auth/Schema";
-import {
-  AuthenticationAuthority,
-  AuthenticationFlowId,
-  SecurityRevision,
-  SessionConflict,
-  SessionId,
-  SessionInvalid,
-  SessionUnavailable,
-  StaleAuthentication,
-  assessAuthentication,
-  type AuthenticationEvidence,
-  type AuthenticationRevision,
-  type AuthenticationRequirement,
-  type StatefulSessionRecord,
-} from "@yielded/auth/Sessions";
-import { Email } from "@yielded/auth/strategies";
+  Auth,
+  Email,
+  Hooks,
+  Identity,
+  Proofs,
+  Schema as AuthSchema,
+  Sessions,
+} from "@yielded/auth";
 import { Crypto, DateTime, Effect, Encoding, Layer, Option, Schema, Redacted } from "effect";
 
 export const Claims = Schema.Struct({ team: Schema.String, number: Schema.FiniteFromString });
@@ -113,7 +78,7 @@ export const sessionPolicy = {
   requireImmediateInvalidation: false,
 };
 
-const requirement: AuthenticationRequirement = {
+const requirement: Sessions.AuthenticationRequirement = {
   alternatives: [
     {
       factors: ["possession"],
@@ -126,31 +91,31 @@ const requirement: AuthenticationRequirement = {
 };
 
 const bindingKey = Schema.encodeSync(
-  Schema.fromJsonString(Schema.toCodecJson(Schema.toType(ProofBinding))),
+  Schema.fromJsonString(Schema.toCodecJson(Schema.toType(Proofs.ProofBinding))),
 );
 
 interface Subject {
-  id: SubjectId;
+  id: AuthSchema.SubjectId;
   security: string;
   team: string;
   number: number;
   mfa: boolean;
 }
 interface Identifier {
-  subjectId: SubjectId;
+  subjectId: AuthSchema.SubjectId;
   email: string;
   credentialId: string;
   revision: string;
   verifiedAt: number;
 }
 interface Proof {
-  record: ProofRecord;
+  record: Proofs.ProofRecord;
   used: boolean;
   claimed: boolean;
   failed: number;
 }
 interface Continuation {
-  input: ProofCompletionInput;
+  input: Proofs.ProofCompletionInput;
   expires: number;
   used: boolean;
 }
@@ -159,10 +124,10 @@ interface State {
   identifiers: Map<string, Identifier>;
   proofs: Map<string, Proof>;
   continuations: Map<string, Continuation>;
-  requests: Map<string, { fingerprint: string; receipt: ProofRequestReceipt }>;
+  requests: Map<string, { fingerprint: string; receipt: Proofs.ProofRequestReceipt }>;
   windows: Map<string, number[]>;
   commands: Set<string>;
-  sessions: Map<SessionId, StatefulSessionRecord<typeof Claims.Type>>;
+  sessions: Map<Sessions.SessionId, Sessions.StatefulSessionRecord<typeof Claims.Type>>;
   flows: Set<string>;
 }
 
@@ -183,7 +148,7 @@ const clone = (s: State): State => ({
  * adapters implement the full port predicates with their physical driver owner.
  */
 export const makeEmailConsumer = Effect.gen(function* () {
-  const hooks = yield* LifecycleHooks;
+  const hooks = yield* Hooks.LifecycleHooks;
   const crypto = yield* Crypto.Crypto;
 
   let state: State = {
@@ -201,11 +166,11 @@ export const makeEmailConsumer = Effect.gen(function* () {
   let sequence = 0;
   const consumedFactors = new Set<string>();
 
-  const own = <A>(body: (s: State, journal: CommitJournal, now: number) => A) =>
+  const own = <A>(body: (s: State, journal: Hooks.CommitJournal, now: number) => A) =>
     Effect.gen(function* () {
-      if (yield* hasCommitScope) return yield* EmailUnavailable.make({});
+      if (yield* Hooks.hasCommitScope) return yield* Email.EmailUnavailable.make({});
 
-      return yield* coordinateCommit(
+      return yield* Hooks.coordinateCommit(
         (journal) =>
           Effect.gen(function* () {
             const now = DateTime.toEpochMillis(yield* DateTime.now);
@@ -219,18 +184,18 @@ export const makeEmailConsumer = Effect.gen(function* () {
 
                 return result;
               },
-              catch: () => EmailUnavailable.make({}),
+              catch: () => Email.EmailUnavailable.make({}),
             });
           }),
         { mode: "synchronous" },
       ).pipe(
         Effect.map((result) => result.value),
-        Effect.mapError(() => EmailUnavailable.make({})),
-        Effect.provideService(LifecycleHooks, hooks),
+        Effect.mapError(() => Email.EmailUnavailable.make({})),
+        Effect.provideService(Hooks.LifecycleHooks, hooks),
       );
     });
 
-  const current = (s: State, r: AuthenticationRevision) =>
+  const current = (s: State, r: Sessions.AuthenticationRevision) =>
     s.subjects.get(r.subjectId)?.security === r.securityRevision &&
     r.credentials.every((c) =>
       c.credentialId === "fixture-factor"
@@ -245,14 +210,16 @@ export const makeEmailConsumer = Effect.gen(function* () {
 
   const revision = (
     s: State,
-    subjectId: SubjectId,
+    subjectId: AuthSchema.SubjectId,
     ids: readonly string[],
-  ): AuthenticationRevision => ({
+  ): Sessions.AuthenticationRevision => ({
     subjectId,
-    securityRevision: SecurityRevision.make(s.subjects.get(subjectId)?.security ?? "missing"),
+    securityRevision: Sessions.SecurityRevision.make(
+      s.subjects.get(subjectId)?.security ?? "missing",
+    ),
     credentials: ids.map((credentialId) => ({
       credentialId,
-      revision: SecurityRevision.make(
+      revision: Sessions.SecurityRevision.make(
         credentialId === "fixture-factor"
           ? "1"
           : ([...s.identifiers.values()].find(
@@ -262,17 +229,17 @@ export const makeEmailConsumer = Effect.gen(function* () {
     })),
   });
 
-  const snapshot = (s: State, i: Identifier): EmailCredentialSnapshot => ({
+  const snapshot = (s: State, i: Identifier): Email.EmailCredentialSnapshot => ({
     moduleId: "example/email",
-    identifier: LoginIdentifier.make({ namespace: "email", value: i.email }),
-    identifierRevision: SecurityRevision.make(i.revision),
+    identifier: Identity.LoginIdentifier.make({ namespace: "email", value: i.email }),
+    identifierRevision: Sessions.SecurityRevision.make(i.revision),
     verifiedAtMillis: i.verifiedAt,
     credentialId: i.credentialId,
-    credentialRevision: SecurityRevision.make(i.revision),
+    credentialRevision: Sessions.SecurityRevision.make(i.revision),
     revision: revision(s, i.subjectId, [i.credentialId]),
   });
 
-  const validBinding = (s: State, b: ProofBinding) =>
+  const validBinding = (s: State, b: Proofs.ProofBinding) =>
     b._tag === "Identifier" || current(s, b.revision);
 
   const charge = (s: State, keys: readonly string[], now: number) => {
@@ -290,7 +257,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
     return true;
   };
 
-  const continuationValid = (s: State, i: ProofCompletionInput, now: number) => {
+  const continuationValid = (s: State, i: Proofs.ProofCompletionInput, now: number) => {
     const c = s.continuations.get(i.continuationId);
 
     return (
@@ -305,14 +272,14 @@ export const makeEmailConsumer = Effect.gen(function* () {
     );
   };
 
-  const proofStore = ProofPersistence.of({
+  const proofStore = Proofs.ProofPersistence.of({
     issue: (input, prepare) =>
       own((s, journal, now) => {
         const r = input.record;
         const old = s.requests.get(r.requestId);
 
         if (old) {
-          if (old.fingerprint !== r.fingerprint) throw EmailUnavailable.make({});
+          if (old.fingerprint !== r.fingerprint) throw Email.EmailUnavailable.make({});
 
           return prepare({ _tag: "Existing", receipt: old.receipt }, journal);
         }
@@ -346,7 +313,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
           allowed ? { _tag: "Issued", record: r } : { _tag: "Suppressed", receipt },
           journal,
         );
-      }).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
+      }).pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({}))),
     attempt: (input, prepare) =>
       own((s, journal, now) => {
         const allowed = charge(
@@ -411,7 +378,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
         });
 
         return result;
-      }).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
+      }).pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({}))),
     complete: (input, prepare) =>
       own((s, journal, now) => {
         const valid = continuationValid(s, input, now);
@@ -420,7 +387,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
         if (valid) s.continuations.get(input.continuationId)!.used = true;
 
         return result;
-      }).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
+      }).pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({}))),
     claimDelivery: (input, prepare) =>
       own((s, journal, now) => {
         const p = s.proofs.get(input.proofId);
@@ -438,7 +405,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
         p.claimed = true;
 
         return prepare({ _tag: "Claimed", claimVersion: p.record.version }, journal);
-      }).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
+      }).pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({}))),
     settleDelivery: (input, prepare) =>
       own((s, journal) => {
         const p = s.proofs.get(input.proofId);
@@ -447,7 +414,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
           p.used = true;
 
         return prepare(undefined, journal);
-      }).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
+      }).pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({}))),
     cancel: (input, prepare) =>
       own((s, journal) => {
         for (const p of s.proofs.values())
@@ -458,7 +425,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
             p.used = true;
 
         return prepare(undefined, journal);
-      }).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
+      }).pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({}))),
     cleanup: (input, prepare) =>
       own((s, journal, now) => {
         let removed = 0;
@@ -473,10 +440,10 @@ export const makeEmailConsumer = Effect.gen(function* () {
           }
 
         return prepare({ removed, hasMore }, journal);
-      }).pipe(Effect.mapError(() => ProofUnavailable.make({}))),
+      }).pipe(Effect.mapError(() => Proofs.ProofUnavailable.make({}))),
   });
 
-  const subjectRequirement = (id: SubjectId): AuthenticationRequirement =>
+  const subjectRequirement = (id: AuthSchema.SubjectId): Sessions.AuthenticationRequirement =>
     state.subjects.get(id)?.mfa
       ? {
           ...requirement,
@@ -484,23 +451,27 @@ export const makeEmailConsumer = Effect.gen(function* () {
         }
       : requirement;
 
-  const validate = Effect.fn("ExampleEmail.validate")(function* (evidence: AuthenticationEvidence) {
-    if (!current(state, evidence.revision)) return yield* StaleAuthentication.make({});
+  const validate = Effect.fn("ExampleEmail.validate")(function* (
+    evidence: Sessions.AuthenticationEvidence,
+  ) {
+    if (!current(state, evidence.revision)) return yield* Sessions.StaleAuthentication.make({});
 
-    const assessed = yield* assessAuthentication(
+    const assessed = yield* Sessions.assessAuthentication(
       evidence,
       subjectRequirement(evidence.revision.subjectId),
-    ).pipe(Effect.mapError(() => StaleAuthentication.make({})));
+    ).pipe(Effect.mapError(() => Sessions.StaleAuthentication.make({})));
 
     return assessed;
   });
 
-  const authority = AuthenticationAuthority.of({
+  const authority = Sessions.AuthenticationAuthority.of({
     capture: (id, ids) =>
       Effect.suspend(() => {
         const r = revision(state, id, ids);
 
-        return current(state, r) ? Effect.succeed(r) : Effect.fail(StaleAuthentication.make({}));
+        return current(state, r)
+          ? Effect.succeed(r)
+          : Effect.fail(Sessions.StaleAuthentication.make({}));
       }),
     requirements: (evidence) =>
       validate(evidence).pipe(Effect.map(() => subjectRequirement(evidence.revision.subjectId))),
@@ -514,19 +485,22 @@ export const makeEmailConsumer = Effect.gen(function* () {
               !current(s, input.evidence.revision) ||
               now >= DateTime.toEpochMillis(input.expiresAt)
             )
-              throw StaleAuthentication.make({});
+              throw Sessions.StaleAuthentication.make({});
 
             return prepare(undefined, journal);
           }),
         ),
-        Effect.mapError(() => StaleAuthentication.make({})),
+        Effect.mapError(() => Sessions.StaleAuthentication.make({})),
       ),
   });
 
   const mutate = <A>(
     action: "verify" | "change",
-    input: EmailAddressMutation,
-    prepare: (decision: "changed" | "rejected", journal: CommitJournal) => PreparedCommit<A>,
+    input: Email.EmailAddressMutation,
+    prepare: (
+      decision: "changed" | "rejected",
+      journal: Hooks.CommitJournal,
+    ) => Hooks.PreparedCommit<A>,
   ) =>
     own((s, journal, now) => {
       const source = action === "change" ? input.captured.source : undefined;
@@ -572,12 +546,12 @@ export const makeEmailConsumer = Effect.gen(function* () {
       return result;
     });
 
-  const addressStore = EmailAddressPersistence.of({
+  const addressStore = Email.EmailAddressPersistence.of({
     target: (input) =>
       Effect.suspend(() => {
         const subject = state.subjects.get(input.subjectId);
 
-        if (!subject) return Effect.fail(EmailUnavailable.make({}));
+        if (!subject) return Effect.fail(Email.EmailUnavailable.make({}));
 
         const source = [...state.identifiers.values()].find(
           (i) => i.subjectId === input.subjectId && i.credentialId === input.sourceCredentialId,
@@ -599,25 +573,25 @@ export const makeEmailConsumer = Effect.gen(function* () {
       own((_s, journal) => prepare({ removed: 0, hasMore: false }, journal)),
   });
 
-  const actions = EmailActionEvidence.of({
+  const actions = Email.EmailActionEvidence.of({
     verify: (input) =>
       Effect.gen(function* () {
         if (!current(state, input.challenge.revision) || input.proof === undefined)
-          return yield* EmailActionRequired.make({});
+          return yield* Email.EmailActionRequired.make({});
         const token = Redacted.value(input.proof);
 
         if (!token.startsWith("fixture:") || consumedFactors.has(token))
-          return yield* EmailActionRequired.make({});
+          return yield* Email.EmailActionRequired.make({});
         consumedFactors.add(token);
 
-        const evidence: AuthenticationEvidence = {
-          flowId: AuthenticationFlowId.make(input.challenge.commandId),
+        const evidence: Sessions.AuthenticationEvidence = {
+          flowId: Sessions.AuthenticationFlowId.make(input.challenge.commandId),
           bindingDigest: input.challenge.bindingDigest,
           revision: {
             ...input.challenge.revision,
             credentials: [
               ...input.challenge.revision.credentials,
-              { credentialId: "fixture-factor", revision: SecurityRevision.make("1") },
+              { credentialId: "fixture-factor", revision: Sessions.SecurityRevision.make("1") },
             ],
           },
           proofs: [
@@ -641,15 +615,15 @@ export const makeEmailConsumer = Effect.gen(function* () {
       const text = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.Finite])),
       )([input.registration.team, input.registration.number]).pipe(
-        Effect.mapError(() => EmailUnavailable.make({})),
+        Effect.mapError(() => Email.EmailUnavailable.make({})),
       );
 
       const digest = yield* crypto
         .digest("SHA-256", new TextEncoder().encode(text))
-        .pipe(Effect.mapError(() => EmailUnavailable.make({})));
+        .pipe(Effect.mapError(() => Email.EmailUnavailable.make({})));
 
       return {
-        fingerprint: TokenDigest.make(Encoding.encodeBase64Url(digest)),
+        fingerprint: AuthSchema.TokenDigest.make(Encoding.encodeBase64Url(digest)),
         eligible: !state.identifiers.has(input.identifier.value),
       };
     }),
@@ -666,7 +640,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
         if (valid) {
           s.commands.add(input.commandId);
           s.continuations.get(input.completion.input.continuationId)!.used = true;
-          const id = SubjectId.make(`email-subject:${++sequence}`);
+          const id = AuthSchema.SubjectId.make(`email-subject:${++sequence}`);
 
           s.subjects.set(id, {
             id,
@@ -700,12 +674,12 @@ export const makeEmailConsumer = Effect.gen(function* () {
               !current(s, input.evidence.revision) ||
               now >= DateTime.toEpochMillis(input.session.expiresAt)
             )
-              throw SessionConflict.make({});
+              throw Sessions.SessionConflict.make({});
 
             const row = {
               ...input.session,
-              sessionId: SessionId.make(String(++sequence)),
-              version: SecurityRevision.make(String(sequence)),
+              sessionId: Sessions.SessionId.make(String(++sequence)),
+              version: Sessions.SecurityRevision.make(String(sequence)),
             };
 
             const result = prepare(row, journal);
@@ -716,7 +690,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
             return result;
           }),
         ),
-        Effect.mapError(() => SessionUnavailable.make({})),
+        Effect.mapError(() => Sessions.SessionUnavailable.make({})),
       ),
     verify: (input) =>
       Effect.suspend(() => {
@@ -730,9 +704,9 @@ export const makeEmailConsumer = Effect.gen(function* () {
               DateTime.toEpochMillis(row.absoluteExpiresAt),
             )
           ? Effect.succeed(row)
-          : Effect.fail(SessionInvalid.make({}));
+          : Effect.fail(Sessions.SessionInvalid.make({}));
       }),
-    rotate: () => Effect.fail(SessionUnavailable.make({})),
+    rotate: () => Effect.fail(Sessions.SessionUnavailable.make({})),
     revokeDigest: (digest, prepare) =>
       own((s, journal) => {
         const row = [...s.sessions.values()].find((r) => r.digest === digest);
@@ -741,20 +715,20 @@ export const makeEmailConsumer = Effect.gen(function* () {
         if (row) s.sessions.delete(row.sessionId);
 
         return result;
-      }).pipe(Effect.mapError(() => SessionUnavailable.make({}))),
-    revoke: () => Effect.fail(SessionUnavailable.make({})),
-    revokeAll: () => Effect.fail(SessionUnavailable.make({})),
+      }).pipe(Effect.mapError(() => Sessions.SessionUnavailable.make({}))),
+    revoke: () => Effect.fail(Sessions.SessionUnavailable.make({})),
+    revokeAll: () => Effect.fail(Sessions.SessionUnavailable.make({})),
   });
 
   return {
     layer: Layer.mergeAll(
-      Layer.succeed(ProofPersistence, proofStore),
-      ProofKeys.layer(proofKeys),
-      Layer.succeed(AuthenticationAuthority, authority),
-      Layer.succeed(EmailAddressPersistence, addressStore),
-      Layer.succeed(EmailActionEvidence, actions),
+      Layer.succeed(Proofs.ProofPersistence, proofStore),
+      Proofs.ProofKeys.layer(proofKeys),
+      Layer.succeed(Sessions.AuthenticationAuthority, authority),
+      Layer.succeed(Email.EmailAddressPersistence, addressStore),
+      Layer.succeed(Email.EmailActionEvidence, actions),
       Layer.succeed(registration.RegistrationAuthority, registrations),
-      Layer.succeed(EmailSignInTargets, {
+      Layer.succeed(Email.EmailSignInTargets, {
         lookup: (input) =>
           Effect.sync(() => {
             const row = state.identifiers.get(input.identifier.value);
@@ -769,7 +743,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
 
             return row
               ? Effect.succeed({ team: row.team, number: row.number })
-              : Effect.fail(EmailUnavailable.make({}));
+              : Effect.fail(Email.EmailUnavailable.make({}));
           }),
       }),
       Layer.succeed(sessions.StatefulSessionPersistence, stateful),
@@ -782,7 +756,7 @@ export const makeEmailConsumer = Effect.gen(function* () {
           }),
       }),
     ),
-    requireMfaFixture: (id: SubjectId) =>
+    requireMfaFixture: (id: AuthSchema.SubjectId) =>
       Effect.sync(() => {
         const row = state.subjects.get(id);
 

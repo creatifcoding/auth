@@ -1,5 +1,4 @@
-import { EmailAddressPersistence, EmailUnavailable } from "@yielded/auth/Email";
-import { SecurityRevision } from "@yielded/auth/Sessions";
+import { Email, Sessions } from "@yielded/auth";
 import { Effect, Layer } from "effect";
 
 import { current, customer, evidenceDeadline, revision, satisfies } from "./accounts";
@@ -11,11 +10,11 @@ import { AccountStore } from "./store";
 const moduleId = AppAuth.strategies.email.persistence.moduleId;
 
 export const EmailLive = Layer.effect(
-  EmailAddressPersistence,
+  Email.EmailAddressPersistence,
   Effect.gen(function* () {
     const store = yield* AccountStore;
 
-    return EmailAddressPersistence.of({
+    return Email.EmailAddressPersistence.of({
       target: (input) =>
         store
           .read((state) =>
@@ -23,7 +22,7 @@ export const EmailLive = Layer.effect(
               const account = customer(state, input.subjectId);
 
               if (input.moduleId !== moduleId || account === undefined)
-                return yield* EmailUnavailable.make({});
+                return yield* Email.EmailUnavailable.make({});
 
               const eligible =
                 input.target.namespace === "email" &&
@@ -37,11 +36,11 @@ export const EmailLive = Layer.effect(
               };
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => EmailUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Email.EmailUnavailable.make({}))),
       checkCompletion: (input) =>
         store
           .read((state, now) => Effect.succeed(completionCurrent(state, input, now)))
-          .pipe(Effect.catchTag("StoreUnavailable", () => EmailUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Email.EmailUnavailable.make({}))),
       verifyWithProof: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -103,10 +102,12 @@ export const EmailLive = Layer.effect(
                   ? {
                       ...item,
                       verifiedAtMillis: now,
-                      identifierRevision: SecurityRevision.make(nextId(state, "identifier")),
+                      identifierRevision: Sessions.SecurityRevision.make(
+                        nextId(state, "identifier"),
+                      ),
                       emailCredential: {
                         id: nextId(state, "email"),
-                        revision: SecurityRevision.make(nextId(state, "email-revision")),
+                        revision: Sessions.SecurityRevision.make(nextId(state, "email-revision")),
                       },
                     }
                   : item,
@@ -125,9 +126,9 @@ export const EmailLive = Layer.effect(
               return receipt;
             }),
           )
-          .pipe(Effect.mapError(() => EmailUnavailable.make({}))),
+          .pipe(Effect.mapError(() => Email.EmailUnavailable.make({}))),
       // This application exposes confirmation of its registered address, not address replacement.
-      changeWithProof: () => Effect.fail(EmailUnavailable.make({})),
+      changeWithProof: () => Effect.fail(Email.EmailUnavailable.make({})),
       cleanup: (input, prepare) =>
         store
           .transaction((state, journal, now) =>
@@ -146,7 +147,7 @@ export const EmailLive = Layer.effect(
               );
             }),
           )
-          .pipe(Effect.catchTag("StoreUnavailable", () => EmailUnavailable.make({}))),
+          .pipe(Effect.catchTag("StoreUnavailable", () => Email.EmailUnavailable.make({}))),
     });
   }),
 );

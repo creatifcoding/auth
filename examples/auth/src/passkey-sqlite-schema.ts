@@ -1,3 +1,4 @@
+import { Passkey, Schema as AuthSchema } from "@yielded/auth";
 import {
   passkeyInvalidationMutation,
   requiredPasskeyCredentialConstraints,
@@ -9,14 +10,6 @@ import {
   type PasskeyRegistrationMapping,
   type PasskeyWriteTables,
 } from "@yielded/auth-persistence-drizzle";
-import {
-  PasskeyCredential,
-  PasskeyManagementPolicy,
-  PasskeyMethodPolicy,
-  PasskeyProfile,
-  PasskeyRequirement,
-} from "@yielded/auth/Passkey";
-import { SubjectId } from "@yielded/auth/Schema";
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { Effect, Schema } from "effect";
@@ -183,7 +176,7 @@ export const registrationSchema = Schema.Struct({
   name: Schema.NonEmptyString,
 });
 
-export const profile = PasskeyProfile.make({
+export const profile = Passkey.PasskeyProfile.make({
   profileId: "primary",
   generation: 1,
   rpId: "localhost",
@@ -197,7 +190,7 @@ export const profile = PasskeyProfile.make({
   algorithms: [-7, -257],
 });
 
-export const policy = PasskeyMethodPolicy.make({
+export const policy = Passkey.PasskeyMethodPolicy.make({
   generation: 1,
   profiles: [profile],
   lifetimeMillis: 120000,
@@ -212,21 +205,21 @@ export const policy = PasskeyMethodPolicy.make({
   },
 });
 
-export const management = PasskeyManagementPolicy.make({
+export const management = Passkey.PasskeyManagementPolicy.make({
   maximumCredentials: 5,
   maximumEvidenceAgeMillis: 120000,
   requireImmediateInvalidation: true,
 });
 
-export const requirement = PasskeyRequirement.make({
+export const requirement = Passkey.PasskeyRequirement.make({
   maximumAgeMillis: 120000,
   alternatives: [
     { factors: ["possession"], minimumCredentials: 1, userVerified: true, phishingResistant: true },
   ],
 });
 
-const profileCodec = Schema.fromJsonString(PasskeyProfile);
-const policyCodec = Schema.fromJsonString(PasskeyMethodPolicy);
+const profileCodec = Schema.fromJsonString(Passkey.PasskeyProfile);
+const policyCodec = Schema.fromJsonString(Passkey.PasskeyMethodPolicy);
 const active = (value: unknown) => value === "active";
 
 export const read = {
@@ -262,7 +255,7 @@ export const read = {
     decode: (row) =>
       // oxlint-disable-next-line no-restricted-properties -- the partial native database row is decoded at the storage boundary.
       Schema.decodeUnknownSync(
-        PasskeyCredential.mapFields(
+        Passkey.PasskeyCredential.mapFields(
           ({ revision: _revision, active: _active, ...fields }) => fields,
         ),
       )({ ...row, profile: Schema.decodeSync(profileCodec)(row.profile!) }),
@@ -307,8 +300,8 @@ export const read = {
     decodeSubjectId: (row) => row.subjectId!,
   },
   subjectIds: {
-    toNative: (id: SubjectId) => String(id),
-    toSubject: SubjectId.make,
+    toNative: (id: AuthSchema.SubjectId) => String(id),
+    toSubject: AuthSchema.SubjectId.make,
     equals: (left: string, right: string) => left === right,
   },
   constraints: requiredPasskeyCredentialConstraints,
