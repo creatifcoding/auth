@@ -303,12 +303,15 @@ for acquisition and cleanup.
 
 ## Use your Effect HttpClient
 
-Replace the default `AuthAtom.make` call with your application's transport Layer:
+Replace the default `AuthAtom.make` call with explicit Layer composition:
 
 ```ts
+import { Layer } from "effect";
+
 import { ApplicationHttpClient } from "./http-client";
 
-export const auth = AuthAtom.make(AppClient, { httpClient: ApplicationHttpClient });
+export const ClientLive = AppClient.layer.pipe(Layer.provide(ApplicationHttpClient));
+export const auth = AuthAtom.make(AppClient, { layer: ClientLive });
 ```
 
 For example, configure Effect's Fetch transport with browser credentials:
@@ -347,19 +350,9 @@ export const session = Effect.gen(function* () {
 }).pipe(Effect.provide(AppClient.layerFetch));
 ```
 
-With your own transport, compose `AppClient.layer` instead:
-
-```ts
-import { Layer } from "effect";
-
-import { AppClient } from "./auth-client";
-import { ApplicationHttpClient } from "./http-client";
-
-export const ClientLive = AppClient.layer.pipe(Layer.provide(ApplicationHttpClient));
-```
-
-Use `Effect.provide(ClientLive)` at that program's boundary. To share the Atom
-client, compose through `auth.runtime` instead of acquiring a separate Layer.
+To use your transport, replace `Effect.provide(AppClient.layerFetch)` with
+`Effect.provide(ClientLive)` from the previous example. To share the Atom client,
+compose through `auth.runtime` instead of acquiring a separate Layer.
 
 ## Compose a passkey workflow
 

@@ -124,8 +124,8 @@ export const memberName = auth.runtime.atom(
 
 <!-- #endregion auth-query -->
 
-Fetch is configured by default. Pass `{ httpClient: ApplicationHttpClient }` to
-`AuthAtom.make` to use your Effect transport Layer. See the
+Fetch is configured by default. To customize transport, compose `AppClient.layer`
+with your HttpClient Layer and pass `{ layer: ClientLive }` to `AuthAtom.make`. See the
 [client guide](docs/src/content/docs/guide/http-and-client.md#connect-client-state)
 for React, shared invalidation, and standalone Effect calls.
 
