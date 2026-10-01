@@ -12,7 +12,7 @@ Add `https://app.example.com/auth/google/callback` as an authorized redirect URI
 
 ## Configure the provider
 
-```ts title="google.ts"
+```ts title="apps/server/google.ts"
 import { Redacted } from "effect";
 import { Http } from "@yielded/auth";
 import * as OpenIdClient from "@yielded/auth-openid-client";

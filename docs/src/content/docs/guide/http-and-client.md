@@ -15,7 +15,7 @@ AuthApi ──→ Auth.make ──→ local Effects + HTTP handlers
 
 Keep the contract safe to import in both the browser and server:
 
-```ts title="auth-contract.ts"
+```ts title="packages/domain/auth-contract.ts"
 import { Schema } from "effect";
 import { AuthContract } from "@yielded/auth";
 
@@ -42,10 +42,10 @@ and client use the same descriptors.
 
 Bind the contract to your methods and session configuration:
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Auth, Http, Password, Sessions } from "@yielded/auth";
 
-import { AuthApi } from "./auth-contract";
+import { AuthApi } from "@app/domain/auth-contract";
 
 export const AppAuth = Auth.make(AuthApi, {
   sessions: Sessions.stateful(),
@@ -64,7 +64,7 @@ The [adapter guide](../reference/adapters#compose-the-application-layer) shows t
 For an existing raw `HttpRouter`, merge the auth route Layer with your application
 routes:
 
-```ts title="routes.ts"
+```ts title="apps/server/routes.ts"
 import { Layer } from "effect";
 
 import { ApplicationRoutes } from "./application-routes";
@@ -80,7 +80,7 @@ export const Routes = Layer.mergeAll(AuthRoutes, ApplicationRoutes).pipe(
 
 For application routes that call auth, build the middleware with `Http.make`:
 
-```ts title="auth-http.ts"
+```ts title="apps/server/auth-http.ts"
 import { Http } from "@yielded/auth";
 
 import { AppAuth } from "./auth";
@@ -101,7 +101,7 @@ or require a headers argument.
 
 Add the native auth group beside your application groups in the shared API:
 
-```ts title="api.ts"
+```ts title="packages/domain/api.ts"
 import { AuthContract } from "@yielded/auth";
 import { HttpApi } from "effect/unstable/httpapi";
 
@@ -111,11 +111,11 @@ import { Projects } from "./projects-contract";
 export const Api = HttpApi.make("app").add(Projects, AuthContract.httpGroup(AuthApi));
 ```
 
-```ts title="api-server.ts"
+```ts title="apps/server/api-server.ts"
 import { Layer } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 
-import { Api } from "./api";
+import { Api } from "@app/domain/api";
 import { http } from "./auth-http";
 import { AuthLive } from "./auth-live";
 import { ProjectHandlers } from "./projects-handlers";
@@ -201,10 +201,10 @@ example and [TOTP](./totp#expose-private-reveals-over-http) for private reveals.
 
 ## Call the client directly
 
-```ts title="client-service.ts"
+```ts title="apps/web/client-service.ts"
 import { Client } from "@yielded/auth";
 
-import { AuthApi } from "./auth-contract";
+import { AuthApi } from "@app/domain/auth-contract";
 
 export const AppClient = Client.make(AuthApi, { baseUrl: "https://app.example.com" });
 ```
@@ -229,7 +229,7 @@ reveal handling, or account transition coordination.
 
 ## Connect client state
 
-```ts title="auth-client.ts"
+```ts title="apps/web/auth-client.ts"
 import { Atom as AuthAtom } from "@yielded/auth";
 
 import { AppClient } from "./client-service";
@@ -245,7 +245,7 @@ including setup errors.
 
 Compose application queries with the same scoped client:
 
-```ts title="member-name.ts"
+```ts title="apps/web/member-name.ts"
 import { Effect } from "effect";
 
 import { auth } from "./auth-client";
@@ -272,7 +272,7 @@ shares its Layer memo map.
 Use the standard `@effect/atom-react` adapter and the application's ordinary
 `RegistryProvider`. Yielded Auth has no React-specific provider or hooks:
 
-```tsx title="account.tsx"
+```tsx title="apps/web/account.tsx"
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 
 import { auth } from "./auth-client";
@@ -301,7 +301,7 @@ Auth mutations refresh auth queries automatically. Extra reactivity keys describ
 application data that must also refresh. Use the same runtime factory as the
 queries subscribed to those keys:
 
-```ts title="shared-runtime.ts"
+```ts title="apps/web/shared-runtime.ts"
 import { Atom as AuthAtom } from "@yielded/auth";
 import { Atom } from "effect/unstable/reactivity";
 
@@ -358,12 +358,12 @@ the public schema and injects them from request credentials during execution.
 Neither local nor HTTP callers can supply those private fields. For new contracts,
 `AuthContract.action` also accepts explicit input, success, and error schemas.
 
-```ts title="passkey-workflow.ts"
+```ts title="apps/web/passkey-workflow.ts"
 import { Effect, Redacted } from "effect";
 import { Atom as AuthAtom, Client } from "@yielded/auth";
 import * as PasskeyBrowser from "@yielded/auth-simplewebauthn/Browser";
 
-import { PasskeyApi } from "./passkey-contract";
+import { PasskeyApi } from "@app/domain/passkey-contract";
 
 export const PasskeyClient = Client.make(PasskeyApi, { baseUrl: "https://app.example.com" });
 export const passkeys = AuthAtom.make(PasskeyClient);

@@ -17,11 +17,11 @@ Your app owns accounts, claims, and permission policy.
 
 ## Sign in and retain provider access
 
-```ts title="auth.ts"
+```ts title="apps/server/auth.ts"
 import { Auth, Sessions } from "@yielded/auth";
 import { OAuth } from "@yielded/auth/strategies";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
-import { AuthApi } from "./auth-contract";
+import { AuthApi } from "@app/domain/auth-contract";
 import { clientId } from "./config";
 
 const profile = GitHub.accessProfile({ clientId, scopes: ["read:user"] });

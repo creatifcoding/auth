@@ -46,7 +46,7 @@ const { id, methods } = Astro.props;
       methods.map(({ name, href, code, detail }, index) => (
         <section id={`${id}-${index}`} aria-label={`${name} example`}>
           <h3>{name}</h3>
-          <Code code={code} lang="ts" title="auth.ts" />
+          <Code code={code} lang="ts" title="apps/server/auth.ts" />
           <p>{detail}</p>
           <a href={href}>{name} guide <span aria-hidden="true">→</span></a>
         </section>

@@ -31,16 +31,15 @@ Prefer named namespace imports from `@yielded/auth`. Direct module paths such as
 
 ## One API, server and client
 
-Want a working app first? [Download the starter](https://yielded.dev/auth/auth-starter.tar.gz)
-and follow the [getting-started guide](docs/src/content/docs/guide/getting-started.md).
+Want a working app first? [Download the starter](https://yielded.dev/auth/auth-starter.tar.gz).
 It includes registration, password and passkey sign-in, email verification, recovery,
 and SQLite storage. Local email delivery needs no provider credentials.
 
-Define the shared contract in `auth-contract.ts`:
+Define the shared contract in `packages/domain/auth-contract.ts`:
 
 <!-- #region auth-contract -->
 
-```ts [auth-contract.ts]
+```ts [packages/domain/auth-contract.ts]
 import { Schema } from "effect";
 import { AuthContract } from "@yielded/auth";
 
@@ -56,10 +55,10 @@ Bind the server implementation and mount its HTTP routes:
 
 <!-- #region auth-server -->
 
-```ts [auth.ts]
+```ts [apps/server/auth.ts]
 import { Auth, Http, Password, Sessions } from "@yielded/auth";
 
-import { AuthApi } from "./auth-contract";
+import { AuthApi } from "@app/domain/auth-contract";
 
 export const AppAuth = Auth.make(AuthApi, {
   sessions: Sessions.stateful(),
@@ -91,10 +90,10 @@ Create the client and its atoms from the same contract:
 
 <!-- #region auth-client -->
 
-```ts [auth-client.ts]
+```ts [apps/web/auth-client.ts]
 import { Atom as AuthAtom, Client } from "@yielded/auth";
 
-import { AuthApi } from "./auth-contract";
+import { AuthApi } from "@app/domain/auth-contract";
 
 export const AppClient = Client.make(AuthApi, { baseUrl: "https://app.example.com" });
 export const auth = AuthAtom.make(AppClient);

@@ -16,7 +16,7 @@ stay the same at every level; only the Layers you provide change.
 
 Map your account table and let Yielded Auth define the rest:
 
-```ts title="schema.ts"
+```ts title="apps/server/schema.ts"
 import { Schema as AuthSchema } from "@yielded/auth";
 import { AuthPersistence } from "@yielded/auth-persistence-drizzle/SqliteBun";
 import { Effect } from "effect";
@@ -71,7 +71,7 @@ To give a single table your own layout, pass it in `tables`. The rest stay manag
 
 Declare every table yourself, with your own names and columns:
 
-```ts title="tables.ts"
+```ts title="apps/server/tables.ts"
 export const identifiers = sqliteTable(
   "app_identifiers",
   {
@@ -89,7 +89,7 @@ export const identifiers = sqliteTable(
 Then map them with `Persistence.map`. TypeScript requires a table for every
 storage role your installed methods use:
 
-```ts title="schema.ts"
+```ts title="apps/server/schema.ts"
 export const storage = Persistence.map({
   subjects: { table: customers, id: "id", status: "enabled" /* … */ },
   tables: {
@@ -115,7 +115,7 @@ runs on SQLite and PostgreSQL.
 Each storage role is a public service, such as `Password.PasswordPersistence`.
 Implement them in your own Layers, on any store:
 
-```ts title="live.ts"
+```ts title="apps/server/live.ts"
 export const PersistenceLive = Layer.mergeAll(
   PasswordsLive,
   ProofsLive,
@@ -131,7 +131,7 @@ uses a single-writer file store with no SQL at all.
 
 Layer composition also replaces one method while keeping the others:
 
-```ts title="password-methods.ts"
+```ts title="apps/server/password-methods.ts"
 const Passwords = AppAuth.strategies.password.Passwords;
 
 export const PasswordMethodsLive = Layer.effect(

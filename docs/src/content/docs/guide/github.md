@@ -15,7 +15,7 @@ Set its callback URL to `https://app.example.com/auth/github/callback`.
 
 ## Configure the provider
 
-```ts title="github.ts"
+```ts title="apps/server/github.ts"
 import { Redacted } from "effect";
 import * as GitHub from "@yielded/auth-openid-client/GitHub";
 import { Http } from "@yielded/auth";
