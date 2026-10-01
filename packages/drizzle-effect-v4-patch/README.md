@@ -1,9 +1,13 @@
 # @yielded/drizzle-effect-v4-patch
 
-Temporary compatibility patch for Drizzle's Effect integration. The CLI saves a
-native Bun patch and runs `bun install`; subsequent installs apply it from your
-lockfile. It updates Drizzle's SQL type imports, error classes, and schema length helper in its
-ESM and CommonJS artifacts. Your application's Effect package stays unchanged.
+Drizzle RC4's Effect integration still uses APIs removed from the current stable
+Effect release. This temporary patch lets you use Drizzle with the Effect version
+required by Yielded Auth until Drizzle ships a compatible release.
+
+The CLI saves a native Bun patch and runs `bun install`; subsequent installs apply
+it from your lockfile. It updates Drizzle's SQL type imports, error classes, and
+schema length helper in its ESM and CommonJS artifacts. Your application's Effect
+package stays unchanged.
 
 ## Apply
 

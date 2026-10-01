@@ -261,8 +261,10 @@ as `Uint8Array`. Match application-owned column codecs to these values; use
 `sql.json` for JSON parameters. Set `prepare: false` for poolers that cannot retain
 prepared statements between queries.
 
-The pinned Drizzle release needs a temporary compatibility patch. In a Bun app, install your
-dependencies and run this from the workspace that depends on Drizzle:
+Drizzle RC4's Effect integration still uses APIs removed from the current stable
+Effect release. Until Drizzle ships a compatible release, apply this temporary
+patch to use it with Yielded Auth. In a Bun app, install your dependencies and run
+this from the workspace that depends on Drizzle:
 
 ```sh
 bun add drizzle-orm@1.0.0-rc.4
