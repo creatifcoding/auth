@@ -19,15 +19,19 @@ export const AppAuth = Auth.make("app/Auth", {
   claims: Schema.Struct({ displayName: Schema.String }),
   strategies: {
     password: Password.make(),
-    totp: Totp.make({ issuer: "My app" }),
+    totp: Totp.make({
+      issuer: "My app",
+      allowRecoveryCodeForPending: true,
+    }),
   },
   defaultStrategy: "password",
 });
 ```
 
-`Totp.make()` also works; `issuer` customizes the authenticator label. Enrollment,
-attempt, and recovery policies have defaults. Recovery for lost factors is denied
-unless explicitly enabled.
+`Totp.make()` also works; `issuer` customizes the authenticator label. The example explicitly
+allows a recovery code to finish a pending sign-in; the default is
+`allowRecoveryCodeForPending: false`. Lost-factor reset is a separate policy,
+`lostFactorRecovery: "deny"` by default. Enabling one does not enable the other.
 
 Your `AuthenticationAuthority` decides which accounts require two factors.
 Provide `TotpCryptography` with `layer` from `@yielded/auth-crypto/Totp`, supplying
@@ -82,8 +86,12 @@ const result = yield* auth.confirmEnrollment("totp", {
 });
 ```
 
-Show the private `recovery-codes` reveal once and let the user save it. Keep both
-reveals out of ordinary query caches, logs, and persisted UI state.
+Use a new command ID and fresh evidence bound to this confirmation, not the
+begin-enrollment proof. Show the ten private `recovery-codes` once and ask the
+user to save them somewhere secure before leaving. The public result contains
+only enabled state and session invalidation information. Keep both reveals out
+of ordinary query caches, logs, and persisted UI state. Reauthenticate after a
+management change invalidates the current session.
 
 ## Finish a two-factor sign-in
 
@@ -113,8 +121,77 @@ const result = yield* auth.verifyPending("totp", { pendingCredential, code });
   ]}
 />
 
-Use `auth.recoverPending("totp", { pendingCredential, code })` for a recovery
-code. Each code is consumed once. A replay or exhausted attempt budget fails closed.
+## Choose a recovery action
+
+### Finish sign-in with a saved code
+
+With `allowRecoveryCodeForPending: true` as above, a guest who has completed the
+primary method can supply its pending proof and an unused recovery code:
+
+{/* prettier-ignore */}
+```ts
+const auth = yield* AppAuth;
+const result = yield* auth.recoverPending("totp", { pendingCredential, code });
+```
+
+The code contributes recovery-code evidence to the captured authentication
+requirement; your authority must accept that evidence for completion. It does
+not disable the authenticator or replace the remaining codes. Each code is
+consumed once, even if subsequent session completion fails. A reused code,
+expired pending proof, or exhausted attempt budget fails closed.
+
+### Replace the recovery codes
+
+An authenticated caller with fresh independent evidence for this exact
+`regenerate` command can replace the whole set:
+
+{/* prettier-ignore */}
+```ts
+const auth = yield* AppAuth;
+const result = yield* auth.regenerateRecoveryCodes("totp", { commandId, actionProof });
+```
+
+This invalidates every old code, including unused ones, and privately reveals ten
+new codes once. It leaves the authenticator enabled. Save the replacement set
+and discard the old one. Regeneration does not require enabling pending recovery
+or lost-factor reset. A session alone, or possession of a recovery code alone,
+is insufficient authorization.
+
+Regenerate before exhausting the set. If none remain, use the authenticator or
+another application-approved method to authenticate and obtain fresh management
+authorization. If all factors and codes are lost, recovery requires an
+application-owned account recovery process; there is no automatic bypass.
+
+### Reset a lost authenticator
+
+Only applications that deliberately support this route should configure:
+
+```ts
+Totp.make({
+  issuer: "My app",
+  allowRecoveryCodeForPending: true,
+  lostFactorRecovery: "reset-with-recovery-code",
+});
+```
+
+A guest completes the primary method again and submits its pending proof with an
+unused recovery code. Choose reset instead of spending that code on sign-in:
+
+{/* prettier-ignore */}
+```ts
+const auth = yield* AppAuth;
+const result = yield* auth.recoverLostFactor("totp", { pendingCredential, code });
+```
+
+Reset removes the authenticator and all remaining recovery codes, revises the
+account's authentication state, and clears pending and session credentials.
+The result is `{ outcome: "reauthentication-required", invalidation }`, never a
+signed-in session. Start primary authentication again under the application's
+current policy, then obtain fresh enrollment authorization and enroll a new
+factor. The persistence owner must atomically validate the pending flow for
+reset; custom Drizzle mappings need `pendingCondition`. Unsupported storage
+fails closed. Keep the default immediate session invalidation requirement
+unless your application deliberately accepts the adapter's invalidation window.
 
 ## Expose private reveals over HTTP
 
@@ -136,6 +213,21 @@ export const TotpApi = AuthContract.make("app/Auth", {
       }),
       confirmEnrollment: AuthContract.fromOperation(totp.operations.Confirm, {
         strategy: "totp",
+      }),
+      regenerateRecoveryCodes: AuthContract.fromOperation(totp.operations.Regenerate, {
+        strategy: "totp",
+      }),
+      recoverPending: AuthContract.fromOperation(totp.operations.RecoverPending, {
+        strategy: "totp",
+        requestFields: { pendingCredential: "pending-proof" },
+        subject: {
+          fromSuccess: (result) =>
+            result._tag === "Authenticated" ? result.session.subjectId : undefined,
+        },
+      }),
+      recoverLostFactor: AuthContract.fromOperation(totp.operations.RecoverLostFactor, {
+        strategy: "totp",
+        requestFields: { pendingCredential: "pending-proof" },
       }),
       verifyPending: AuthContract.fromOperation(totp.operations.VerifyPending, {
         strategy: "totp",
@@ -168,3 +260,40 @@ Give the collector a finite
 lifetime, erase expired reveals, and clear it when the enrollment screen closes.
 The client also clears it on account transition and disposal. Keep reveals outside
 ordinary atom results, query caches, logs, and persisted client state.
+
+## Connect the enrollment and recovery screens
+
+Use the contract above with the [client and Atom setup](./client#create-the-client-and-atoms)
+and the private-output collector described above. The named actions become
+mutations such as `auth.beginEnrollment`, `auth.recoverPending`, and
+`auth.regenerateRecoveryCodes`. Keep multi-step work in Effect workflow atoms;
+React renders the screen and dispatches input. Declare additional settings-query
+invalidation through mutation reactivity keys.
+
+1. **Enroll:** authenticate, obtain fresh `enroll` evidence, and call
+   `beginEnrollment`. Render the collector's temporary QR/manual-key reveal.
+2. **Save codes:** obtain fresh `confirm` evidence and submit the first
+   authenticator code with the enrollment ID. Render only the private collector's
+   recovery-code reveal, then clear it on expiry or screen exit. If delivery is
+   lost, do not retry issuance blindly; obtain fresh authorization to replace
+   the codes.
+3. **Recover sign-in:** complete the primary method, then dispatch
+   `recoverPending({ code })`. The request boundary supplies the pending cookie;
+   no subject ID or session cookie substitutes for it.
+4. **Maintain access:** after authentication, obtain fresh `regenerate` evidence
+   to replace a depleted set. For a lost authenticator, offer the separately
+   enabled reset action from the pending screen, then return to sign-in and
+   repeat enrollment with fresh authorization.
+
+The existing [studio contract](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/studio-transport.ts)
+and [Atom client](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/studio-browser.ts)
+show route and mutation composition. They are wiring references, not a complete
+recovery UI or a substitute for your independent action-evidence service.
+
+## Phone and remembered-device scope
+
+[Phone codes](./phone) provide primary SMS sign-in and phone-number lifecycle
+operations. Adding `PhoneOtp` does not automatically add SMS as a second factor
+for a pending sign-in. The application still owns MFA requirements and evidence
+acceptance. There is no packaged remembered-device bypass; a remembered browser
+must not silently skip the required factor.
