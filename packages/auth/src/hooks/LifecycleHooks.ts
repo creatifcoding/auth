@@ -129,7 +129,7 @@ export const composeHooks = <const Tag extends string>(
           }
 
           return reports;
-        }, Effect.uninterruptible),
+        }),
       };
     }),
   );

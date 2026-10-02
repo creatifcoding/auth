@@ -7,6 +7,7 @@ import {
   Predicate,
   Schema,
   SchemaGetter,
+  Scope,
   type Types,
 } from "effect";
 import { Rpc, RpcGroup } from "effect/rpc";
@@ -405,12 +406,15 @@ const buildOperation = <
     return yield* execute(context, payload);
   }, sanitizeOperationDefects("local"));
 
-  /** Capture capabilities at Layer construction, with the caller still an explicit argument. */
+  /** Capture shared services at construction. Omit Scope so the caller scope
+   * remains. The assertion keeps that omission out of public requirements. */
   const installHandler = <R>(handler: CredentialHandler<R>) =>
     Layer.effect(
       HandlerService,
       Effect.gen(function* () {
-        const services = yield* Effect.context<R>();
+        const services = Context.omit(Scope.Scope)(
+          yield* Effect.context<R>(),
+        ) as unknown as Context.Context<R>;
 
         return {
           run: (payload: Payload["Type"], context: AuthInvocation) =>

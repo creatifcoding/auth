@@ -412,6 +412,33 @@ const scopeEntries = (keys: PasswordScopeKeys, policy: PasswordAttemptPolicy) =>
   return entries;
 };
 
+const livePendingAttempts = (
+  mapping: Mapping,
+  moduleId: string,
+  action: "sign-in" | "change",
+  entry: ScopeEntry,
+  identifier: LoginIdentifier,
+  nativeSubjectId: unknown | undefined,
+  activeAt: unknown,
+) => {
+  const a = attemptColumns(mapping);
+
+  return and(
+    entry.kind === "action"
+      ? and(eq(a.moduleId, moduleId), eq(a.action, action))
+      : entry.kind === "identifier"
+        ? and(
+            eq(a.moduleId, moduleId),
+            eq(a.action, action),
+            eq(a.identifierNamespace, identifier.namespace),
+            eq(a.identifierValue, identifier.value),
+          )
+        : and(eq(a.moduleId, moduleId), eq(a.action, action), eq(a.subjectId, nativeSubjectId)),
+    eq(a.state, "pending"),
+    sql`${a.retentionUntil} > ${activeAt}`,
+  );
+};
+
 const scopeAdmissionCondition = (
   mapping: Mapping,
   moduleId: string,
@@ -422,25 +449,16 @@ const scopeAdmissionCondition = (
   nativeSubjectId: unknown | undefined,
 ) => {
   const c = chargeColumns(mapping);
-  const a = attemptColumns(mapping);
 
-  const pending =
-    entry.kind === "action"
-      ? and(eq(a.moduleId, moduleId), eq(a.action, action), eq(a.state, "pending"))
-      : entry.kind === "identifier"
-        ? and(
-            eq(a.moduleId, moduleId),
-            eq(a.action, action),
-            eq(a.identifierNamespace, identifier.namespace),
-            eq(a.identifierValue, identifier.value),
-            eq(a.state, "pending"),
-          )
-        : and(
-            eq(a.moduleId, moduleId),
-            eq(a.action, action),
-            eq(a.subjectId, nativeSubjectId),
-            eq(a.state, "pending"),
-          );
+  const pending = livePendingAttempts(
+    mapping,
+    moduleId,
+    action,
+    entry,
+    identifier,
+    nativeSubjectId,
+    mapping.d1.engineNow,
+  );
 
   return sql`(select count(*) from ${mapping.charge.table} where ${c.moduleId} = ${sql.param(moduleId, c.moduleId)} and ${c.action} = ${sql.param(action, c.action)} and ${c.scopeKind} = ${sql.param(entry.kind, c.scopeKind)} and ${c.scopeKey} = ${sql.param(entry.key, c.scopeKey)} and ${c.occurredAt} >= ${mapping.d1.engineInstantMinus(entry.windowMillis)}) < ${entry.limit} and (select count(*) from ${mapping.attempt.table} where ${pending}) < ${policy.maximumPending}`;
 };
@@ -458,7 +476,6 @@ const readScopeAdmission = Effect.fn("DrizzleD1Password.readScopeAdmission")(fun
   const database = yield* CurrentD1PlanningDatabase;
 
   const c = chargeColumns(mapping);
-  const a = attemptColumns(mapping);
   const admitted: ScopeEntry[] = [];
 
   for (let index = 0; index < entries.length; index++) {
@@ -479,26 +496,21 @@ const readScopeAdmission = Effect.fn("DrizzleD1Password.readScopeAdmission")(fun
         ),
     );
 
-    const pendingWhere =
-      entry.kind === "action"
-        ? and(eq(a.moduleId, moduleId), eq(a.action, action), eq(a.state, "pending"))
-        : entry.kind === "identifier"
-          ? and(
-              eq(a.moduleId, moduleId),
-              eq(a.action, action),
-              eq(a.identifierNamespace, identifier.namespace),
-              eq(a.identifierValue, identifier.value),
-              eq(a.state, "pending"),
-            )
-          : and(
-              eq(a.moduleId, moduleId),
-              eq(a.action, action),
-              eq(a.subjectId, nativeSubjectId),
-              eq(a.state, "pending"),
-            );
-
     const pendingRows = yield* mapAdapter(
-      database.select({ total: count() }).from(mapping.attempt.table).where(pendingWhere),
+      database
+        .select({ total: count() })
+        .from(mapping.attempt.table)
+        .where(
+          livePendingAttempts(
+            mapping,
+            moduleId,
+            action,
+            entry,
+            identifier,
+            nativeSubjectId,
+            mapping.encodeInstant(now),
+          ),
+        ),
     );
 
     const admittedHere =

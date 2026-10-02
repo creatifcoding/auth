@@ -162,6 +162,29 @@ const privateConfiguration = <R>(
   return configuration;
 };
 
+const jwksCaches = new Map<string, NonNullable<ReturnType<typeof client.getJwksCache>>>();
+
+/** One JWKS cache per installed issuer generation. Request configurations stay private. */
+const bindJwks = (
+  provider: {
+    readonly issuer: string;
+    readonly configurationGeneration: string | number;
+    readonly clientId: string;
+  },
+  configuration: client.Configuration,
+) => {
+  const key = `${provider.issuer}\u0000${String(provider.configurationGeneration)}\u0000${provider.clientId}`;
+  const existing = jwksCaches.get(key);
+
+  if (existing !== undefined) client.setJwksCache(configuration, existing);
+
+  return () => {
+    const next = client.getJwksCache(configuration);
+
+    if (next !== undefined) jwksCaches.set(key, next);
+  };
+};
+
 export const makeOpenIdClientOAuthProtocol = Effect.fn("makeOpenIdClientOAuthProtocol")(
   // Capture one provider table; each generation retains its own receipt rules.
   function* <R = never>(
@@ -199,40 +222,46 @@ export const makeOpenIdClientOAuthProtocol = Effect.fn("makeOpenIdClientOAuthPro
         try: async (signal) => {
           const configuration = privateConfiguration(entry, timeoutSeconds, fetch, signal);
 
-          const state = client.randomState();
-          const verifier = client.randomPKCECodeVerifier();
-          const nonce = provider.protocol === "oidc" ? client.randomNonce() : undefined;
-          const challenge = await client.calculatePKCECodeChallenge(verifier);
+          const publishJwks = bindJwks(provider, configuration);
 
-          signal.throwIfAborted();
+          try {
+            const state = client.randomState();
+            const verifier = client.randomPKCECodeVerifier();
+            const nonce = provider.protocol === "oidc" ? client.randomNonce() : undefined;
+            const challenge = await client.calculatePKCECodeChallenge(verifier);
 
-          const url = client.buildAuthorizationUrl(
-            configuration,
-            makeAuthorizationParameters(provider, callback.redirectUri, {
-              state,
-              challenge,
-              ...(nonce === undefined ? {} : { nonce }),
-            }),
-          );
+            signal.throwIfAborted();
 
-          return {
-            configuration: {
-              provider: provider.provider,
-              protocol: provider.protocol,
-              configurationGeneration: provider.configurationGeneration,
-              issuer: provider.issuer,
-              responseIssuerMode: provider.responseIssuerMode,
-              callbackId: callback.callbackId,
-              redirectUri: callback.redirectUri,
-            },
-            authorizationUrl: Redacted.make(url.href),
-            secrets: {
-              namespace: "effect-auth/oauth-transaction-secrets/v1" as const,
-              state: Redacted.make(state),
-              pkceVerifier: Redacted.make(verifier),
-              ...(nonce === undefined ? {} : { oidcNonce: Redacted.make(nonce) }),
-            },
-          };
+            const url = client.buildAuthorizationUrl(
+              configuration,
+              makeAuthorizationParameters(provider, callback.redirectUri, {
+                state,
+                challenge,
+                ...(nonce === undefined ? {} : { nonce }),
+              }),
+            );
+
+            return {
+              configuration: {
+                provider: provider.provider,
+                protocol: provider.protocol,
+                configurationGeneration: provider.configurationGeneration,
+                issuer: provider.issuer,
+                responseIssuerMode: provider.responseIssuerMode,
+                callbackId: callback.callbackId,
+                redirectUri: callback.redirectUri,
+              },
+              authorizationUrl: Redacted.make(url.href),
+              secrets: {
+                namespace: "effect-auth/oauth-transaction-secrets/v1" as const,
+                state: Redacted.make(state),
+                pkceVerifier: Redacted.make(verifier),
+                ...(nonce === undefined ? {} : { oidcNonce: Redacted.make(nonce) }),
+              },
+            };
+          } finally {
+            publishJwks();
+          }
         },
         catch: unavailable,
       });
@@ -282,58 +311,64 @@ export const makeOpenIdClientOAuthProtocol = Effect.fn("makeOpenIdClientOAuthPro
           try: async (signal) => {
             const configuration = privateConfiguration(entry, timeoutSeconds, fetch, signal);
 
-            const currentUrl = new URL(saved.redirectUri);
+            const publishJwks = bindJwks(provider, configuration);
 
-            currentUrl.searchParams.set("code", Redacted.value(request.response.code));
-            currentUrl.searchParams.set("state", Redacted.value(request.response.state));
-            if (request.response.issuer !== undefined)
-              currentUrl.searchParams.set("iss", request.response.issuer);
+            try {
+              const currentUrl = new URL(saved.redirectUri);
 
-            const tokens = await client.authorizationCodeGrant(
-              configuration,
-              currentUrl,
-              {
-                pkceCodeVerifier: Redacted.value(request.secrets.pkceVerifier),
-                expectedState: Redacted.value(request.secrets.state),
-                ...(provider.protocol === "oidc"
-                  ? {
-                      expectedNonce: Redacted.value(request.secrets.oidcNonce!),
-                      idTokenExpected: true,
-                      ...(provider.maxAgeSeconds === undefined
-                        ? {}
-                        : { maxAge: provider.maxAgeSeconds }),
-                    }
-                  : {}),
-              },
-              provider.tokenParameters,
-            );
+              currentUrl.searchParams.set("code", Redacted.value(request.response.code));
+              currentUrl.searchParams.set("state", Redacted.value(request.response.state));
+              if (request.response.issuer !== undefined)
+                currentUrl.searchParams.set("iss", request.response.issuer);
 
-            signal.throwIfAborted();
-            if (provider.protocol === "oidc")
-              return { protocol: "oidc" as const, claims: tokens.claims() };
-            if (tokens.token_type !== "bearer") throw unavailable();
+              const tokens = await client.authorizationCodeGrant(
+                configuration,
+                currentUrl,
+                {
+                  pkceCodeVerifier: Redacted.value(request.secrets.pkceVerifier),
+                  expectedState: Redacted.value(request.secrets.state),
+                  ...(provider.protocol === "oidc"
+                    ? {
+                        expectedNonce: Redacted.value(request.secrets.oidcNonce!),
+                        idTokenExpected: true,
+                        ...(provider.maxAgeSeconds === undefined
+                          ? {}
+                          : { maxAge: provider.maxAgeSeconds }),
+                      }
+                    : {}),
+                },
+                provider.tokenParameters,
+              );
 
-            const response = await client.fetchProtectedResource(
-              configuration,
-              tokens.access_token,
-              new URL(provider.identitySource.url),
-              "GET",
-              undefined,
-              new Headers(provider.identitySource.headers),
-            );
+              signal.throwIfAborted();
+              if (provider.protocol === "oidc")
+                return { protocol: "oidc" as const, claims: tokens.claims() };
+              if (tokens.token_type !== "bearer") throw unavailable();
 
-            signal.throwIfAborted();
-            if (
-              response.status !== 200 ||
-              response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
-                "application/json"
-            )
-              throw unavailable();
-            const body: unknown = await response.json();
+              const response = await client.fetchProtectedResource(
+                configuration,
+                tokens.access_token,
+                new URL(provider.identitySource.url),
+                "GET",
+                undefined,
+                new Headers(provider.identitySource.headers),
+              );
 
-            signal.throwIfAborted();
+              signal.throwIfAborted();
+              if (
+                response.status !== 200 ||
+                response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
+                  "application/json"
+              )
+                throw unavailable();
+              const body: unknown = await response.json();
 
-            return { protocol: "oauth" as const, body };
+              signal.throwIfAborted();
+
+              return { protocol: "oauth" as const, body };
+            } finally {
+              publishJwks();
+            }
           },
           catch: grantError,
         });

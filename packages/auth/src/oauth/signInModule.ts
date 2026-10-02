@@ -91,15 +91,16 @@ const read = <A>(receipt: PreparedCommit<A>) =>
 
 const encoder = new TextEncoder();
 
-// Waiting is bounded even if an adapter is still finishing cooperative cleanup.
-// A timed-out owner may still commit: its receipt is abandoned, never recovered.
+// The wait is bounded. Cancellation stays on this fiber and runs finalizers
+// before returning. A timed-out owner may still have committed: its receipt is
+// abandoned, never recovered.
 const bounded = <A, E, R>(effect: Effect.Effect<A, E, R>, millis: number) =>
   Effect.gen(function* () {
-    const fiber = yield* effect.pipe(Effect.interruptible, Effect.forkDetach);
+    const fiber = yield* effect.pipe(Effect.interruptible, Effect.forkChild);
 
     return yield* Fiber.join(fiber).pipe(
       Effect.timeout(millis),
-      Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid)),
+      Effect.ensuring(Fiber.interrupt(fiber)),
     );
   });
 
@@ -665,6 +666,10 @@ export const makeOAuthMethod = <
                 return {
                   finished,
                   ambiguous: outcome._tag === "Ambiguous",
+                  // A protocol rejection before any grant is definite no-issuance.
+                  // Identity mismatch after exchange still keeps the reservation open.
+                  unissued:
+                    reservation !== undefined && privateGrant === undefined && definiteRejection,
                   registrationCommand: registrationPrepared?.command,
                   context,
                   verifiedAt,
@@ -673,16 +678,19 @@ export const makeOAuthMethod = <
               }),
             );
 
-            const { finished, context, verifiedAt, identity, registrationCommand } = settled;
+            const { finished, context, verifiedAt, identity, registrationCommand, unissued } =
+              settled;
 
             if (access !== undefined && reservation !== undefined && finished._tag !== "Verified") {
               yield* access.abandon(
                 reservation,
                 finished._tag === "Cancelled"
                   ? "Cancelled"
-                  : finished._tag === "Ambiguous"
+                  : finished._tag === "Ambiguous" || settled.ambiguous
                     ? "Ambiguous"
-                    : "Rejected",
+                    : unissued
+                      ? "Unissued"
+                      : "Rejected",
               );
             }
 

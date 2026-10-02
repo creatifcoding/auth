@@ -75,6 +75,7 @@ export const layerEmailProofDelivery = (options: {
                 : { attachments: [...rendered.attachments] }),
             })
             .pipe(
+              Effect.withTracerEnabled(false),
               Effect.as({ _tag: "Accepted" } as const),
               Effect.catchTags({
                 EmailValidationError: () =>

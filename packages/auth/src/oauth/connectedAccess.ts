@@ -94,11 +94,11 @@ export const connectedSafe = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 export const connectedBounded = <A, E, R>(effect: Effect.Effect<A, E, R>, millis: number) =>
   Effect.gen(function* () {
-    const fiber = yield* effect.pipe(Effect.interruptible, Effect.forkDetach);
+    const fiber = yield* effect.pipe(Effect.interruptible, Effect.forkChild);
 
     return yield* Fiber.join(fiber).pipe(
       Effect.timeout(millis),
-      Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid)),
+      Effect.ensuring(Fiber.interrupt(fiber)),
     );
   });
 

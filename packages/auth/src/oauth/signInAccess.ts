@@ -143,7 +143,7 @@ const make = Effect.fnUntraced(function* (
 
   const abandon = (
     reservation: OAuthSignInAccessClaim,
-    outcome: "Cancelled" | "Rejected" | "Ambiguous",
+    outcome: "Cancelled" | "Rejected" | "Unissued" | "Ambiguous",
   ) =>
     persistence
       .settleSignIn({ reservation, outcome: { _tag: outcome } }, (value, journal) =>

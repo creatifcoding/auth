@@ -118,14 +118,16 @@ export const settle = Effect.fn("oauthConnected.settle")(function* (
     const claimed = yield* F.exact(mapping, input.claim);
 
     if (claimed === undefined) return { _tag: "Rejected" } as const;
+    const state = out._tag === "Unissued" ? "Rejected" : out._tag;
+
     yield* F.terminal(
       mapping,
       input.claim,
-      out._tag,
-      out._tag === "Cancelled" ? "Resolved" : "Unresolved",
+      state,
+      out._tag === "Cancelled" || out._tag === "Unissued" ? "Resolved" : "Unresolved",
     );
 
-    return { _tag: out._tag } as
+    return { _tag: state } as
       | { readonly _tag: "Cancelled" }
       | { readonly _tag: "Rejected" }
       | { readonly _tag: "Conflict" }
