@@ -14,54 +14,6 @@ Use `EmailNotAccepted` only when rejection is certain; use `EmailAcceptanceUnkno
 when sending might have happened. Map typed provider errors without copying their
 messages or causes into Auth errors. Defects and interruption must propagate.
 
-## Bridge effect-cf
-
-Use your existing `Email.Tag` service, or define one for the Worker's email binding:
-
-```ts title="apps/server/email.ts"
-import {
-  EmailDelivery,
-  EmailNotAccepted,
-  EmailAcceptanceUnknown,
-} from "@yielded/auth/EmailDelivery";
-import { Effect, Layer, Redacted } from "effect";
-import { Email } from "effect-cf";
-
-class AppMail extends Email.Tag<AppMail>()("app/Mail") {}
-
-export const EmailLive = Layer.effect(
-  EmailDelivery,
-  Effect.gen(function* () {
-    const mail = yield* AppMail;
-
-    return EmailDelivery.of({
-      send: (message) =>
-        mail
-          .send({
-            from: "hello@example.com",
-            to: message.to,
-            subject: message.subject,
-            text: Redacted.value(message.text),
-            ...(message.html === undefined ? {} : { html: Redacted.value(message.html) }),
-          })
-          .pipe(
-            Effect.asVoid,
-            Effect.mapError((error) =>
-              error._tag === "EmailValidationError"
-                ? EmailNotAccepted.make({})
-                : EmailAcceptanceUnknown.make({}),
-            ),
-          ),
-    });
-  }),
-).pipe(Layer.provide(AppMail.layer({ binding: "AUTH_EMAIL" })));
-```
-
-Provide `WorkerEnvironment` from `effect-cf` with the current Worker environment
-at your application boundary. The binding and verified sender are application
-configuration. Local validation happens before provider I/O; operation failures
-are classified conservatively as uncertain acceptance.
-
 ## Bridge Alchemy
 
 Alchemy's email binding provides an Effect-native client. In your stack, declare
@@ -110,6 +62,54 @@ Build/provide this Layer inside Worker request execution, where Alchemy supplies
 `SendEmailError` does not distinguish rejection from uncertain acceptance, so this
 bridge maps it to uncertainty. Provision sender permissions and destination
 eligibility for your deployment separately.
+
+## Bridge effect-cf
+
+Use your existing `Email.Tag` service, or define one for the Worker's email binding:
+
+```ts title="apps/server/email.ts"
+import {
+  EmailDelivery,
+  EmailNotAccepted,
+  EmailAcceptanceUnknown,
+} from "@yielded/auth/EmailDelivery";
+import { Effect, Layer, Redacted } from "effect";
+import { Email } from "effect-cf";
+
+class AppMail extends Email.Tag<AppMail>()("app/Mail") {}
+
+export const EmailLive = Layer.effect(
+  EmailDelivery,
+  Effect.gen(function* () {
+    const mail = yield* AppMail;
+
+    return EmailDelivery.of({
+      send: (message) =>
+        mail
+          .send({
+            from: "hello@example.com",
+            to: message.to,
+            subject: message.subject,
+            text: Redacted.value(message.text),
+            ...(message.html === undefined ? {} : { html: Redacted.value(message.html) }),
+          })
+          .pipe(
+            Effect.asVoid,
+            Effect.mapError((error) =>
+              error._tag === "EmailValidationError"
+                ? EmailNotAccepted.make({})
+                : EmailAcceptanceUnknown.make({}),
+            ),
+          ),
+    });
+  }),
+).pipe(Layer.provide(AppMail.layer({ binding: "AUTH_EMAIL" })));
+```
+
+Provide `WorkerEnvironment` from `effect-cf` with the current Worker environment
+at your application boundary. The binding and verified sender are application
+configuration. Local validation happens before provider I/O; operation failures
+are classified conservatively as uncertain acceptance.
 
 ## Compose Auth
 
