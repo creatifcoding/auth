@@ -6,8 +6,8 @@
 "@yielded/auth-cloudflare": patch
 ---
 
-Release password admission after attempt retention, page phone admission cleanup, and resolve OAuth reservations when the provider definitely issues no token.
+Release password admission after attempt retention, page phone admission cleanup, and resolve an OAuth reservation when the provider issues no token.
 
-Keep request resources on the request scope, let post-commit hooks observe caller deadlines, report password hashing and authority outages as unavailable, reuse each OIDC issuer's JWKS cache, and leave provider message text out of delivery traces.
+Keep request resources and post-commit hooks on the caller, report password outages as unavailable, and reuse each issuer's JWKS cache.
 
-BEHAVIOR CHANGE: Existing unresolved OAuth reservations from earlier definite provider rejections stay in place; clear those development rows if a cohort remains blocked. Reset is not required for password attempts, which stop counting once their retention instant has passed.
+BEHAVIOR CHANGE: Clear unresolved reservations left by earlier definite provider rejections if a cohort stays blocked. Password attempts need no reset.

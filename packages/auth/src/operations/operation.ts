@@ -406,10 +406,8 @@ const buildOperation = <
     return yield* execute(context, payload);
   }, sanitizeOperationDefects("local"));
 
-  /** Capture shared capabilities at Layer construction. Scope is omitted so
-   * request resources close with the caller. `Effect.provide` merges contexts,
-   * and a missing Scope key leaves the caller's scope in place. The captured
-   * map is typed as `R` so that fallthrough does not appear in public requirements. */
+  /** Capture shared services at construction. Omit Scope so the caller scope
+   * remains. The assertion keeps that omission out of public requirements. */
   const installHandler = <R>(handler: CredentialHandler<R>) =>
     Layer.effect(
       HandlerService,

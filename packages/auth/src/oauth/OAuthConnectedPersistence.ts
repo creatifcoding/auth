@@ -47,7 +47,8 @@ export class OAuthConnectedPersistence extends Context.Service<
     }) => Effect.Effect<OAuthSignInAccessInspection, OAuthUnavailable>;
     /** Commit sealed tokens into the ordinary connected-grant store. Exact
      * reservation/target/revisions are rechecked; no session is released before
-     * confirmation. Failed/unknown exchanges retain unresolved cohort work. */
+     * confirmation. `Unissued` resolves the reservation. `Rejected` and unknown
+     * exchanges keep unresolved cohort work. */
     readonly settleSignIn: <A>(
       input: {
         readonly reservation: OAuthSignInAccessClaim;
@@ -101,7 +102,8 @@ export class OAuthConnectedPersistence extends Context.Service<
      * includes sealed cleanup for a cutoff advanced since inspectGrant; route it into
      * original cohort custody instead of activating. Quarantined can ONLY join sealed
      * cleanup custody, never Active. No login
-     * credential/factor/session mutation. Unknown outcome MUST NOT trigger revoke. */
+     * credential/factor/session mutation. `Unissued` resolves the flow. `Rejected`
+     * stays unresolved. Unknown outcome MUST NOT trigger revoke. */
     readonly settle: <A>(
       input: {
         readonly claim: M.OAuthConnectedClaim;
