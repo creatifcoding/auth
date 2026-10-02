@@ -29,6 +29,7 @@ export default defineConfig({
       "src/Proofs.ts",
       "src/Password.ts",
       "src/Email.ts",
+      "src/EmailDelivery.ts",
       "src/Passkey.ts",
       "src/PasskeyPassword.ts",
       "src/PhoneOtp.ts",

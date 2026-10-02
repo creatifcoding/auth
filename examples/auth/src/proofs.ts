@@ -1,5 +1,5 @@
 import { BunRuntime } from "@effect/platform-bun";
-import { Hooks, Operations, Proofs, WebCrypto } from "@yielded/auth";
+import { EmailDelivery, Hooks, Operations, Proofs, WebCrypto } from "@yielded/auth";
 import { Effect, Layer, Redacted } from "effect";
 import { Base64Url } from "effect/encoding";
 
@@ -46,12 +46,12 @@ const invocation = { _tag: "System", authority: "example-method" } as const;
 
 const program = Effect.gen(function* () {
   for (const channel of ["email", "sms"] as const) {
-    const delivered: Proofs.ProofDeliveryMessage[] = [];
+    const delivered: Redacted.Redacted<string>[] = [];
     const commands: Operations.AuthCredentialCommand[] = [];
 
     const sender = (message: Proofs.ProofDeliveryMessage) =>
       Effect.sync(() => {
-        delivered.push(message);
+        delivered.push(message.secret);
 
         return { _tag: "Accepted" as const };
       });
@@ -70,7 +70,20 @@ const program = Effect.gen(function* () {
 
     const capability = (
       channel === "email"
-        ? proofs.emailLayer.pipe(Layer.provide(Proofs.EmailProofDelivery.layer(vendor, sender)))
+        ? proofs.emailLayer.pipe(
+            Layer.provide(
+              Layer.succeed(EmailDelivery.EmailDelivery, {
+                send: (message) =>
+                  Effect.sync(() => {
+                    delivered.push(
+                      Redacted.make(
+                        Redacted.value(message.text).match(/code is ([0-9]+)/)?.[1] ?? "",
+                      ),
+                    );
+                  }),
+              }),
+            ),
+          )
         : proofs.smsLayer.pipe(Layer.provide(Proofs.SmsProofDelivery.layer(vendor, sender)))
     ).pipe(Layer.provide(authority), Layer.provide(base));
 
@@ -129,7 +142,7 @@ const program = Effect.gen(function* () {
       const superseded = yield* proofs.operations.Attempt.invoke(invocation, {
         reference: receipt.reference,
         binding,
-        credential: Redacted.value(first.secret),
+        credential: Redacted.value(first),
       }).pipe(
         Effect.provideService(
           Operations.AuthCredentialCommandCollector,
@@ -143,7 +156,7 @@ const program = Effect.gen(function* () {
       const accepted = yield* proofs.operations.Attempt.invoke(invocation, {
         reference: resent.reference,
         binding,
-        credential: Redacted.value(latest.secret),
+        credential: Redacted.value(latest),
       }).pipe(
         Effect.provideService(
           Operations.AuthCredentialCommandCollector,

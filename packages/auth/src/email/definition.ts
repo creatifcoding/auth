@@ -10,15 +10,16 @@ import { defaultProofPolicy, type ProofPolicy } from "../proofs/policy";
 import type { EmailAddressPolicy } from "./addresses";
 import { type EmailProofOptions, makeEmailAccountModule, makeEmailSignInModule } from "./module";
 
+export interface EmailCodeOptions<Namespace extends string | undefined = undefined> {
+  readonly namespace?: Namespace;
+  readonly policy?: ProofPolicy;
+  readonly digits?: 6 | 7 | 8 | 9 | 10;
+}
+
 export interface EmailLinkOptions<Namespace extends string | undefined = undefined> {
   readonly namespace?: Namespace;
   readonly policy?: ProofPolicy;
-}
-
-export interface EmailCodeOptions<
-  Namespace extends string | undefined = undefined,
-> extends EmailLinkOptions<Namespace> {
-  readonly digits?: 6 | 7 | 8 | 9 | 10;
+  readonly url: string;
 }
 
 const captureDefine = <
@@ -114,11 +115,11 @@ export function makeLink<const Namespace extends string>(
 ): ReturnType<typeof define<"link", Namespace>>;
 
 export function makeLink<const Namespace extends string | undefined = undefined>(
-  options?: EmailLinkOptions<Namespace>,
+  options: EmailLinkOptions<Namespace>,
 ): ReturnType<typeof define<"link", Namespace | undefined>>;
 
 export function makeLink<const Namespace extends string | undefined>(
-  options: EmailLinkOptions<Namespace> = {},
+  options: EmailLinkOptions<Namespace>,
 ) {
   return define("link", options.namespace, {
     ...options,

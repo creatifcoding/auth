@@ -17,7 +17,6 @@
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "@yielded/auth": "workspace:*",
-        "@yielded/auth-cloudflare": "workspace:*",
         "@yielded/auth-crypto": "workspace:*",
         "@yielded/auth-openid-client": "workspace:*",
         "@yielded/auth-persistence": "workspace:*",
@@ -196,24 +195,6 @@
       },
       "peerDependencies": {
         "effect": "^4.0.0",
-      },
-    },
-    "packages/auth-cloudflare": {
-      "name": "@yielded/auth-cloudflare",
-      "version": "0.1.0-beta.13",
-      "dependencies": {
-        "@yielded/auth": "workspace:*",
-      },
-      "devDependencies": {
-        "@cloudflare/workers-types": "catalog:",
-        "effect": "catalog:",
-        "effect-cf": "catalog:",
-        "typescript": "catalog:",
-        "vite-plus": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "^4.0.0",
-        "effect-cf": "^0.53.0",
       },
     },
     "packages/auth-crypto": {
@@ -1501,8 +1482,6 @@
     "@voidzero-dev/vite-plus-win32-x64-msvc": ["@voidzero-dev/vite-plus-win32-x64-msvc@0.3.3", "", { "os": "win32", "cpu": "x64" }, "sha512-npbLQAAKdWHEB0qOFkmF/2OUzdraNBe1w7gY1LjXQFvqORAKZlHyQ2rgF5nBtG5+LKvbKWL6XpvyP+cQEh7MZg=="],
 
     "@yielded/auth": ["@yielded/auth@workspace:packages/auth"],
-
-    "@yielded/auth-cloudflare": ["@yielded/auth-cloudflare@workspace:packages/auth-cloudflare"],
 
     "@yielded/auth-crypto": ["@yielded/auth-crypto@workspace:packages/auth-crypto"],
 

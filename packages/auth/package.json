@@ -59,7 +59,8 @@
     "./TotpContract": "./src/TotpContract.ts",
     "./AuthContract": "./src/AuthContract.ts",
     "./Client": "./src/Client.ts",
-    "./Persistence": "./src/Persistence.ts"
+    "./Persistence": "./src/Persistence.ts",
+    "./EmailDelivery": "./src/EmailDelivery.ts"
   },
   "publishConfig": {
     "access": "public"

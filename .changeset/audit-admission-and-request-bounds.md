@@ -3,7 +3,6 @@
 "@yielded/auth-persistence": patch
 "@yielded/auth-persistence-drizzle": patch
 "@yielded/auth-openid-client": patch
-"@yielded/auth-cloudflare": patch
 ---
 
 Release password admission after attempt retention, page phone admission cleanup, and resolve an OAuth reservation when the provider issues no token.

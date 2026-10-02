@@ -110,6 +110,8 @@ export {
   type PasswordOptions,
   type PasswordManagementOptions,
   make,
+  resetLink,
+  resetCode,
 } from "./password/methods/definition";
 
 export {

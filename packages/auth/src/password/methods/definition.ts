@@ -27,8 +27,9 @@ export interface PasswordManagementOptions<
   Secret extends ProofSecretPolicy = ProofSecretPolicy,
 > extends PasswordOptions<Namespace> {
   readonly registration: Registration;
-  readonly reset?: {
-    readonly secret?: Secret;
+  readonly reset: {
+    readonly secret: Secret;
+    readonly url?: string;
     readonly policy?: ProofPolicy;
   };
 }
@@ -109,8 +110,9 @@ const captureManagement = <
     ...input,
     policy: snapshotPasswordMethodPolicy(input.policy ?? defaultPasswordMethodPolicy),
     reset: snapshotProofConfiguration({
-      secret: input.reset?.secret ?? { _tag: "Token" },
-      policy: input.reset?.policy ?? defaultProofPolicy,
+      secret: input.reset.secret,
+      url: input.reset.url,
+      policy: input.reset.policy ?? defaultProofPolicy,
     }),
   });
 
@@ -130,13 +132,7 @@ const bindManagement = <
 ) => {
   const { options } = captured;
 
-  return makePasswordMethod<
-    Id,
-    SessionId,
-    Claims,
-    Registration,
-    Secret | { readonly _tag: "Token" }
-  >(binding.namespace, {
+  return makePasswordMethod<Id, SessionId, Claims, Registration, Secret>(binding.namespace, {
     ...options,
     sessions: binding.sessions,
   });
@@ -228,3 +224,21 @@ export function make<
     ? management(options.namespace, options)
     : signIn(options.namespace, options);
 }
+
+/** Configure token proofs and their fixed HTTPS landing page together. */
+export const resetLink = (options: { readonly url: string; readonly policy?: ProofPolicy }) => ({
+  secret: { _tag: "Token" as const },
+  url: options.url,
+  policy: options.policy,
+});
+
+/** Numeric reset codes preserve leading zeroes and require ProofKeys. */
+export const resetCode = (
+  options: {
+    readonly digits?: 6 | 7 | 8 | 9 | 10;
+    readonly policy?: ProofPolicy;
+  } = {},
+) => ({
+  secret: { _tag: "NumericCode" as const, digits: options.digits ?? 6 },
+  policy: options.policy,
+});

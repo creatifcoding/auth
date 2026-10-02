@@ -11,7 +11,7 @@ const sessionLifetimeMillis = sessionConfiguration.policy(
 export const accountStrategies = {
   password: Password.make({
     registration: Registration,
-    reset: { secret: { _tag: "NumericCode", digits: 6 }, policy: emailProofPolicy },
+    reset: Password.resetCode({ policy: emailProofPolicy }),
   }),
   email: Email.makeAddresses({
     policy: emailProofPolicy,

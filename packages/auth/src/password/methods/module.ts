@@ -122,6 +122,7 @@ const makePasswordWithManagement = <
     readonly policy: PasswordMethodPolicy;
     readonly reset: {
       readonly secret: Secret;
+      readonly url?: string;
       readonly policy: ProofPolicy;
     };
   },

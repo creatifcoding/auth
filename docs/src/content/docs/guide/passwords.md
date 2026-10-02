@@ -18,14 +18,15 @@ export const AppAuth = Auth.make("app/Auth", {
   strategies: {
     password: Password.make({
       registration: Schema.Struct({ displayName: Schema.NonEmptyString }),
+      reset: Password.resetLink({ url: "https://app.example.com/reset-password" }),
     }),
   },
   defaultStrategy: "password",
 });
 ```
 
-Password policy and reset-token expiry have defaults. Your application controls
-account creation and recovery delivery. Override `policy` or `reset` when needed. For sign-in only, use
+Password policy and proof expiry have defaults. Choose reset links or codes explicitly.
+Your application controls account creation and supplies an email transport. For sign-in only, use
 `password: Password.make()` as in [getting started](./getting-started).
 
 This definition exposes local methods. The calls below belong inside an existing
@@ -90,7 +91,7 @@ remain application-owned:
 
 ```ts title="apps/server/password-live.ts"
 import { Layer } from "effect";
-import { Password, Proofs, WebCrypto } from "@yielded/auth";
+import { Password, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";
 
 import { AppAuth } from "./auth";
@@ -98,7 +99,7 @@ import { AuthDependencies } from "./auth-dependencies";
 import { authorizePasswordChange, registerAccount, resolvePasswordClaims } from "./auth-accounts";
 import { PasswordPersistenceLive, ProofPersistenceLive } from "./auth-persistence";
 import { checkPassword } from "./password-screening";
-import { emailVendor, sendEmail } from "./email";
+import { EmailLive } from "./email";
 
 export const PasswordLive = Layer.mergeAll(
   PasswordCrypto.layer().pipe(
@@ -111,7 +112,7 @@ export const PasswordLive = Layer.mergeAll(
   Layer.succeed(AppAuth.strategies.password.RegistrationAuthority, { register: registerAccount }),
   Layer.succeed(Password.CompromisedPasswords, { check: checkPassword }),
   Layer.succeed(Password.PasswordActionEvidence, { verify: authorizePasswordChange }),
-  Proofs.EmailProofDelivery.layer(emailVendor, sendEmail),
+  EmailLive,
 );
 
 export const AuthLive = AppAuth.layer.pipe(
@@ -126,48 +127,30 @@ can provide persistence and registration. `AuthDependencies` supplies the shared
 For sign-in-only `Password.make()`, supply hashing, password persistence, and claims
 alongside those shared services. Keep normalization stable for stored credentials.
 
-## Recover a password with Cloudflare email
+## Recover a password
 
 Recovery uses `requestReset` → `verifyReset` → `completeReset` and requires an
-independently verified email address. Registration/management enables these methods;
-provide proof persistence and email delivery alongside the services above.
+independently verified email address. The definition above selects reset links.
+Auth builds the link and renders the email; your `EmailDelivery` service only
+sends the finished message. Use the [email delivery recipes](./email-delivery)
+for effect-cf, Alchemy, or your own provider.
 
-Password reset proofs default to tokens. Cloudflare's default `EmailRenderer`
-only renders numeric codes, so explicitly select numeric reset proofs in the
-`Password.make` call above:
+The link destination must be a fixed HTTPS URL without credentials, query, or
+fragment. Auth validates it when building the Layer, before issuing any proof.
+For a code-entry UI, select numeric codes instead:
 
 ```ts
 Password.make({
   registration: Schema.Struct({ displayName: Schema.NonEmptyString }),
-  reset: { secret: { _tag: "NumericCode", digits: 6 } },
+  reset: Password.resetCode(),
 });
 ```
 
-Numeric proofs also require `Proofs.ProofKeys.layer(proofKeys)` in
-[`AuthDependencies`](../reference/adapters#compose-the-application-layer).
-Use a secret-managed keyring with at least 32 random bytes per key, encoded as
-base64url; retain old key IDs until their proofs expire. Keep the default proof
-expiry and attempt limits unless your application supplies its own policy.
-
-Replace `Proofs.EmailProofDelivery.layer(emailVendor, sendEmail)` in `PasswordLive`
-with `EmailDeliveryLive`:
-
-```ts title="apps/server/email.ts"
-import { layerEmailProofDelivery } from "@yielded/auth-cloudflare";
-
-export const EmailDeliveryLive = layerEmailProofDelivery({
-  binding: "AUTH_EMAIL",
-  from: "hello@example.com",
-});
-```
-
-Configure the Worker email binding and sender domain, and provide the current
-Worker environment as `WorkerEnvironment` from `effect-cf` at your Worker boundary.
-The Layer checks binding availability and shape; it does not receive the password
-strategy's proof policy and cannot check renderer compatibility at construction.
-To keep token proofs instead, provide the adapter's `EmailRenderer` service with
-application-owned link rendering. Without it, tokens fail delivery before any
-provider call.
+Codes default to six digits and also require `Proofs.ProofKeys.layer(proofKeys)` in
+[`AuthDependencies`](../reference/adapters#compose-the-application-layer). Keep
+leading zeroes by treating codes as strings. Link proofs do not require that keyring.
+Both choices have working default email content; wording and localization can be
+customized independently of the transport.
 
 Start recovery inside an Effect request handler:
 
@@ -177,23 +160,26 @@ const auth = yield* AppAuth;
 const requested = yield* auth.requestReset({ flowId, requestId, email, locale: "en" });
 ```
 
-Retain `flowId`, `email`, and `requested.reference` for this flow. Generate
-`requestId` once per submission and retain it for an exact retry. Always show a
-generic response such as “If this address is eligible, check your email.” The
-receipt does not reveal account eligibility or whether a message was sent.
+Retain the original flow ID, email, request ID, and reference. Always show a generic
+response such as “If this address is eligible, check your email.” The receipt does
+not reveal account eligibility or whether a message was sent.
 
-In the next request, verify the code entered from the email, preserving leading
-zeroes by keeping it a string:
+For links, the originating client uses `EmailDelivery.parseLinkFragment` to extract
+the reference and secret, clears the fragment from history, then waits for an
+intentional confirmation before submitting. A landing-page GET must never consume
+the proof. See [link handling](./email-delivery#handle-links) for the private-state
+and response-header boundaries. For codes, use the saved reference and entered code.
+
+In the next request, verify the submitted secret:
 
 <!-- prettier-ignore -->
 ```ts
 const auth = yield* AppAuth;
-const verified = yield* auth.verifyReset({ flowId, email, reference, secret: code });
+const verified = yield* auth.verifyReset({ flowId, email, reference, secret });
 ```
 
 Retain `verified.continuation.continuationId`. Its matching credential is issued
-through the private `proof-continuation` channel. Complete the reset with the same
-flow and email:
+through the private `proof-continuation` channel. Complete with the same flow and email:
 
 <!-- prettier-ignore -->
 ```ts
@@ -209,32 +195,24 @@ const result = yield* auth.completeReset({
 ```
 
 These are server-side inputs. For browser endpoints, map `credential` to the
-`proof-continuation` slot through the contract's `requestFields`, so the HTTP
-adapter reads the private cookie. Never return codes or continuation credentials
-in operation results or logs, or make the browser copy an HttpOnly cookie into
-JSON. Generate `commandId` once for the completion submission. Completion changes
-the password; sign in separately to obtain a session.
+`proof-continuation` slot through the contract's `requestFields`, so the HTTP adapter
+reads the private cookie. Never return secrets in ordinary operation results or logs,
+or make the browser copy an HttpOnly cookie into JSON. Generate `commandId` once per
+completion submission. Completion changes the password; sign in separately for a session.
 
 ### Delivery and retry boundaries
 
-Cloudflare delivery awaits provider acceptance in the request; acceptance does
-not prove inbox delivery. Unsupported formats and local email validation failures
-are definite policy failures: correct the configuration before starting a fresh,
-rate-limited recovery request. Typed provider `EmailOperationError` failures are
-treated conservatively as uncertain acceptance, even when they contain an error code.
-Do not automatically resend: the binding has no delivery-ID deduplication contract.
+Email delivery awaits provider acceptance, which does not prove inbox delivery.
+The transport distinguishes definite rejection from uncertain acceptance. Neither
+Auth nor the transport should automatically resend an uncertain message; this email
+service makes no deduplication promise and requires `maximumDeliveryAttempts: 1`.
 
 An exact `requestReset` retry can recover a generic receipt, not guarantee another
 send. Dispatch is a process-local continuation after persistence commits, not a
-durable outbox. A crash can leave an unsent proof; neither the receipt nor a
-restart guarantees eventual delivery. Let the user check their inbox and, if
-needed, explicitly start a new recovery flow under the configured cooldown and
-attempt limits. Do not use a generic receipt as a signal to enqueue retries.
-
-A consumed proof or an unknown commit outcome is not permission to repeat a
-password mutation. Prepared-password intents bind the original action, credential
-revision, and replacement verifier.
+durable outbox. A crash can leave an unsent proof. Let the user check their inbox
+and, if needed, explicitly start a new flow under the configured cooldown and attempt
+limits. A consumed proof or an unknown commit outcome does not authorize repeating
+a password mutation.
 
 See the [complete password composition](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/password-methods.ts)
-for recovery and factor authorization; its local delivery collector is independent
-of Cloudflare and uses token proofs.
+for a reset-link journey using a private local email collector.

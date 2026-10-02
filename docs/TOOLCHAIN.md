@@ -108,7 +108,7 @@ Before enabling automated releases:
 3. Configure npm trusted publishing for each published package, including
    `@yielded/auth`, `@yielded/auth-persistence`, `@yielded/auth-persistence-drizzle`,
    `@yielded/auth-simplewebauthn`, `@yielded/auth-react-native`,
-   `@yielded/auth-openid-client`, `@yielded/auth-cloudflare`, `@yielded/auth-crypto`,
+   `@yielded/auth-openid-client`, `@yielded/auth-crypto`,
    and `@yielded/drizzle-effect-v4-patch`, repository
    `yielded-dev/auth`, workflow `release.yml`. The first npm publication may
    require a manually authenticated owner before trusted publishing can be set.

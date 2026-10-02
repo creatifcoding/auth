@@ -1,4 +1,4 @@
-import { Proofs, Schema as AuthSchema } from "@yielded/auth";
+import { EmailDelivery, Schema as AuthSchema } from "@yielded/auth";
 import { Config, Effect, Layer, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
@@ -29,14 +29,11 @@ export const DeliveryLive = Layer.unwrap(
     const client = yield* HttpClient.HttpClient;
 
     const send = Effect.fn("Customers.sendEmail")(function* (
-      message: Proofs.ProofDeliveryMessage,
-    ): Effect.fn.Return<Proofs.ProofDeliveryOutcome> {
-      if (message.recipient.namespace !== "email" || message.format !== "numeric-code")
-        return { _tag: "DefiniteFailure", reason: "policy" };
-
-      const reset = message.purpose === "password-reset";
-      const code = Redacted.value(message.secret);
-
+      message: EmailDelivery.EmailMessage,
+    ): Effect.fn.Return<
+      void,
+      EmailDelivery.EmailNotAccepted | EmailDelivery.EmailAcceptanceUnknown
+    > {
       const result = yield* HttpClientRequest.post(
         `https://api.cloudflare.com/client/v4/accounts/${accountId}/email/sending/send`,
       ).pipe(
@@ -44,9 +41,10 @@ export const DeliveryLive = Layer.unwrap(
         HttpClientRequest.acceptJson,
         HttpClientRequest.bodyJsonUnsafe({
           from: sender,
-          to: message.recipient.value,
-          subject: reset ? "Reset your password" : "Verify your email address",
-          text: `${reset ? "Your password reset code" : "Your email verification code"} is ${code}.\n\nThis code expires in 5 minutes. If you did not request it, you can ignore this email.`,
+          to: message.to,
+          subject: message.subject,
+          text: Redacted.value(message.text),
+          ...(message.html === undefined ? {} : { html: Redacted.value(message.html) }),
         }),
         client.execute,
         Effect.flatMap((response) =>
@@ -56,35 +54,37 @@ export const DeliveryLive = Layer.unwrap(
                 status: response.status,
               });
 
-              return { _tag: "DefiniteFailure", reason: "unavailable" } as const;
+              return yield* EmailDelivery.EmailNotAccepted.make({});
             }
             if (response.status < 200 || response.status >= 300)
-              return { _tag: "Ambiguous" } as const;
+              return yield* EmailDelivery.EmailAcceptanceUnknown.make({});
             const body = yield* HttpClientResponse.schemaBodyJson(SendResponse)(response);
 
             if (
-              body.result.delivered.includes(message.recipient.value) ||
-              body.result.queued.includes(message.recipient.value)
+              body.result.delivered.includes(message.to) ||
+              body.result.queued.includes(message.to)
             )
-              return { _tag: "Accepted" } as const;
+              return;
             if (
-              body.result.permanent_bounces.includes(message.recipient.value) ||
-              body.result.suppressed_recipients?.includes(message.recipient.value)
+              body.result.permanent_bounces.includes(message.to) ||
+              body.result.suppressed_recipients?.includes(message.to)
             )
-              return { _tag: "DefiniteFailure", reason: "recipient" } as const;
+              return yield* EmailDelivery.EmailNotAccepted.make({});
 
-            return { _tag: "Ambiguous" } as const;
+            return yield* EmailDelivery.EmailAcceptanceUnknown.make({});
           }),
         ),
         Effect.timeout("8 seconds"),
         Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-        Effect.orElseSucceed(() => ({ _tag: "Ambiguous" }) as const),
+        Effect.mapError((error) =>
+          error._tag === "EmailNotAccepted" ? error : EmailDelivery.EmailAcceptanceUnknown.make({}),
+        ),
       );
 
       return result;
     });
 
     // Cloudflare does not promise delivery-ID deduplication. Never retry an uncertain send.
-    return Proofs.EmailProofDelivery.layer({ vendorId: "cloudflare", idempotencyMillis: 0 }, send);
+    return Layer.succeed(EmailDelivery.EmailDelivery, { send });
   }),
 );

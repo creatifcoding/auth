@@ -1,5 +1,5 @@
 import { BunRuntime } from "@effect/platform-bun";
-import { Auth, Email, Hooks, Operations, Proofs, WebCrypto } from "@yielded/auth";
+import { Auth, EmailDelivery, Email, Hooks, Operations, WebCrypto } from "@yielded/auth";
 import { Effect, Layer, Redacted } from "effect";
 import { Base64Url } from "effect/encoding";
 import { HttpRouter, HttpServerResponse } from "effect/http";
@@ -8,7 +8,7 @@ import { emailAuth, makeEmailConsumer, sessions, sessionPolicy } from "./email-m
 
 const program = Effect.gen(function* () {
   for (const mode of ["stateless", "stateful"] as const) {
-    const deliveries: Proofs.ProofDeliveryMessage[] = [];
+    const deliveries: EmailDelivery.EmailMessage[] = [];
     const notifications: string[] = [];
     const commands: Operations.AuthCredentialCommand[] = [];
     const notify = Email.emailIdentifierNotifications("example/email");
@@ -65,15 +65,12 @@ const program = Effect.gen(function* () {
         .completionLayer()
         .pipe(Layer.provide(Layer.mergeAll(strategy, model.layer)), Layer.provide(base));
 
-      const sender = Proofs.EmailProofDelivery.layer(
-        { vendorId: "local-fixture", idempotencyMillis: 0 },
-        (message) =>
+      const sender = Layer.succeed(EmailDelivery.EmailDelivery, {
+        send: (message) =>
           Effect.sync(() => {
             deliveries.push(message);
-
-            return { _tag: "Accepted" as const };
           }),
-      );
+      });
 
       const returns = Email.EmailReturnTargets.exactRoutes(["/account", "/settings"]);
 
@@ -145,7 +142,7 @@ const program = Effect.gen(function* () {
         const regProof = yield* auth.verifyRegistration("registration", {
           ...registerBase,
           reference: requested.reference,
-          secret: Redacted.value(delivered().secret),
+          secret: Redacted.value(delivered().text).match(/code is ([0-9]+)/)?.[1] ?? "",
         });
 
         const registered = yield* auth.completeRegistration("registration", {
@@ -169,7 +166,7 @@ const program = Effect.gen(function* () {
           locale: "en",
         });
 
-        const codeSecret = Redacted.value(delivered().secret);
+        const codeSecret = Redacted.value(delivered().text).match(/code is ([0-9]+)/)?.[1] ?? "";
 
         const duplicate = yield* auth.signIn({
           ...signInBase,
@@ -227,9 +224,10 @@ const program = Effect.gen(function* () {
           locale: "en",
         });
 
-        const render = yield* Email.makeMagicLinkRenderer("https://example.invalid/email");
-        const linkUrl = yield* render(delivered());
-        const parsedUrl = new URL(Redacted.value(linkUrl));
+        const linkUrl = Redacted.value(delivered().text).match(/https:\/\/\S+/)?.[0];
+
+        if (!linkUrl) return yield* Effect.die("sign-in link missing from email");
+        const parsedUrl = new URL(linkUrl);
         // A link preview performs only this static GET. The proof lives in the
         // fragment and never reaches the landing server or an automatic operation.
         const landingRequest = new Request(`${parsedUrl.origin}${parsedUrl.pathname}`);
@@ -243,7 +241,7 @@ const program = Effect.gen(function* () {
                 "/email",
                 HttpServerResponse.text(
                   "<!doctype html><button type=button>Confirm sign-in in the originating client</button>",
-                  { contentType: "text/html", headers: Email.magicLinkLandingHeaders },
+                  { contentType: "text/html", headers: EmailDelivery.linkLandingHeaders },
                 ),
               ),
               { disableLogger: true },
@@ -264,7 +262,7 @@ const program = Effect.gen(function* () {
         const fragment = Redacted.make(parsedUrl.hash);
 
         parsedUrl.hash = ""; // Browser history.replaceState performs this before UI work.
-        const extracted = yield* Email.parseMagicLinkFragment(fragment);
+        const extracted = yield* EmailDelivery.parseLinkFragment(fragment);
         const otherDevice = yield* begin("link-sign-in");
 
         const crossDevice = yield* auth
@@ -312,7 +310,7 @@ const program = Effect.gen(function* () {
           })
           .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: caller }));
 
-        const verifyCode = Redacted.value(delivered().secret);
+        const verifyCode = Redacted.value(delivered().text).match(/code is ([0-9]+)/)?.[1] ?? "";
 
         const verifiedProof = yield* auth
           .verifyEmailAddress("addresses", {
@@ -370,7 +368,7 @@ const program = Effect.gen(function* () {
         const refreshProof = yield* auth.verifySignIn({
           ...refreshBase,
           reference: refreshRequest.reference,
-          secret: Redacted.value(delivered().secret),
+          secret: Redacted.value(delivered().text).match(/code is ([0-9]+)/)?.[1] ?? "",
         });
 
         const refreshed = yield* auth.completeSignIn({
@@ -413,7 +411,7 @@ const program = Effect.gen(function* () {
           .verifyEmailChange("addresses", {
             ...changeBase,
             reference: changeRequest.reference,
-            secret: Redacted.value(delivered().secret),
+            secret: Redacted.value(delivered().text).match(/code is ([0-9]+)/)?.[1] ?? "",
           })
           .pipe(Effect.provideService(Auth.AuthRequest, { ...call, invocation: changeCaller }));
 
@@ -448,7 +446,7 @@ const program = Effect.gen(function* () {
         const mfaProof = yield* auth.verifySignIn({
           ...mfaBase,
           reference: mfaRequest.reference,
-          secret: Redacted.value(delivered().secret),
+          secret: Redacted.value(delivered().text).match(/code is ([0-9]+)/)?.[1] ?? "",
         });
 
         const mfa = yield* auth

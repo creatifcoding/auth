@@ -33,12 +33,6 @@ export {
   emailIdentifierNotifications,
 } from "./email/EmailIdentifierNotifier";
 
-export {
-  makeMagicLinkRenderer,
-  parseMagicLinkFragment,
-  magicLinkLandingHeaders,
-} from "./email/magicLink";
-
 export { makeEmailMethod as makeModule } from "./email/module";
 
 export {

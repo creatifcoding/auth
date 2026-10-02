@@ -54,7 +54,7 @@ const sent = yield* auth.signIn({
 
 `beginSignIn` delivers a private request-binding credential. The next request uses
 that credential as `requestBinding`. `signIn` returns a proof `reference`, not the code.
-Your `EmailProofDelivery` service sends the code.
+Auth renders the email; your `EmailDelivery` service sends the finished message.
 
 `requestBinding` and the continuation `credential` below are private server inputs.
 Map them to the `request-binding` and `proof-continuation` slots through the
@@ -103,11 +103,12 @@ to cookies so they stay out of ordinary browser payloads.
 ```ts title="apps/server/magic-link.ts"
 import { Email } from "@yielded/auth";
 
-export const magicLink = Email.makeLink();
+export const magicLink = Email.makeLink({ url: "https://app.example.com/sign-in" });
 ```
 
 Use this strategy with the same begin → request → verify → complete flow.
-`makeMagicLinkRenderer` places the secret in the URL fragment. A landing-page GET
+Auth places the reference and secret in the URL fragment. Use
+`EmailDelivery.parseLinkFragment` to read it. A landing-page GET
 must not consume it: show a confirmation action, clear the fragment from browser
 history, and complete from the originating client.
 
@@ -149,20 +150,20 @@ an exact-route allowlist helper, Web Crypto, and empty lifecycle hooks:
 
 ```ts title="apps/server/email-live.ts"
 import { Layer } from "effect";
-import { Email, Proofs } from "@yielded/auth";
+import { Email } from "@yielded/auth";
 
 import { AppAuth } from "./auth";
 import { AuthDependencies } from "./auth-dependencies";
 import { lookupEmail, resolveEmailClaims } from "./auth-accounts";
 import { ProofPersistenceLive } from "./auth-persistence";
-import { emailVendor, sendEmail } from "./email";
+import { EmailLive } from "./email";
 
 export const EmailLive = Layer.mergeAll(
   ProofPersistenceLive,
   Layer.succeed(Email.EmailSignInTargets, { lookup: lookupEmail }),
   Layer.succeed(AppAuth.strategies.email.SessionClaims, { resolve: resolveEmailClaims }),
   Email.EmailReturnTargets.exactRoutes(["/account"]),
-  Proofs.EmailProofDelivery.layer(emailVendor, sendEmail),
+  EmailLive,
 );
 
 export const AuthLive = AppAuth.layer.pipe(
@@ -171,33 +172,11 @@ export const AuthLive = AppAuth.layer.pipe(
 );
 ```
 
-The relative imports are your application modules. `sendEmail` returns a
-`ProofDeliveryOutcome`; `emailVendor` declares your sender's ID and deduplication
-interval (`0` when unsupported). Typed sender failures become ambiguous outcomes.
-Defects and interruption propagate after an ambiguous settlement attempt; they do
-not authorize another send. `AuthDependencies` supplies the shared
+The relative imports are your application modules. `EmailLive` implements the
+provider-neutral email service: see [email delivery](./email-delivery) for complete
+effect-cf and Alchemy recipes. `AuthDependencies` supplies the shared
 [session, account, and key configuration](../reference/adapters#compose-the-application-layer).
 For database-backed lookup, use [the email adapter](../reference/adapters#email).
-
-### Cloudflare Worker delivery
-
-`@yielded/auth-cloudflare` implements `EmailProofDelivery` through an `effect-cf`
-email binding:
-
-```ts
-import { layerEmailProofDelivery } from "@yielded/auth-cloudflare";
-
-export const EmailDeliveryLive = layerEmailProofDelivery({
-  binding: "AUTH_EMAIL",
-  from: "hello@example.com",
-});
-```
-
-Provide this Layer to your auth composition and supply the Worker environment.
-The default renderer sends numeric verification and reset codes. Supply the
-adapter's `EmailRenderer` service for localized content or magic links.
-Delivery awaits provider acceptance; an uncertain send is recorded as ambiguous
-and is not automatically retried. Acceptance does not prove inbox delivery.
 
 For new accounts use `Email.makeRegistration`; for verified-address management
 use `Email.makeAddresses`. Verification alone does not sign in or link an account.

@@ -1,4 +1,3 @@
-export { EmailProofDelivery } from "./proofs/EmailProofDelivery";
 export { HostIngressLimiter } from "./proofs/HostIngressLimiter";
 
 export {

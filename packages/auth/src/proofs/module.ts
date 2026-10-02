@@ -25,7 +25,7 @@ import {
   makeProofDispatch,
   readProofCommit,
 } from "./dispatch";
-import { EmailProofDelivery } from "./EmailProofDelivery";
+import { EmailProofDelivery, emailProofDeliveryLayer } from "./EmailProofDelivery";
 import {
   ProofCapabilityUnsupported,
   ProofConfigurationError,
@@ -105,6 +105,7 @@ export const makeProofModule = <
     readonly binding: Binding;
     readonly channel: "email" | "sms";
     readonly template?: string;
+    readonly url?: string;
     readonly secret: Secret;
     readonly policy: ProofPolicy;
   },
@@ -491,7 +492,10 @@ export const makeProofModule = <
       }),
     );
 
-  const emailLayer = makeLayer(EmailProofDelivery, "email");
+  const emailLayer = makeLayer(EmailProofDelivery, "email").pipe(
+    Layer.provide(emailProofDeliveryLayer(options)),
+  );
+
   const smsLayer = makeLayer(SmsProofDelivery, "sms");
   const errors = Schema.Union([ProofError, HookDenied]);
 
