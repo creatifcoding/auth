@@ -387,10 +387,6 @@
     "drizzle-orm@1.0.0-rc.4": "packages/drizzle-effect-v4-patch/patches/drizzle-orm@1.0.0-rc.4.patch",
   },
   "overrides": {
-    "@effect/platform-node": "catalog:",
-    "@effect/platform-node-shared": "catalog:",
-    "@effect/vitest": "catalog:",
-    "effect": "catalog:",
     "vitest": "catalog:",
   },
   "catalog": {
@@ -399,7 +395,6 @@
     "@effect/atom-react": "4.0.0",
     "@effect/platform-bun": "4.0.0",
     "@effect/platform-node": "4.0.0",
-    "@effect/platform-node-shared": "4.0.0",
     "@effect/sql-d1": "4.0.0",
     "@effect/sql-libsql": "4.0.0",
     "@effect/sql-mysql2": "4.0.0",

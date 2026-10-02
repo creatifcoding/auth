@@ -17,7 +17,7 @@ Shared strict compiler settings live in `tsconfig.base.json`. Public packages
 use Effect as a peer and the exact catalog pin for development; the standalone
 patch CLI bundles its tooling dependencies. Upgrade the
 Effect family together and rerun installation and the handoff gate. Vite+ 0.3.3
-bundles Vitest 4.1.11. Root overrides pin `vitest` and `@effect/vitest` to the catalog,
+bundles Vitest 4.1.11. The root override pins `vitest` to the catalog,
 which keeps Effect's test integration on that Vitest despite its Vitest 5 peer range,
 matching Effect Agent; keep the catalog `vitest` pin equal to the bundled version. The `preferTypedSchemaDecoder` diagnostic follows the reference repository's disabled
 setting until the upstream TypeScript-Go panic is resolved.
