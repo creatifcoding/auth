@@ -17,7 +17,9 @@ export interface EmailContent {
 }
 
 /** Private rendering boundary. Return undefined for an unsupported template or format.
- * The default renders numeric codes; applications supply link rendering and localization. */
+ * The default renders numeric codes. Password recovery defaults to tokens: select
+ * reset.secret = { _tag: "NumericCode", digits: 6 } and supply ProofKeys, or provide
+ * this service for application-owned token links. Never log rendered credentials. */
 export const EmailRenderer = Context.Reference<{
   readonly render: (message: ProofDeliveryMessage) => Effect.Effect<EmailContent | undefined>;
 }>("effect-auth/cloudflare/EmailRenderer", {
@@ -40,7 +42,11 @@ export const EmailRenderer = Context.Reference<{
 
 /** Supply the same EmailProofDelivery port used by Email and Password strategies.
  * Await provider acceptance within the request. An uncertain send stays ambiguous;
- * the binding has no delivery-ID deduplication contract, so it is never retried here. */
+ * the binding has no delivery-ID deduplication contract, so it is never retried here.
+ * Unsupported formats and local validation fail definitely before provider I/O.
+ * This Layer knows the binding, not the strategy proof policy; format compatibility
+ * is checked per message. Generic recovery receipts do not prove delivery, and
+ * process-local proof dispatch is not a durable outbox. */
 export const layerEmailProofDelivery = (options: {
   readonly binding: string;
   readonly from: string | Email.EmailAddress;

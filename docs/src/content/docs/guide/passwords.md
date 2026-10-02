@@ -126,19 +126,115 @@ can provide persistence and registration. `AuthDependencies` supplies the shared
 For sign-in-only `Password.make()`, supply hashing, password persistence, and claims
 alongside those shared services. Keep normalization stable for stored credentials.
 
-<details>
-<summary>Reset and retry boundaries</summary>
+## Recover a password with Cloudflare email
 
-Password recovery uses `requestReset` → `verifyReset` → `completeReset`. Enable
-registration/management to include recovery, and supply email delivery and
-proof persistence. Reset links use token proofs by default; override `reset` to
-change the secret or expiry policy. A reset requires an independently verified address.
+Recovery uses `requestReset` → `verifyReset` → `completeReset` and requires an
+independently verified email address. Registration/management enables these methods;
+provide proof persistence and email delivery alongside the services above.
 
-Keep continuation credentials in private delivery. A consumed proof or an unknown
-commit outcome is not permission to repeat a password mutation. Prepared-password
-intents bind the original action, credential revision, and replacement verifier.
+Password reset proofs default to tokens. Cloudflare's default `EmailRenderer`
+only renders numeric codes, so explicitly select numeric reset proofs in the
+`Password.make` call above:
+
+```ts
+Password.make({
+  registration: Schema.Struct({ displayName: Schema.NonEmptyString }),
+  reset: { secret: { _tag: "NumericCode", digits: 6 } },
+});
+```
+
+Numeric proofs also require `Proofs.ProofKeys.layer(proofKeys)` in
+[`AuthDependencies`](../reference/adapters#compose-the-application-layer).
+Use a secret-managed keyring with at least 32 random bytes per key, encoded as
+base64url; retain old key IDs until their proofs expire. Keep the default proof
+expiry and attempt limits unless your application supplies its own policy.
+
+Replace `Proofs.EmailProofDelivery.layer(emailVendor, sendEmail)` in `PasswordLive`
+with `EmailDeliveryLive`:
+
+```ts title="apps/server/email.ts"
+import { layerEmailProofDelivery } from "@yielded/auth-cloudflare";
+
+export const EmailDeliveryLive = layerEmailProofDelivery({
+  binding: "AUTH_EMAIL",
+  from: "hello@example.com",
+});
+```
+
+Configure the Worker email binding and sender domain, and provide the current
+Worker environment as `WorkerEnvironment` from `effect-cf` at your Worker boundary.
+The Layer checks binding availability and shape; it does not receive the password
+strategy's proof policy and cannot check renderer compatibility at construction.
+To keep token proofs instead, provide the adapter's `EmailRenderer` service with
+application-owned link rendering. Without it, tokens fail delivery before any
+provider call.
+
+Start recovery inside an Effect request handler:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const requested = yield* auth.requestReset({ flowId, requestId, email, locale: "en" });
+```
+
+Retain `flowId`, `email`, and `requested.reference` for this flow. Generate
+`requestId` once per submission and retain it for an exact retry. Always show a
+generic response such as “If this address is eligible, check your email.” The
+receipt does not reveal account eligibility or whether a message was sent.
+
+In the next request, verify the code entered from the email, preserving leading
+zeroes by keeping it a string:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const verified = yield* auth.verifyReset({ flowId, email, reference, secret: code });
+```
+
+Retain `verified.continuation.continuationId`. Its matching credential is issued
+through the private `proof-continuation` channel. Complete the reset with the same
+flow and email:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const result = yield* auth.completeReset({
+  flowId,
+  email,
+  commandId,
+  newPassword,
+  continuationId,
+  credential,
+});
+```
+
+These are server-side inputs. For browser endpoints, map `credential` to the
+`proof-continuation` slot through the contract's `requestFields`, so the HTTP
+adapter reads the private cookie. Never return codes or continuation credentials
+in operation results or logs, or make the browser copy an HttpOnly cookie into
+JSON. Generate `commandId` once for the completion submission. Completion changes
+the password; sign in separately to obtain a session.
+
+### Delivery and retry boundaries
+
+Cloudflare delivery awaits provider acceptance in the request; acceptance does
+not prove inbox delivery. Unsupported formats and local email validation failures
+are definite policy failures: correct the configuration before starting a fresh,
+rate-limited recovery request. Provider operation failures are treated
+conservatively as uncertain acceptance, even when they contain an error code.
+Do not automatically resend: the binding has no delivery-ID deduplication contract.
+
+An exact `requestReset` retry can recover a generic receipt, not guarantee another
+send. Dispatch is a process-local continuation after persistence commits, not a
+durable outbox. A crash can leave an unsent proof; neither the receipt nor a
+restart guarantees eventual delivery. Let the user check their inbox and, if
+needed, explicitly start a new recovery flow under the configured cooldown and
+attempt limits. Do not use a generic receipt as a signal to enqueue retries.
+
+A consumed proof or an unknown commit outcome is not permission to repeat a
+password mutation. Prepared-password intents bind the original action, credential
+revision, and replacement verifier.
 
 See the [complete password composition](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/password-methods.ts)
-for recovery and factor authorization.
-
-</details>
+for recovery and factor authorization; its local delivery collector is independent
+of Cloudflare and uses token proofs.
