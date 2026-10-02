@@ -19,6 +19,7 @@
     "@yielded/drizzle-effect-v4-patch": "0.1.0-beta.0"
   },
   "changesets": [
+    "aligned-package-versions",
     "application-owned-drizzle-example",
     "bright-oauth-callbacks",
     "canonical-auth-transport",
@@ -53,6 +54,7 @@
     "small-oauth-signin",
     "stable-effect",
     "tidy-oauth-engine",
+    "visible-client-dependencies",
     "yielded-auth-publication",
     "yielded-repository-links"
   ]
