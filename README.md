@@ -1,4 +1,23 @@
-# Yielded Auth
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/lockup-auth-paper.svg" />
+    <img src=".github/assets/lockup-auth-ink.svg" alt="Yielded Auth" height="48" />
+  </picture>
+</h1>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@yielded/auth"><img alt="npm" src="https://img.shields.io/npm/v/@yielded/auth/beta?label=npm&labelColor=121310&color=ffb45e" /></a>
+  <a href="https://github.com/yielded-dev/auth/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/yielded-dev/auth/ci.yml?branch=main&label=ci&labelColor=121310" /></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-f3f1e8?labelColor=121310" /></a>
+</p>
+
+<p align="center">
+  <a href="https://yielded.dev/auth/"><b>Documentation</b></a>
+  ·
+  <a href="https://yielded.dev/auth/guide/getting-started/">Getting started</a>
+  ·
+  <a href="https://yielded.dev">yielded.dev</a>
+</p>
 
 Composable authentication, sessions, and identity workflows for Effect.
 
