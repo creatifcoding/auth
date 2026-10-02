@@ -78,7 +78,12 @@ import {
   snapshotPasswordRequirement,
   snapshotPasswordRevision,
 } from "./snapshot";
-import { passwordNoAmbient, passwordUnexpected, readPasswordCommit } from "./verification";
+import {
+  passwordCompletionFailure,
+  passwordNoAmbient,
+  passwordUnexpected,
+  readPasswordCommit,
+} from "./verification";
 
 export interface ServiceId<Id extends string, Kind extends string> {
   readonly moduleId: Id;
@@ -441,7 +446,7 @@ export const makePasswordPrepared = <
 
         const proof = yield* (yield* resetTag)
           .planComplete({ ...record.reset, credential })
-          .pipe(Effect.mapError(() => PasswordRejected.make({})));
+          .pipe(Effect.mapError(passwordCompletionFailure));
 
         if (!(yield* store.checkReset(proof.input))) return yield* PasswordRejected.make({});
 
@@ -906,7 +911,7 @@ export const makePasswordPrepared = <
               binding,
               credential: request.continuationCredential,
             })
-            .pipe(Effect.mapError(() => PasswordRejected.make({})));
+            .pipe(Effect.mapError(passwordCompletionFailure));
 
           if (!(yield* store.checkReset(proof.input))) return yield* PasswordRejected.make({});
 

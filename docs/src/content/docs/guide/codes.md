@@ -173,7 +173,9 @@ export const AuthLive = AppAuth.layer.pipe(
 
 The relative imports are your application modules. `sendEmail` returns a
 `ProofDeliveryOutcome`; `emailVendor` declares your sender's ID and deduplication
-interval (`0` when unsupported). `AuthDependencies` supplies the shared
+interval (`0` when unsupported). Typed sender failures become ambiguous outcomes.
+Defects and interruption propagate after an ambiguous settlement attempt; they do
+not authorize another send. `AuthDependencies` supplies the shared
 [session, account, and key configuration](../reference/adapters#compose-the-application-layer).
 For database-backed lookup, use [the email adapter](../reference/adapters#email).
 

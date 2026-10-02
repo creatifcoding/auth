@@ -96,7 +96,13 @@ export const AccountMethodsLive = Layer.effect(
 
           const original = yield* authority
             .capture(captured.revision.subjectId, [captured.credentialId])
-            .pipe(Effect.mapError(() => Password.PasswordRejected.make({})));
+            .pipe(
+              Effect.mapError((error) =>
+                error._tag === "StaleAuthentication"
+                  ? Password.PasswordRejected.make({})
+                  : Password.PasswordUnavailable.make({}),
+              ),
+            );
 
           if (
             original.securityRevision !== captured.revision.securityRevision ||
@@ -106,7 +112,9 @@ export const AccountMethodsLive = Layer.effect(
                 item.revision === captured.credentialRevision,
             )
           ) {
-            yield* hasher.dummy(input.password).pipe(Effect.ignore);
+            yield* hasher
+              .dummy(input.password)
+              .pipe(Effect.mapError(() => Password.PasswordUnavailable.make({})));
 
             return yield* Password.PasswordRejected.make({});
           }
@@ -120,8 +128,9 @@ export const AccountMethodsLive = Layer.effect(
               hasher.dummy(password).pipe(Effect.andThen(Password.PasswordRejected.make({}))),
             ),
             Effect.mapError((error) =>
-              Schema.is(Password.PasswordRejected)(error)
-                ? error
+              Schema.is(Password.PasswordRejected)(error) ||
+              Schema.is(Password.PasswordInputInvalid)(error)
+                ? Password.PasswordRejected.make({})
                 : Password.PasswordUnavailable.make({}),
             ),
           );
@@ -168,7 +177,11 @@ export const AccountMethodsLive = Layer.effect(
           return { evidence, credential: captured, rehash };
         }).pipe(Effect.result);
 
-        // Even failed verification settles once. Abandoned attempts keep their admission charge.
+        // Infrastructure failures retain the admission charge without credential rejection.
+        if (checked._tag === "Failure" && checked.failure._tag !== "PasswordRejected")
+          return yield* checked.failure;
+
+        // Definite credential rejection settles once; abandoned attempts remain charged.
         const decision = yield* persistence
           .settleAttempt(
             {

@@ -16,7 +16,6 @@ import {
 } from "../operations/requestBinding";
 import type { ProofSecretPolicy } from "../proofs/crypto";
 import { readProofCommit } from "../proofs/dispatch";
-import { ProofInvalid, ProofRequestConflict } from "../proofs/errors";
 import {
   ProofBinding,
   ProofContinuation,
@@ -31,13 +30,6 @@ import { makeProofModule } from "../proofs/module";
 import type { ProofPolicy } from "../proofs/policy";
 import { Email, type SubjectId, TokenDigest } from "../Schema";
 import { AuthenticationAuthority } from "../sessions/AuthenticationAuthority";
-import {
-  SessionCapabilityUnsupported,
-  SessionInvalid,
-  SessionConflict,
-  PendingAuthenticationInvalid,
-  StaleAuthentication,
-} from "../sessions/errors";
 import type { AuthenticationEvidence } from "../sessions/models";
 import { AuthenticationFlowId } from "../sessions/models";
 import type { makeSessionModule } from "../sessions/module";
@@ -45,6 +37,7 @@ import { makeEmailAddresses, type EmailAddressPolicy } from "./addresses";
 import { EmailReturnTargets } from "./EmailReturnTargets";
 import { EmailSignInTargets } from "./EmailSignInTargets";
 import {
+  emailCompletionFailure,
   EmailActionRequired,
   EmailConfigurationError,
   EmailMethodUnsupported,
@@ -100,30 +93,6 @@ const noAmbient = Effect.fn("Email.noAmbient")(function* () {
 
 const read = <A>(receipt: PreparedCommit<A>) =>
   receipt.read.pipe(Effect.mapError(() => EmailUnavailable.make({})));
-
-/** Unknown completion/receipt failures may follow a durable write. */
-const completionFailure = (
-  error: unknown,
-): EmailRejected | EmailUnavailable | EmailMethodUnsupported | HookDenied => {
-  if (Schema.is(HookDenied)(error)) return error;
-  if (Schema.is(SessionCapabilityUnsupported)(error)) return EmailMethodUnsupported.make({});
-  if (
-    Schema.is(
-      Schema.Union([
-        SessionCapabilityUnsupported,
-        SessionInvalid,
-        SessionConflict,
-        PendingAuthenticationInvalid,
-        StaleAuthentication,
-        ProofInvalid,
-        ProofRequestConflict,
-      ]),
-    )(error)
-  )
-    return EmailRejected.make({});
-
-  return EmailUnavailable.make({});
-};
 
 const tupleCodec = Schema.fromJsonString(Schema.Array(Schema.String));
 
@@ -250,7 +219,13 @@ export const makeEmailSignInModule = <
         ) {
           const verified = yield* binder
             .verify(request.flowId, request.requestBinding)
-            .pipe(Effect.mapError(() => EmailRejected.make({})));
+            .pipe(
+              Effect.mapError((error) =>
+                error._tag === "RequestBindingInvalid"
+                  ? EmailRejected.make({})
+                  : EmailUnavailable.make({}),
+              ),
+            );
 
           const returnTarget = yield* returns.resolve(request.returnTarget);
           const identifier = LoginIdentifier.make({ namespace: "email", value: request.email });
@@ -346,7 +321,7 @@ export const makeEmailSignInModule = <
                 reference: request.reference,
                 credential: request.secret,
               })
-              .pipe(Effect.flatMap(readProofCommit), Effect.mapError(completionFailure));
+              .pipe(Effect.flatMap(readProofCommit), Effect.mapError(emailCompletionFailure));
 
             if (result.value._tag === "Rejected") return yield* EmailRejected.make({});
 
@@ -370,7 +345,7 @@ export const makeEmailSignInModule = <
                 continuationId: request.continuationId,
                 credential: request.credential,
               })
-              .pipe(Effect.flatMap(readProofCommit), Effect.mapError(completionFailure));
+              .pipe(Effect.flatMap(readProofCommit), Effect.mapError(emailCompletionFailure));
 
             if (consumed !== "completed") return yield* EmailRejected.make({});
 
@@ -401,7 +376,7 @@ export const makeEmailSignInModule = <
             // requires a fresh request; no cross-owner atomicity is claimed here.
             const established = yield* completion
               .prepare({ evidence, claims: applicationClaims })
-              .pipe(Effect.flatMap(read), Effect.mapError(completionFailure));
+              .pipe(Effect.flatMap(read), Effect.mapError(emailCompletionFailure));
 
             return {
               value: { completion: established.value, returnTarget: current.returnTarget },

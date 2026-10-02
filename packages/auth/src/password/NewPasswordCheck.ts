@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, Effect, Layer, Redacted, Schema } from "effect";
 
 import { reportAuthFailure } from "../internal/diagnostics";
 import {
@@ -74,7 +74,13 @@ export class NewPasswordCheck extends Context.Service<
               Effect.flatMap(Schema.decodeEffect(PasswordScreening)),
               Effect.catchCause((cause) =>
                 reportAuthFailure("password-screening", cause).pipe(
-                  Effect.andThen(Effect.fail(PasswordCheckUnavailable.make({}))),
+                  Effect.andThen(
+                    Cause.hasInterrupts(cause)
+                      ? Effect.failCause(
+                          Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)),
+                        )
+                      : Effect.fail(PasswordCheckUnavailable.make({})),
+                  ),
                 ),
               ),
             );

@@ -768,6 +768,13 @@ export const makeOAuthAccounts = <
                 Effect.mapError(() => OAuthUnavailable.make({})),
               );
 
+              if (
+                exchanged !== undefined &&
+                Exit.isFailure(exchanged) &&
+                Cause.hasInterrupts(exchanged.cause)
+              )
+                return yield* Effect.interrupt;
+
               return committed;
             }),
           );

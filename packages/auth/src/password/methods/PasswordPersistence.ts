@@ -51,6 +51,8 @@ export class PasswordPersistence extends Context.Service<
      * predicate). Unknown/disabled/missing/corrupt/subject-limited return no verifier.
      * Denial shape never reveals which bucket. No refund on interruption/abandonment;
      * expired pending attempts remain conservatively charged through window horizons.
+     * Verification infrastructure failures use this same abandonment policy; they
+     * must not settle as credential rejection or refund admission capacity.
      */
     readonly admitAttempt: <A>(
       input: {
