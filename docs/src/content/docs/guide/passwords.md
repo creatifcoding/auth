@@ -132,8 +132,8 @@ alongside those shared services. Keep normalization stable for stored credential
 Recovery uses `requestReset` → `verifyReset` → `completeReset` and requires an
 independently verified email address. The definition above selects reset links.
 Auth builds the link and renders the email; your `EmailDelivery` service only
-sends the finished message. Use the [email delivery recipes](./email-delivery)
-for effect-cf, Alchemy, or your own provider.
+sends the finished message. See [email delivery](./email-delivery) for REST API
+and Alchemy examples.
 
 The link destination must be a fixed HTTPS URL without credentials, query, or
 fragment. Auth validates it when building the Layer, before issuing any proof.

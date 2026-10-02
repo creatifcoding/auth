@@ -173,8 +173,7 @@ export const AuthLive = AppAuth.layer.pipe(
 ```
 
 The relative imports are your application modules. `EmailLive` implements the
-provider-neutral email service: see [email delivery](./email-delivery) for complete
-effect-cf and Alchemy recipes. `AuthDependencies` supplies the shared
+email service: see [email delivery](./email-delivery) for REST API and Alchemy examples. `AuthDependencies` supplies the shared
 [session, account, and key configuration](../reference/adapters#compose-the-application-layer).
 For database-backed lookup, use [the email adapter](../reference/adapters#email).
 
