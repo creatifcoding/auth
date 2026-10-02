@@ -73,13 +73,15 @@ export class NewPasswordCheck extends Context.Service<
             const result = yield* Effect.suspend(() => screening(normalized, checkedContext)).pipe(
               Effect.flatMap(Schema.decodeEffect(PasswordScreening)),
               Effect.catchCause((cause) =>
-                Cause.hasInterrupts(cause)
-                  ? Effect.failCause(
-                      Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)),
-                    )
-                  : reportAuthFailure("password-screening", cause).pipe(
-                      Effect.andThen(Effect.fail(PasswordCheckUnavailable.make({}))),
-                    ),
+                reportAuthFailure("password-screening", cause).pipe(
+                  Effect.andThen(
+                    Cause.hasInterrupts(cause)
+                      ? Effect.failCause(
+                          Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)),
+                        )
+                      : Effect.fail(PasswordCheckUnavailable.make({})),
+                  ),
+                ),
               ),
             );
 
