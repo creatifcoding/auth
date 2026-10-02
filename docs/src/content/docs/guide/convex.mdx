@@ -1,0 +1,138 @@
+---
+title: Convex persistence
+description: Store OAuth authorization-server grants in Convex with atomic mutations.
+---
+
+import { FlowMap } from "@yielded/starlight-theme/components";
+
+`@yielded/auth-persistence-convex` stores [OAuth authorization-server grants](./oauth#authorize-mcp-clients)
+in Convex. One grant owns consent, authorization-code redemption, and its refresh
+family. Internal mutations enforce insert uniqueness, version comparisons, and
+revocation that concurrent refresh cannot undo.
+
+This initial adapter implements `OAuthServer.Persistence`. It does not yet
+provide password, sign-in proof, or session storage. Your application supplies
+the authorization server's `Identity` service from its authenticated request.
+Confect's `Auth.getUserIdentity` can be part of that identity lookup; this adapter
+does not replace Confect's identity service or configure a Convex JWT provider.
+
+<FlowMap
+  title="Convex owns each grant commit"
+  description="OAuth work runs in an action. The persistence Layer calls internal queries and mutations, waits for each mutation to commit, then returns its result."
+  columns={3}
+  nodes={[
+    {
+      id: "action",
+      at: [1, 1],
+      owner: "app",
+      title: "Action / HTTP action",
+      note: "OAuthServer and application identity",
+    },
+    {
+      id: "layer",
+      at: [1, 2],
+      owner: "library",
+      title: "Persistence Layer",
+      code: "OAuthServerPersistence.layer",
+    },
+    {
+      id: "functions",
+      at: [2, 2],
+      owner: "library",
+      title: "Internal functions",
+      note: "Schema validation and conditional writes",
+    },
+    {
+      id: "database",
+      at: [2, 3],
+      owner: "app",
+      title: "Convex database",
+      note: "One indexed document per grant",
+    },
+  ]}
+  edges={[
+    { from: "action", to: "layer" },
+    { from: "layer", to: "functions", label: "runQuery / runMutation" },
+    { from: "functions", to: "database", label: "Atomic commit" },
+  ]}
+/>
+
+## Install and register storage
+
+```sh
+bun add @yielded/auth@beta @yielded/auth-persistence-convex@beta effect convex
+```
+
+Merge the adapter's tables into your application schema:
+
+```ts title="convex/schema.ts"
+import { tables } from "@yielded/auth-persistence-convex/Server";
+import { defineSchema } from "convex/server";
+
+export default defineSchema({ ...tables });
+```
+
+Register the supplied internal functions. Keep them internal; they are storage
+authority, not client-accessible auth endpoints.
+
+```ts title="convex/authGrants.ts"
+export {
+  get,
+  insert,
+  compareAndSet,
+  revoke,
+  cleanup,
+} from "@yielded/auth-persistence-convex/Server";
+```
+
+Convex generates the function references when you deploy the schema and functions.
+The table is `yieldedAuthOAuthGrants`, indexed by `(namespace, grantId)` and
+`expiresAtMillis`. Effect Schema validates each grant's JSON payload on reads and
+writes. It contains authorization metadata and version markers, never bearer
+tokens or provider credentials.
+
+## Supply the Layer inside an action
+
+Build the persistence Layer with the current action context and generated
+internal references:
+
+```ts
+import { ActionContext, Functions, OAuthServerPersistence } from "@yielded/auth-persistence-convex";
+import { Layer } from "effect";
+
+import { internal } from "./_generated/api";
+
+// Inside an action or HTTP action handler, where ctx is its current context:
+const persistence = OAuthServerPersistence.layer.pipe(
+  Layer.provide([Layer.succeed(ActionContext, ctx), Layer.succeed(Functions, internal.authGrants)]),
+);
+```
+
+Provide `persistence` to your `OAuthServer` Layer. The
+[composition example](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/convex-persistence.ts)
+keeps the application's identity service required; the
+[OAuth guide](./oauth#authorize-mcp-clients) covers signing keys, client
+registration, consent, and protected resources.
+
+Create the Layer separately for every action invocation. Do not capture `ctx` in
+a global runtime or use this Layer inside a Convex query or mutation. A nested
+mutation there belongs to the outer transaction and cannot provide the standalone
+commit acknowledgment this service requires. An ambient Yielded commit scope is
+also rejected before storage calls.
+
+## Retention and failures
+
+Schedule `internal.authGrants.cleanup` through your application, with
+`{ limit: 100 }`. Limits range from 1 to 1000; the result contains `removed` and
+`hasMore`. It removes only grants whose retention deadline has passed according
+to Convex's transaction clock. Do not shorten that deadline or reuse grant IDs.
+
+Duplicate inserts and lost version comparisons return `false`. Malformed data
+and failed or uncertain storage calls return `OAuthServerUnavailable`. The
+adapter never retries an uncertain insert or replacement. Convex may retry a
+conflicted mutation internally; that mutation contains only deterministic storage
+work, not token issuance, provider exchanges, or lifecycle callbacks.
+
+Grant writes cannot join application writes in another mutation. Password and
+session storage have additional preparation and commit contracts; this grant
+adapter does not claim to satisfy those boundaries.

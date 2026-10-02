@@ -102,6 +102,7 @@ you use.
 | `@yielded/auth-cloudflare`              | Worker email delivery through `EmailProofDelivery`.                                             |
 | `@yielded/auth-crypto`                  | Password hashing, TOTP, and OAuth secret protection through `/Password`, `/Totp`, and `/OAuth`. |
 | `@yielded/auth-persistence`             | Direct Effect SQL persistence; requires an application-provided SQL client.                     |
+| `@yielded/auth-persistence-convex`      | OAuth authorization-server grant persistence through Convex internal mutations.                 |
 | `@yielded/auth-persistence-drizzle`     | Drizzle mappings and explicit driver modules such as `/Postgres` and `/SqliteBun`.              |
 | `@yielded/auth/adapters/Twilio`         | SMS delivery through Effect HTTP; requires `TwilioConfig`.                                      |
 

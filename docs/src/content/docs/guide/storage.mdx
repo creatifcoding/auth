@@ -11,6 +11,10 @@ existing customer table or an identity managed by another service. Yielded Auth
 needs ways to look up that identity and durably store credentials, proofs, and
 sessions; core does not require an ORM or a particular database.
 
+For OAuth authorization-server grants stored in Convex, see
+[Convex persistence](./convex). That adapter currently covers consent, code
+redemption, and refresh families; other auth storage still uses the choices below.
+
 Choose how to provide those services:
 
 | Start with                        | When it fits                                                 |
