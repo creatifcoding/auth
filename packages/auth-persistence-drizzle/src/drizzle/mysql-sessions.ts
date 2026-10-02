@@ -14,12 +14,15 @@ import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { Database as DatabaseService } from "./mysql-database";
+import { nativeDatabase } from "./native-database";
 import type {
   AuthenticationAuthorityMapping,
   PendingAuthenticationMapping,
   SignedSessionValidityMapping,
   StatefulSessionMapping,
 } from "./session-model";
+import { CurrentSessionSql } from "./session-sql";
 import {
   coordinateTargetAuthenticationAuthority,
   coordinateTargetPendingAuthentication,
@@ -33,15 +36,20 @@ import {
   makeTargetSessionStepUpServices,
   coordinateTargetSessionStepUp,
 } from "./session-target";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 type Database = EffectMysql2Database<AnyRelations>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-const configuration = (database: Database) => ({
+const configuration = (service: TransactionService | undefined) => ({
   mode: "interactive" as const,
   locking: true,
-  standaloneGuard: sqlClientSessionStandaloneGuard(database),
+  standaloneGuard: sqlClientSessionStandaloneGuard(service),
 });
 
 export const makeMysqlAuthenticationAuthorityServices = <
@@ -52,9 +60,12 @@ export const makeMysqlAuthenticationAuthorityServices = <
   P extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: AuthenticationAuthorityMapping<Claims, S, C, F, P, NativeId>,
-) => makeTargetAuthenticationAuthorityServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetAuthenticationAuthorityServices<Claims>(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export const makeMysqlPendingAuthenticationServices = <
   Claims,
@@ -64,9 +75,12 @@ export const makeMysqlPendingAuthenticationServices = <
   F extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: PendingAuthenticationMapping<Claims, S, C, P, F, NativeId>,
-) => makeTargetPendingAuthenticationServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetPendingAuthenticationServices<Claims>(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export const makeMysqlStatefulSessionServices = <
   Claims,
@@ -78,9 +92,12 @@ export const makeMysqlStatefulSessionServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: StatefulSessionMapping<Claims, S, C, Session, F, P, NativeId, NativeSessionId>,
-) => makeTargetStatefulSessionServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetStatefulSessionServices<Claims>(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export const makeMysqlSignedSessionValidityServices = <
   S extends AnyMySqlTable,
@@ -88,9 +105,12 @@ export const makeMysqlSignedSessionValidityServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SignedSessionValidityMapping<S, T, NativeId, NativeSessionId>,
-) => makeTargetSignedSessionValidityServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetSignedSessionValidityServices(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export function coordinateMysqlAuthenticationAuthority<
   D extends Database,
@@ -183,7 +203,7 @@ export function coordinateMysqlAuthenticationAuthority<
     >(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: Transaction,
         services: { readonly authenticationAuthority: AuthenticationAuthority["Service"] },
@@ -290,7 +310,7 @@ export function coordinateMysqlPendingAuthentication<
     coordinateTargetPendingAuthentication<Claims, Transaction, A, E, Exclude<R, TargetId>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: Transaction,
         services: { readonly pendingAuthentication: PendingAuthentication<Claims> },
@@ -442,7 +462,7 @@ export function coordinateMysqlStatefulSessions<
     >(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: Transaction,
         services: {
@@ -550,7 +570,7 @@ export function coordinateMysqlSignedSessionValidity<
     coordinateTargetSignedSessionValidity<Transaction, A, E, Exclude<R, TargetId>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: Transaction,
         services: { readonly signedSessionValidity: SignedSessionValidity },
@@ -579,10 +599,13 @@ export const makeMysqlSessionStepUpServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SessionStepUpMapping<NoInfer<Claims>, S, C, I, Session, T, NativeId, NativeSessionId>,
   target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
-) => makeTargetSessionStepUpServices(database, mapping, target, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetSessionStepUpServices(mapping, target, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export function coordinateMysqlSessionStepUp<
   Claims,
@@ -724,7 +747,7 @@ export function coordinateMysqlSessionStepUp<
       database,
       options.mapping,
       options.target,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: Parameters<Parameters<D["transaction"]>[0]>[0],
         services: { readonly sessionStepUpPersistence: SessionStepUpPersistence<Claims> },

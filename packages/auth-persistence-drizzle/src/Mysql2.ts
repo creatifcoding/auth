@@ -1,13 +1,21 @@
 import type { AnyRelations } from "drizzle-orm";
-import type { EffectMysql2Database } from "drizzle-orm/effect-mysql2";
+import { type EffectMysql2Database, makeWithDefaults } from "drizzle-orm/effect-mysql2";
 import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
+import { Layer } from "effect";
 
-import type { IdentityTables } from "./drizzle/model";
+import type {
+  IdentityTables,
+  SubjectProvisioningTables,
+  ExternalIdentityTables,
+} from "./drizzle/model";
+import { Database } from "./drizzle/mysql-database";
 import {
   makeMysqlExternalIdentityServices,
   makeMysqlIdentityServices,
   makeMysqlSubjectProvisioningServices,
 } from "./drizzle/mysql-identity";
+
+export { Database } from "./drizzle/mysql-database";
 
 export {
   coordinateMysqlAuthenticationAuthority as coordinateAuthenticationAuthority,
@@ -40,10 +48,22 @@ export {
   makeMysqlEmailSignInServices as makeEmailSignInServices,
 } from "./drizzle/mysql-emails";
 
-export {
-  makeMysqlExternalIdentityServices as makeExternalIdentityServices,
-  makeMysqlSubjectProvisioningServices as makeSubjectProvisioningServices,
-};
+export const makeSubjectProvisioningServices = <
+  Subject extends AnyMySqlTable,
+  Identifier extends AnyMySqlTable,
+  Request extends AnyMySqlTable,
+  NativeId,
+>(
+  mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
+) => makeMysqlSubjectProvisioningServices(mapping);
+
+export const makeExternalIdentityServices = <
+  Subject extends AnyMySqlTable,
+  External extends AnyMySqlTable,
+  NativeId,
+>(
+  mapping: ExternalIdentityTables<Subject, External, NativeId>,
+) => makeMysqlExternalIdentityServices(mapping);
 
 export const commitMode = "interactive" as const;
 
@@ -54,9 +74,8 @@ export const makeIdentityServices = <
   Request extends AnyMySqlTable,
   NativeId,
 >(
-  database: EffectMysql2Database<AnyRelations>,
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => makeMysqlIdentityServices(database, mapping);
+) => makeMysqlIdentityServices(mapping);
 
 export {
   makeMysqlSessionStepUpServices as makeSessionStepUpServices,
@@ -75,9 +94,10 @@ import { mysqlOAuthTransaction } from "./drizzle/oauth-mysql";
 import { sqlClientOAuthStandaloneGuard } from "./drizzle/oauth-target";
 
 const oauthTarget = makeOAuthTarget<
+  Database,
   EffectMysql2Database<AnyRelations>,
   AnyMySqlTable<{ dialect: "mysql" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "mysql",
   locking: true,
@@ -106,9 +126,10 @@ import { sqlClientPasskeyStandaloneGuard } from "./drizzle/passkey-target";
 import { mysqlTransaction } from "./drizzle/transaction-mysql";
 
 const passkeyTarget = makePasskeyTarget<
+  Database,
   EffectMysql2Database<AnyRelations>,
   AnyMySqlTable<{ dialect: "mysql" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "mysql",
   locking: true,
@@ -133,9 +154,10 @@ import { unavailable as totpUnavailable } from "./drizzle/totp-state";
 import { makeTotpTarget, sqlClientTotpStandaloneGuard } from "./drizzle/totp-target";
 
 const totpTarget = makeTotpTarget<
+  Database,
   EffectMysql2Database<AnyRelations>,
   AnyMySqlTable<{ dialect: "mysql" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "mysql",
   locking: true,
@@ -149,9 +171,10 @@ import { unavailable as phoneUnavailable } from "./drizzle/phone-state";
 import { makePhoneTarget, sqlClientPhoneStandaloneGuard } from "./drizzle/phone-target";
 
 const phoneTarget = makePhoneTarget<
+  Database,
   EffectMysql2Database<AnyRelations>,
   AnyMySqlTable<{ dialect: "mysql" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "mysql",
   locking: true,
@@ -160,3 +183,6 @@ const phoneTarget = makePhoneTarget<
 });
 
 export const { makePhonePersistenceServices, coordinatePhonePersistence } = phoneTarget;
+
+/** Construct Drizzle from the driver's SQL-client Layer. */
+export const databaseLayer = Layer.effect(Database, makeWithDefaults({}));

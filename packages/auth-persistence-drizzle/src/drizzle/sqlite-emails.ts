@@ -17,6 +17,7 @@ import type {
   EmailSignInMapping,
 } from "./email-model";
 import type { EmailRegistrationAuthority } from "./email-registration";
+import { CurrentEmailSql } from "./email-sql";
 import type { EmailSqlQuery } from "./email-sql";
 import {
   coordinateTargetEmailAddress,
@@ -26,8 +27,14 @@ import {
   makeTargetEmailSignInServices,
   type EmailTargetConfiguration,
 } from "./email-target";
+import { nativeDatabase } from "./native-database";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 export type SqliteEmailDatabase =
@@ -73,13 +80,24 @@ export const sqliteEmailConfiguration = (
 });
 
 export const makeSqliteEmailTarget = <
+  DatabaseId,
   D extends SqliteEmailDatabase,
   Synchronous extends boolean = false,
 >(
-  configuration: EmailTargetConfiguration | ((database: D) => EmailTargetConfiguration),
+  databaseService: Context.Service<DatabaseId, D>,
+  configuration:
+    | EmailTargetConfiguration
+    | ((service: TransactionService | undefined) => EmailTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
-    typeof configuration === "function" ? configuration(database) : configuration;
+    typeof configuration === "function"
+      ? configuration(transactionService(database))
+      : configuration;
+
+  const standaloneConfiguration =
+    typeof configuration === "function"
+      ? Effect.map(acquireTransactionService(databaseService), configuration)
+      : Effect.succeed(configuration);
 
   function coordinateEmailAddress<
     Database extends D,
@@ -325,9 +343,11 @@ export const makeSqliteEmailTarget = <
       C extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: EmailSignInMapping<S, I, C, NativeId>,
-    ) => makeTargetEmailSignInServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeTargetEmailSignInServices(mapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentEmailSql, nativeDatabase(databaseService))),
     makeEmailAddressServices: <
       S extends AnySQLiteTable,
       I extends AnySQLiteTable,
@@ -336,11 +356,12 @@ export const makeSqliteEmailTarget = <
       M extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: EmailAddressMapping<S, I, C, AC, M, NativeId>,
       proofMapping: ProofMapping,
     ) =>
-      makeTargetEmailAddressServices(database, mapping, proofMapping, configurationFor(database)),
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeTargetEmailAddressServices(mapping, proofMapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentEmailSql, nativeDatabase(databaseService))),
     coordinateEmailAddress,
     makeEmailRegistrationServices: <
       Registration,
@@ -351,16 +372,12 @@ export const makeSqliteEmailTarget = <
       Rq extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: EmailRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
       proofMapping: ProofMapping,
     ) =>
-      makeTargetEmailRegistrationServices<Registration>(
-        database,
-        mapping,
-        proofMapping,
-        configurationFor(database),
-      ),
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeTargetEmailRegistrationServices<Registration>(mapping, proofMapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentEmailSql, nativeDatabase(databaseService))),
     coordinateEmailRegistration,
   };
 };

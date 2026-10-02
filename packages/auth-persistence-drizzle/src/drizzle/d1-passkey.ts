@@ -10,6 +10,7 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect, Context } from "effect";
 
+import { Database as DatabaseService } from "./d1-database";
 import { makeD1Owner } from "./d1-planning";
 import { D1BatchStatements } from "./D1BatchStatements";
 import { makePasskeyTarget } from "./passkey-drivers";
@@ -38,7 +39,10 @@ const configuration = {
   standaloneGuard: () => Effect.void,
 };
 
-const target = makePasskeyTarget<Database, Table, D1PasskeyMapping>(configuration);
+const target = makePasskeyTarget<DatabaseService, Database, Table, D1PasskeyMapping>(
+  DatabaseService,
+  configuration,
+);
 
 export const {
   makePasskeyCredentialServices,

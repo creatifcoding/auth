@@ -18,5 +18,10 @@ The composed Layer covers password sign-in and management, email address verific
 and changes, phone sign-in, and passkey sign-in and management with stateful sessions
 on PostgreSQL and SQLite. The `/Adapter` module exposes the shared mapping contracts
 and transaction kernels used by companion adapters.
+Its constructors acquire their database through the matching `Current*Sql` or
+`NativeDatabase` service. Provide that dependency during construction only;
+transaction coordinators supply their exact transaction when constructing bound
+services. Keep root database provision outside later operations, where the
+current SQL service identifies an active transaction.
 See [persistence examples](../../docs/src/content/docs/reference/adapters.md#runnable-examples) for all
 four ownership models and their current limits.

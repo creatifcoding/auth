@@ -161,8 +161,10 @@ server call becomes `auth.verifyPending({ code })` and the client call becomes
 there is deliberately no mapping from the session cookie to that field.
 
 `fromOperation` carries forward the `totp-enrollment` and `recovery-codes` reveal
-declarations. Configure `Client.make` with a `privateOutput` collector that supports
-those kinds and implements `accept` and `clear`. Give the collector a finite
+declarations. Configure `Client.make` with a `privateOutput` service key whose
+collector supports those kinds and implements `accept` and `clear`. Provide its
+Layer to the client Layer as shown in the [client reference](../reference/client#client-options).
+Give the collector a finite
 lifetime, erase expired reveals, and clear it when the enrollment screen closes.
 The client also clears it on account transition and disposal. Keep reveals outside
 ordinary atom results, query caches, logs, and persisted client state.

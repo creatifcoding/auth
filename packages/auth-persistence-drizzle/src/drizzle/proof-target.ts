@@ -10,12 +10,13 @@ import { Effect, Layer } from "effect";
 import type * as SqlError from "effect/sql/SqlError";
 
 import {
+  CurrentProofSql,
   makeSqlProofPersistence,
   type ProofSqlConfiguration,
   type ProofSqlDatabase,
   type ProofSqlQuery,
 } from "./proof-sql";
-import { sqlClientStandaloneGuard } from "./standalone-guard";
+import { sqlClientStandaloneGuard, type TransactionService } from "./standalone-guard";
 
 export interface ProofTargetConfiguration {
   readonly mode: "interactive" | "synchronous";
@@ -42,9 +43,9 @@ export type ProofCoordinatorError<E> =
   | SqlError.SqlError;
 
 export const sqlClientProofStandaloneGuard = (
-  database: unknown,
+  service: TransactionService | undefined,
 ): Effect.Effect<void, ProofUnavailable> =>
-  sqlClientStandaloneGuard(database, () => ProofUnavailable.make({}));
+  sqlClientStandaloneGuard(service, () => ProofUnavailable.make({}));
 
 const options = (
   configuration: ProofTargetConfiguration,
@@ -59,13 +60,12 @@ const options = (
 });
 
 export const makeTargetProofPersistenceServices = (
-  database: any,
   mapping: any,
   configuration: ProofTargetConfiguration,
 ) =>
   Effect.gen(function* () {
     return {
-      proofPersistence: yield* makeSqlProofPersistence(database, mapping, options(configuration)),
+      proofPersistence: yield* makeSqlProofPersistence(mapping, options(configuration)),
     };
   });
 
@@ -96,9 +96,10 @@ export const coordinateTargetProofPersistence = <Transaction, A, E, R>(
           Effect.gen(function* () {
             return yield* owner(transaction, {
               proofPersistence: yield* makeSqlProofPersistence(
-                transaction as unknown as ProofSqlDatabase,
                 mapping,
                 options(configuration, true),
+              ).pipe(
+                Effect.provideService(CurrentProofSql, transaction as unknown as ProofSqlDatabase),
               ),
             });
           }),
@@ -109,12 +110,8 @@ export const coordinateTargetProofPersistence = <Transaction, A, E, R>(
     return result.value;
   });
 
-export const proofPersistenceLayer = (
-  services: Effect.Effect<
-    { readonly proofPersistence: ProofPersistence["Service"] },
-    never,
-    LifecycleHooks
-  >,
+export const proofPersistenceLayer = <E, R>(
+  services: Effect.Effect<{ readonly proofPersistence: ProofPersistence["Service"] }, E, R>,
 ) =>
   Layer.effect(
     ProofPersistence,

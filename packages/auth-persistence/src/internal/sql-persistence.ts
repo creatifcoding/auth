@@ -38,7 +38,7 @@ export const AuthPersistence: PersistenceApi<Table> & { readonly table: typeof t
           reason: "Use an explicit adapter for this SQL dialect",
         });
 
-      return makeSqlDatabase(sql, dialect);
+      return yield* makeSqlDatabase(dialect);
     }),
   }),
   table,

@@ -1,5 +1,4 @@
 import { type OAuthConnectedProfile } from "@yielded/auth/OAuth";
-import type { CustomFetch } from "openid-client";
 
 import type {
   OpenIdClientAuthentication,
@@ -52,7 +51,4 @@ export interface OpenIdClientConnectedProtocolOptions<R = never> {
     OpenIdClientConnectedOidcProvider | OpenIdClientConnectedOAuthProvider<R>
   >;
   readonly timeoutSeconds: number;
-  /** Trusted server transport: honor abort, preserve endpoint authority, never
-   * retry a token request or log credentials. */
-  readonly fetch?: CustomFetch;
 }

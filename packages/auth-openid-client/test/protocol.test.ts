@@ -11,7 +11,7 @@ import {
 } from "@yielded/auth/OAuth";
 import { RequestBindingFlowId } from "@yielded/auth/Operations";
 import { DateTime, Deferred, Effect, Fiber, Redacted } from "effect";
-import type { CustomFetch } from "openid-client";
+import { FetchHttpClient } from "effect/http";
 import { describe, expect } from "vite-plus/test";
 
 import { expectTag } from "./helpers/oauth";
@@ -38,10 +38,11 @@ const github = (configurationGeneration?: number, issuance?: "active" | "retired
 const makeTransport = (input: { readonly userResponse?: () => Response } = {}) => {
   const requests: Array<{ url: string; clientId: string | null; method: string | undefined }> = [];
 
-  const fetch: CustomFetch = async (url, init) => {
-    const form = init.body instanceof URLSearchParams ? init.body : new URLSearchParams();
+  const fetch: typeof globalThis.fetch = async (request, init) => {
+    const url = request instanceof Request ? request.url : String(request);
+    const form = init?.body instanceof URLSearchParams ? init.body : new URLSearchParams();
 
-    requests.push({ url, clientId: form.get("client_id"), method: init.method });
+    requests.push({ url, clientId: form.get("client_id"), method: init?.method });
     if (url === "https://github.com/login/oauth/access_token")
       return json({
         access_token: "github-token-never-returned",
@@ -94,16 +95,14 @@ describe("OAuth protocol credential and resource lifetimes", () => {
         const old = yield* loadProtocol({
           providers: [github()],
           timeoutSeconds: 1,
-          fetch: transport.fetch,
-        });
+        }).pipe(Effect.provideService(FetchHttpClient.Fetch, transport.fetch));
 
         const started = yield* begin(old, "github");
 
         const current = yield* loadProtocol({
           providers: [github(1, "retired"), github(2)],
           timeoutSeconds: 1,
-          fetch: transport.fetch,
-        });
+        }).pipe(Effect.provideService(FetchHttpClient.Fetch, transport.fetch));
 
         yield* exchange(current, started);
         expect(
@@ -161,8 +160,7 @@ describe("OAuth protocol credential and resource lifetimes", () => {
         const protocol = yield* loadProtocol({
           providers: [github()],
           timeoutSeconds: 1,
-          fetch: transport.fetch,
-        });
+        }).pipe(Effect.provideService(FetchHttpClient.Fetch, transport.fetch));
 
         const started = yield* begin(protocol, "github");
         const fiber = yield* exchange(protocol, started).pipe(Effect.forkChild);

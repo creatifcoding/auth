@@ -16,11 +16,7 @@ import {
 } from "../openid-client/options";
 import { makeOpenIdClientOAuthProtocol } from "../openid-client/protocol";
 import { gitHubOAuthAppProviderKey } from "./identity";
-import type {
-  GitHubOAuthAppConnectedProtocolOptions,
-  GitHubOAuthAppGeneration,
-  GitHubOAuthAppProtocolOptions,
-} from "./models";
+import type { GitHubOAuthAppConnectedProtocolOptions, GitHubOAuthAppGeneration } from "./models";
 import {
   gitHubOAuthAppProvider,
   makeGitHubOAuthAppConnectedProtocol,
@@ -34,8 +30,6 @@ export type Registration = Pick<GitHubOAuthAppGeneration, "clientId" | "clientSe
 type Transport = {
   /** Per-request timeout in seconds, from 1 to 30. Defaults to 10. */
   readonly timeoutSeconds?: number;
-  /** Trusted transport: honor abort; never retry token requests or log credentials. */
-  readonly fetch?: GitHubOAuthAppProtocolOptions["fetch"];
 };
 
 export type Options = Transport &
@@ -100,7 +94,6 @@ export const provider = (
         provider: binding.provider,
       })),
       timeoutSeconds: options.timeoutSeconds ?? 10,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     });
 
     const profiles = options.access;
@@ -113,7 +106,6 @@ export const provider = (
         profiles: profiles.filter((profile) => profile.clientRegistrationId === input.clientId),
       })),
       timeoutSeconds: options.timeoutSeconds ?? 10,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     });
 
     return { ...protocol, connected };
@@ -133,7 +125,6 @@ export const layer = (options: Options) =>
         registration,
       ),
       timeoutSeconds: options.timeoutSeconds === undefined ? 10 : options.timeoutSeconds,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     })).pipe(Effect.flatMap(makeGitHubOAuthAppProtocol)),
   );
 
@@ -150,6 +141,5 @@ export const layerConnected = (options: ConnectedOptions) =>
         }),
       ),
       timeoutSeconds: options.timeoutSeconds === undefined ? 10 : options.timeoutSeconds,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     })).pipe(Effect.flatMap(makeGitHubOAuthAppConnectedProtocol)),
   );

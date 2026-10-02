@@ -1,7 +1,18 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { AnyRelations } from "drizzle-orm";
 import { type EffectSQLiteWasmDatabase, makeWithDefaults } from "drizzle-orm/effect-sqlite-wasm";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
+
+import { nativeDatabase } from "./drizzle/native-database";
+
+/** The application-owned Drizzle database used to construct persistence services. */
+export class Database extends Context.Service<Database, EffectSQLiteWasmDatabase<AnyRelations>>()(
+  "effect-auth/persistence-drizzle/SqliteWasm/Database",
+) {}
+
+/** Construct Drizzle from the driver's SQL-client Layer. */
+export const databaseLayer = Layer.effect(Database, makeWithDefaults({}));
 
 import { sqlClientEmailStandaloneGuard } from "./drizzle/email-target";
 import type {
@@ -22,29 +33,34 @@ import { makeSqlitePasswordTarget, sqlitePasswordConfiguration } from "./drizzle
 import { makeSqliteProofTarget, sqliteProofConfiguration } from "./drizzle/sqlite-proofs";
 import { makeSqliteSessionTarget, sqliteSessionConfiguration } from "./drizzle/sqlite-sessions";
 
-const sessionTarget = makeSqliteSessionTarget<EffectSQLiteWasmDatabase<AnyRelations>>((database) =>
-  sqliteSessionConfiguration("interactive", sqlClientSessionStandaloneGuard(database)),
+const sessionTarget = makeSqliteSessionTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
+  Database,
+  (service) => sqliteSessionConfiguration("interactive", sqlClientSessionStandaloneGuard(service)),
 );
 
-const proofTarget = makeSqliteProofTarget<EffectSQLiteWasmDatabase<AnyRelations>>((database) =>
-  sqliteProofConfiguration("interactive", sqlClientProofStandaloneGuard(database)),
+const proofTarget = makeSqliteProofTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
+  Database,
+  (service) => sqliteProofConfiguration("interactive", sqlClientProofStandaloneGuard(service)),
 );
 
-const passwordTarget = makeSqlitePasswordTarget<EffectSQLiteWasmDatabase<AnyRelations>>(
-  (database) =>
+const passwordTarget = makeSqlitePasswordTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
+  Database,
+  (service) =>
     sqlitePasswordConfiguration(
       "interactive",
-      sqlClientPasswordStandaloneGuard(database),
-      sqlClientProofStandaloneGuard(database),
+      sqlClientPasswordStandaloneGuard(service),
+      sqlClientProofStandaloneGuard(service),
     ),
 );
 
-const emailTarget = makeSqliteEmailTarget<EffectSQLiteWasmDatabase<AnyRelations>>((database) =>
-  sqliteEmailConfiguration(
-    "interactive",
-    sqlClientEmailStandaloneGuard(database),
-    sqlClientProofStandaloneGuard(database),
-  ),
+const emailTarget = makeSqliteEmailTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
+  Database,
+  (service) =>
+    sqliteEmailConfiguration(
+      "interactive",
+      sqlClientEmailStandaloneGuard(service),
+      sqlClientProofStandaloneGuard(service),
+    ),
 );
 
 export const {
@@ -86,9 +102,11 @@ export const makeIdentityServices = <
   Request extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteWasmDatabase<AnyRelations>,
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => makeSqliteIdentityServices(database, mapping, "interactive");
+) =>
+  makeSqliteIdentityServices(mapping, "interactive").pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
+  );
 
 export const makeSubjectProvisioningServices = <
   Subject extends AnySQLiteTable,
@@ -96,28 +114,33 @@ export const makeSubjectProvisioningServices = <
   Request extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteWasmDatabase<AnyRelations>,
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
-) => makeSqliteSubjectProvisioningServices(database, mapping, "interactive");
+) =>
+  makeSqliteSubjectProvisioningServices(mapping, "interactive").pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
+  );
 
 export const makeExternalIdentityServices = <
   Subject extends AnySQLiteTable,
   External extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteWasmDatabase<AnyRelations>,
   mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => makeSqliteExternalIdentityServices(database, mapping);
+) =>
+  makeSqliteExternalIdentityServices(mapping).pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
+  );
 
 import { makeSqlitePasswordPreparedTarget } from "./drizzle/sqlite-password-prepared";
 
 const passwordPreparedTarget = makeSqlitePasswordPreparedTarget<
+  Database,
   EffectSQLiteWasmDatabase<AnyRelations>
->((database) =>
+>(Database, (service) =>
   sqlitePasswordConfiguration(
     "interactive",
-    sqlClientPasswordStandaloneGuard(database),
-    sqlClientProofStandaloneGuard(database),
+    sqlClientPasswordStandaloneGuard(service),
+    sqlClientProofStandaloneGuard(service),
   ),
 );
 
@@ -130,9 +153,10 @@ import { makeOAuthTarget } from "./drizzle/oauth-drivers";
 import { sqlClientOAuthStandaloneGuard } from "./drizzle/oauth-target";
 
 const oauthTarget = makeOAuthTarget<
+  Database,
   EffectSQLiteWasmDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,
@@ -158,9 +182,10 @@ import { makePasskeyTarget } from "./drizzle/passkey-drivers";
 import { sqlClientPasskeyStandaloneGuard } from "./drizzle/passkey-target";
 
 const passkeyTarget = makePasskeyTarget<
+  Database,
   EffectSQLiteWasmDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,
@@ -183,9 +208,10 @@ export const {
 import { makeTotpTarget, sqlClientTotpStandaloneGuard } from "./drizzle/totp-target";
 
 const totpTarget = makeTotpTarget<
+  Database,
   EffectSQLiteWasmDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,
@@ -197,9 +223,10 @@ export const { makeTotpPersistenceServices, coordinateTotpPersistence } = totpTa
 import { makePhoneTarget, sqlClientPhoneStandaloneGuard } from "./drizzle/phone-target";
 
 const phoneTarget = makePhoneTarget<
+  Database,
   EffectSQLiteWasmDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,

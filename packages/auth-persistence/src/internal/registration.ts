@@ -5,16 +5,17 @@ import { PasswordUnavailable } from "@yielded/auth/Password";
 import { reportPersistenceFailure } from "@yielded/auth/Persistence";
 import type { SubjectId } from "@yielded/auth/Schema";
 import { SecurityRevision } from "@yielded/auth/Sessions";
-import { Effect, Schema } from "effect";
+import { type Context, Effect, Schema } from "effect";
 
-import type { PasswordSqlDatabase } from "./password-kernel";
+import { PersistenceConfigurationError } from "./configuration";
+import { CurrentPasswordSql } from "./password-kernel";
 import type { QueryOperations } from "./query-operations";
 import type { PasswordRegistrationAuthority } from "./registration-contract";
 import type { makeMappings } from "./storage-mapping";
 
 class IdentifierTaken extends Schema.TaggedError<IdentifierTaken>()("IdentifierTaken", {}) {}
 
-export type CreateSubject = (input: {
+type CreateSubject = (input: {
   readonly identifier: LoginIdentifier;
   readonly registration: unknown;
 }) => Effect.Effect<SubjectId, PasswordUnavailable>;
@@ -23,14 +24,28 @@ export type CreateSubject = (input: {
  * creates the unverified identifier and password in one SQL transaction. Replays
  * always suppress; a public request ID never recovers a private password intent.
  */
-export const makeRegistrationAuthority = Effect.fn("makeRegistrationAuthority")(function* (
-  database: PasswordSqlDatabase,
+export const makeRegistrationAuthority = Effect.fn("makeRegistrationAuthority")(function* <R>(
   mappings: ReturnType<typeof makeMappings>,
   operations: QueryOperations,
   standalone: Effect.Effect<void, PasswordUnavailable>,
-  createSubject: CreateSubject,
-): Effect.fn.Return<PasswordRegistrationAuthority<unknown>, never, LifecycleHooks> {
+  provisioning: Context.Key<R, object>,
+  strategy: string,
+): Effect.fn.Return<
+  PasswordRegistrationAuthority<unknown>,
+  PersistenceConfigurationError,
+  LifecycleHooks | CurrentPasswordSql | R
+> {
+  const database = yield* CurrentPasswordSql;
   const hooks = yield* LifecycleHooks;
+  // Core has already decoded registration with the selected strategy's Schema;
+  // the dynamic strategy table erases only that heterogeneous callback signature.
+  const creators = (yield* provisioning) as Readonly<Record<string, CreateSubject>>;
+  const createSubject = creators[strategy];
+
+  if (createSubject === undefined)
+    return yield* PersistenceConfigurationError.make({
+      reason: `Missing subject provisioning for ${strategy}`,
+    });
   const { and, eq, column } = operations;
   const mapping = mappings.passwords();
   const receipts = mappings.table("passwordRegistrations");

@@ -659,10 +659,10 @@ export const makeProofKernel = <
   };
 
   const makeSqlProofPersistence = Effect.fn("makeSqlProofPersistence")(function* (
-    database: Database,
     mapping: Mapping,
     configuration: ProofSqlConfiguration,
-  ): Effect.fn.Return<ProofPersistence["Service"], never, LifecycleHooks> {
+  ): Effect.fn.Return<ProofPersistence["Service"], never, LifecycleHooks | CurrentProofSql> {
+    const database = yield* CurrentProofSql;
     const hooks = yield* LifecycleHooks;
 
     return ProofPersistence.of({

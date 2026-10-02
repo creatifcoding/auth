@@ -8,8 +8,10 @@ import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
 import type { PasswordPersistenceMapping, PasswordRegistrationMapping } from "./password-model";
 import type { PasswordRegistrationAuthority } from "./password-registration";
+import { CurrentPasswordSql } from "./password-sql";
 import type { PasswordSqlQuery } from "./password-sql";
 import {
   coordinateTargetPasswordPersistence,
@@ -18,24 +20,30 @@ import {
   makeTargetPasswordRegistrationServices,
   sqlClientPasswordStandaloneGuard,
 } from "./password-target";
+import { Database as DatabaseService } from "./pg-database";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
 import { sqlClientProofStandaloneGuard } from "./proof-target";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 type Database = PostgresDatabase<AnyRelations> | PgliteDatabase<AnyRelations>;
 type TransactionOf<D extends Database> = Parameters<Parameters<D["transaction"]>[0]>[0];
 
-const configuration = (database: Database) => ({
+const configuration = (service: TransactionService | undefined) => ({
   mode: "interactive" as const,
   locking: true,
-  standaloneGuard: sqlClientPasswordStandaloneGuard(database),
+  standaloneGuard: sqlClientPasswordStandaloneGuard(service),
   insertIfAbsent: (query: PasswordSqlQuery) => query.onConflictDoNothing(),
   generatedSubjectRows: (query: PasswordSqlQuery) => query.returning(),
   proof: {
     mode: "interactive" as const,
     locking: true,
-    standaloneGuard: sqlClientProofStandaloneGuard(database),
+    standaloneGuard: sqlClientProofStandaloneGuard(service),
     insertIfAbsent: (query: ProofSqlQuery) => query.onConflictDoNothing(),
   },
 });
@@ -63,7 +71,6 @@ export const makePgPasswordPersistenceServices = <
   M extends AnyPgTable,
   NativeId,
 >(
-  database: Database,
   mapping: PasswordMapping<S, I, C, AC, A, RS, CE, M, NativeId>,
   proofMapping?: ProofPersistenceMapping<
     any,
@@ -80,7 +87,10 @@ export const makePgPasswordPersistenceServices = <
     any
   >,
 ) =>
-  makeTargetPasswordPersistenceServices(database, mapping, configuration(database), proofMapping);
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetPasswordPersistenceServices(mapping, configuration, proofMapping),
+  ).pipe(Effect.provideServiceEffect(CurrentPasswordSql, nativeDatabase(DatabaseService)));
 
 export function coordinatePgPasswordPersistence<
   D extends Database,
@@ -188,7 +198,7 @@ export function coordinatePgPasswordPersistence<
     coordinateTargetPasswordPersistence<TransactionOf<D>, Out, E, Exclude<R, PasswordPersistence>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       options.proofMapping,
       (
         transaction: TransactionOf<D>,
@@ -214,10 +224,12 @@ export const makePgPasswordRegistrationServices = <
   Rq extends AnyPgTable,
   NativeId,
 >(
-  database: Database,
   mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
 ) =>
-  makeTargetPasswordRegistrationServices<Registration>(database, mapping, configuration(database));
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetPasswordRegistrationServices<Registration>(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentPasswordSql, nativeDatabase(DatabaseService)));
 
 export function coordinatePgPasswordRegistration<
   TargetId,
@@ -319,7 +331,7 @@ export function coordinatePgPasswordRegistration<
     >(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly registrationAuthority: PasswordRegistrationAuthority<Registration> },

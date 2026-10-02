@@ -11,6 +11,7 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect } from "effect";
 
+import { Database as DatabaseService } from "./d1-database";
 import { makeD1Owner } from "./d1-planning";
 import { D1BatchStatements } from "./D1BatchStatements";
 import type { D1PhoneMapping, PhoneMapping, PhoneMappingSource } from "./phone-model";
@@ -26,7 +27,10 @@ const configuration = {
 };
 
 /** Reads use a primary D1 session; observations and expiry are asserted in the same batch. */
-const target = makePhoneTarget<Database, Table, D1PhoneMapping>(configuration);
+const target = makePhoneTarget<DatabaseService, Database, Table, D1PhoneMapping>(
+  DatabaseService,
+  configuration,
+);
 
 export const { makePhonePersistenceServices } = target;
 

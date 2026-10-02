@@ -15,13 +15,14 @@ import {
   type PasswordRegistrationConfiguration,
 } from "./password-registration";
 import {
+  CurrentPasswordSql,
   makeSqlPasswordPersistence,
   type PasswordSqlConfiguration,
   type PasswordSqlDatabase,
   type PasswordSqlQuery,
 } from "./password-sql";
 import type { ProofTargetConfiguration } from "./proof-target";
-import { sqlClientStandaloneGuard } from "./standalone-guard";
+import { sqlClientStandaloneGuard, type TransactionService } from "./standalone-guard";
 
 export interface PasswordTargetConfiguration {
   readonly mode: "interactive" | "synchronous";
@@ -50,9 +51,9 @@ export type PasswordCoordinatorError<E> =
   | SqlError.SqlError;
 
 export const sqlClientPasswordStandaloneGuard = (
-  database: unknown,
+  service: TransactionService | undefined,
 ): Effect.Effect<void, PasswordUnavailable> =>
-  sqlClientStandaloneGuard(database, () => PasswordUnavailable.make({}));
+  sqlClientStandaloneGuard(service, () => PasswordUnavailable.make({}));
 
 export const passwordOptions = (
   configuration: PasswordTargetConfiguration,
@@ -96,7 +97,6 @@ const registrationOptions = (
 });
 
 export const makeTargetPasswordPersistenceServices = (
-  database: any,
   mapping: any,
   configuration: PasswordTargetConfiguration,
   proofMapping?: any,
@@ -104,7 +104,6 @@ export const makeTargetPasswordPersistenceServices = (
   Effect.gen(function* () {
     return {
       passwordPersistence: yield* makeSqlPasswordPersistence(
-        database,
         mapping,
         passwordOptions(configuration, proofMapping),
       ),
@@ -112,14 +111,12 @@ export const makeTargetPasswordPersistenceServices = (
   });
 
 export const makeTargetPasswordRegistrationServices = <Registration>(
-  database: any,
   mapping: any,
   configuration: PasswordTargetConfiguration,
 ) =>
   Effect.gen(function* () {
     return {
       registrationAuthority: yield* makeSqlPasswordRegistrationAuthority<Registration>(
-        database,
         mapping,
         registrationOptions(configuration),
       ),
@@ -149,9 +146,13 @@ export const coordinateTargetPasswordPersistence = <Transaction, A, E, R>(
           Effect.gen(function* () {
             return yield* owner(transaction, {
               passwordPersistence: yield* makeSqlPasswordPersistence(
-                transaction as unknown as PasswordSqlDatabase,
                 mapping,
                 passwordOptions(configuration, proofMapping, true),
+              ).pipe(
+                Effect.provideService(
+                  CurrentPasswordSql,
+                  transaction as unknown as PasswordSqlDatabase,
+                ),
               ),
             });
           }),
@@ -185,9 +186,13 @@ export const coordinateTargetPasswordRegistration = <Registration, Transaction, 
           Effect.gen(function* () {
             return yield* owner(transaction, {
               registrationAuthority: yield* makeSqlPasswordRegistrationAuthority<Registration>(
-                transaction as unknown as PasswordSqlDatabase,
                 mapping,
                 registrationOptions(configuration, true),
+              ).pipe(
+                Effect.provideService(
+                  CurrentPasswordSql,
+                  transaction as unknown as PasswordSqlDatabase,
+                ),
               ),
             });
           }),
@@ -198,24 +203,20 @@ export const coordinateTargetPasswordRegistration = <Registration, Transaction, 
     return result.value;
   });
 
-export const passwordPersistenceLayer = (
-  services: Effect.Effect<
-    { readonly passwordPersistence: PasswordPersistence["Service"] },
-    never,
-    LifecycleHooks
-  >,
+export const passwordPersistenceLayer = <E, R>(
+  services: Effect.Effect<{ readonly passwordPersistence: PasswordPersistence["Service"] }, E, R>,
 ) =>
   Layer.effect(
     PasswordPersistence,
     Effect.map(services, (value) => value.passwordPersistence),
   );
 
-export const passwordRegistrationLayer = <Id, Registration>(
+export const passwordRegistrationLayer = <Id, Registration, E, R>(
   tag: Context.Key<Id, PasswordRegistrationAuthority<Registration>>,
   services: Effect.Effect<
     { readonly registrationAuthority: PasswordRegistrationAuthority<Registration> },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(

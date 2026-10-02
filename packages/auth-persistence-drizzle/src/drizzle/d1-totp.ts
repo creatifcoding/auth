@@ -6,6 +6,7 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect } from "effect";
 
+import { Database as DatabaseService } from "./d1-database";
 import { makeD1Owner } from "./d1-planning";
 import { D1BatchStatements } from "./D1BatchStatements";
 import type { D1TotpMapping, TotpMapping, TotpMappingSource } from "./totp-model";
@@ -21,7 +22,10 @@ const configuration = {
 };
 
 /** Reads use a primary D1 session; observations and expiry are asserted in the same batch. */
-const target = makeTotpTarget<Database, Table, D1TotpMapping>(configuration);
+const target = makeTotpTarget<DatabaseService, Database, Table, D1TotpMapping>(
+  DatabaseService,
+  configuration,
+);
 
 export const { makeTotpPersistenceServices } = target;
 

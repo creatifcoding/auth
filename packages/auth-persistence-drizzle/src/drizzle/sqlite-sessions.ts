@@ -18,12 +18,14 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
 import type {
   AuthenticationAuthorityMapping,
   PendingAuthenticationMapping,
   SignedSessionValidityMapping,
   StatefulSessionMapping,
 } from "./session-model";
+import { CurrentSessionSql } from "./session-sql";
 import {
   coordinateTargetAuthenticationAuthority,
   coordinateTargetPendingAuthentication,
@@ -37,6 +39,11 @@ import {
   makeTargetSessionStepUpServices,
   coordinateTargetSessionStepUp,
 } from "./session-target";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 type Database =
@@ -66,10 +73,9 @@ export const makeSqliteAuthenticationAuthorityServices = <
   P extends AnySQLiteTable,
   NativeId,
 >(
-  database: Database,
   mapping: AuthenticationAuthorityMapping<Claims, S, C, F, P, NativeId>,
   configuration: SessionTargetConfiguration,
-) => makeTargetAuthenticationAuthorityServices<Claims>(database, mapping, configuration);
+) => makeTargetAuthenticationAuthorityServices<Claims>(mapping, configuration);
 
 export const makeSqlitePendingAuthenticationServices = <
   Claims,
@@ -79,10 +85,9 @@ export const makeSqlitePendingAuthenticationServices = <
   F extends AnySQLiteTable,
   NativeId,
 >(
-  database: Database,
   mapping: PendingAuthenticationMapping<Claims, S, C, P, F, NativeId>,
   configuration: SessionTargetConfiguration,
-) => makeTargetPendingAuthenticationServices<Claims>(database, mapping, configuration);
+) => makeTargetPendingAuthenticationServices<Claims>(mapping, configuration);
 
 export const makeSqliteStatefulSessionServices = <
   Claims,
@@ -94,10 +99,9 @@ export const makeSqliteStatefulSessionServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: StatefulSessionMapping<Claims, S, C, Session, F, P, NativeId, NativeSessionId>,
   configuration: SessionTargetConfiguration,
-) => makeTargetStatefulSessionServices<Claims>(database, mapping, configuration);
+) => makeTargetStatefulSessionServices<Claims>(mapping, configuration);
 
 export const makeSqliteSignedSessionValidityServices = <
   S extends AnySQLiteTable,
@@ -105,10 +109,9 @@ export const makeSqliteSignedSessionValidityServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SignedSessionValidityMapping<S, T, NativeId, NativeSessionId>,
   configuration: SessionTargetConfiguration,
-) => makeTargetSignedSessionValidityServices(database, mapping, configuration);
+) => makeTargetSignedSessionValidityServices(mapping, configuration);
 
 export const coordinateSqliteAuthenticationAuthority = <
   Claims,
@@ -221,11 +224,25 @@ export const coordinateSqliteSignedSessionValidity = <
     owner,
   );
 
-export const makeSqliteSessionTarget = <D extends Database, Synchronous extends boolean = false>(
-  configuration: SessionTargetConfiguration | ((database: D) => SessionTargetConfiguration),
+export const makeSqliteSessionTarget = <
+  DatabaseId,
+  D extends Database,
+  Synchronous extends boolean = false,
+>(
+  databaseService: Context.Service<DatabaseId, D>,
+  configuration:
+    | SessionTargetConfiguration
+    | ((service: TransactionService | undefined) => SessionTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
-    typeof configuration === "function" ? configuration(database) : configuration;
+    typeof configuration === "function"
+      ? configuration(transactionService(database))
+      : configuration;
+
+  const standaloneConfiguration =
+    typeof configuration === "function"
+      ? Effect.map(acquireTransactionService(databaseService), configuration)
+      : Effect.succeed(configuration);
 
   function coordinateSessionStepUp<
     Database extends D,
@@ -854,7 +871,6 @@ export const makeSqliteSessionTarget = <D extends Database, Synchronous extends 
       NativeId,
       NativeSessionId,
     >(
-      database: D,
       mapping: SessionStepUpMapping<
         NoInfer<Claims>,
         S,
@@ -866,7 +882,10 @@ export const makeSqliteSessionTarget = <D extends Database, Synchronous extends 
         NativeSessionId
       >,
       target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
-    ) => makeSqliteSessionStepUpServices(database, mapping, target, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeSqliteSessionStepUpServices(mapping, target, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(databaseService))),
     coordinateSessionStepUp,
     makeAuthenticationAuthorityServices: <
       Claims,
@@ -876,9 +895,11 @@ export const makeSqliteSessionTarget = <D extends Database, Synchronous extends 
       P extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: AuthenticationAuthorityMapping<Claims, S, C, F, P, NativeId>,
-    ) => makeSqliteAuthenticationAuthorityServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeSqliteAuthenticationAuthorityServices(mapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(databaseService))),
     makePendingAuthenticationServices: <
       Claims,
       S extends AnySQLiteTable,
@@ -887,9 +908,11 @@ export const makeSqliteSessionTarget = <D extends Database, Synchronous extends 
       F extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: PendingAuthenticationMapping<Claims, S, C, P, F, NativeId>,
-    ) => makeSqlitePendingAuthenticationServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeSqlitePendingAuthenticationServices(mapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(databaseService))),
     makeStatefulSessionServices: <
       Claims,
       S extends AnySQLiteTable,
@@ -900,18 +923,22 @@ export const makeSqliteSessionTarget = <D extends Database, Synchronous extends 
       NativeId,
       NativeSessionId,
     >(
-      database: D,
       mapping: StatefulSessionMapping<Claims, S, C, Session, F, P, NativeId, NativeSessionId>,
-    ) => makeSqliteStatefulSessionServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeSqliteStatefulSessionServices(mapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(databaseService))),
     makeSignedSessionValidityServices: <
       S extends AnySQLiteTable,
       T extends AnySQLiteTable,
       NativeId,
       NativeSessionId,
     >(
-      database: D,
       mapping: SignedSessionValidityMapping<S, T, NativeId, NativeSessionId>,
-    ) => makeSqliteSignedSessionValidityServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeSqliteSignedSessionValidityServices(mapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(databaseService))),
     coordinateAuthenticationAuthority,
     coordinatePendingAuthentication,
     coordinateStatefulSessions,
@@ -932,11 +959,10 @@ export const makeSqliteSessionStepUpServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SessionStepUpMapping<NoInfer<Claims>, S, C, I, Session, T, NativeId, NativeSessionId>,
   target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
   configuration: SessionTargetConfiguration,
-) => makeTargetSessionStepUpServices(database, mapping, target, configuration);
+) => makeTargetSessionStepUpServices(mapping, target, configuration);
 
 export const coordinateSqliteSessionStepUp = <
   Claims,

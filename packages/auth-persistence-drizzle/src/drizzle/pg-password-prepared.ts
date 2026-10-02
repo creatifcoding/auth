@@ -7,6 +7,7 @@ import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
 import type {
   PasswordPreparedPersistenceMapping,
   PasswordPreparedProofMapping,
@@ -15,7 +16,10 @@ import {
   makeTargetPasswordPreparedPersistenceServices,
   coordinateTargetPasswordPreparedPersistence,
 } from "./password-prepared-target";
+import { CurrentPasswordSql } from "./password-sql";
+import { Database as DatabaseService } from "./pg-database";
 import { pgPasswordConfiguration as configuration } from "./pg-passwords";
+import { acquireTransactionService, transactionService } from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 type Database = PostgresDatabase<AnyRelations> | PgliteDatabase<AnyRelations>;
 type TransactionOf<D extends Database> = Parameters<Parameters<D["transaction"]>[0]>[0];
@@ -40,16 +44,14 @@ export const makePgPasswordPreparedPersistenceServices = <
   PCr extends AnyPgTable = AnyPgTable,
   PNativeId = unknown,
 >(
-  database: Database,
   mapping: PasswordPreparedPersistenceMapping<S, I, C, AC, A, RS, CE, M, T, B, NativeId>,
   proofMapping?: PasswordPreparedProofMapping<PS, PC, PM, PSub, PI, PCr, PNativeId>,
 ) =>
-  makeTargetPasswordPreparedPersistenceServices(
-    database,
-    mapping,
-    configuration(database),
-    proofMapping,
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) =>
+      makeTargetPasswordPreparedPersistenceServices(mapping, configuration, proofMapping),
+  ).pipe(Effect.provideServiceEffect(CurrentPasswordSql, nativeDatabase(DatabaseService)));
 
 export function coordinatePgPasswordPreparedPersistence<
   TargetId,
@@ -187,7 +189,7 @@ export function coordinatePgPasswordPreparedPersistence<
     coordinateTargetPasswordPreparedPersistence<TransactionOf<D>, Out, E, Exclude<R, TargetId>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       options.proofMapping,
       (
         transaction: TransactionOf<D>,

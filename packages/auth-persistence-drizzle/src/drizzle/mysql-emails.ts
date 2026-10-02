@@ -13,6 +13,7 @@ import type {
   EmailSignInMapping,
 } from "./email-model";
 import type { EmailRegistrationAuthority } from "./email-registration";
+import { CurrentEmailSql } from "./email-sql";
 import type { EmailSqlQuery } from "./email-sql";
 import {
   coordinateTargetEmailAddress,
@@ -22,9 +23,16 @@ import {
   makeTargetEmailSignInServices,
   sqlClientEmailStandaloneGuard,
 } from "./email-target";
+import { Database as DatabaseService } from "./mysql-database";
+import { nativeDatabase } from "./native-database";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
 import { sqlClientProofStandaloneGuard } from "./proof-target";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 type Database = EffectMysql2Database<AnyRelations>;
@@ -44,15 +52,15 @@ type ProofMapping = ProofPersistenceMapping<
   any
 >;
 
-const configuration = (database: Database) => ({
+const configuration = (service: TransactionService | undefined) => ({
   mode: "interactive" as const,
   locking: true,
-  standaloneGuard: sqlClientEmailStandaloneGuard(database),
+  standaloneGuard: sqlClientEmailStandaloneGuard(service),
   generatedSubjectRows: (query: EmailSqlQuery) => query.$returningId(),
   proof: {
     mode: "interactive" as const,
     locking: true,
-    standaloneGuard: sqlClientProofStandaloneGuard(database),
+    standaloneGuard: sqlClientProofStandaloneGuard(service),
     insertIfAbsent: (query: ProofSqlQuery, selfKey: string, selfValue: unknown) =>
       query.onDuplicateKeyUpdate({ set: { [selfKey]: selfValue } }),
   },
@@ -64,9 +72,12 @@ export const makeMysqlEmailSignInServices = <
   C extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: EmailSignInMapping<S, I, C, NativeId>,
-) => makeTargetEmailSignInServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetEmailSignInServices(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentEmailSql, nativeDatabase(DatabaseService)));
 
 export const makeMysqlEmailAddressServices = <
   S extends AnyMySqlTable,
@@ -76,10 +87,13 @@ export const makeMysqlEmailAddressServices = <
   M extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: EmailAddressMapping<S, I, C, AC, M, NativeId>,
   proofMapping: ProofMapping,
-) => makeTargetEmailAddressServices(database, mapping, proofMapping, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetEmailAddressServices(mapping, proofMapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentEmailSql, nativeDatabase(DatabaseService)));
 
 export function coordinateMysqlEmailAddress<
   D extends Database,
@@ -170,7 +184,7 @@ export function coordinateMysqlEmailAddress<
       database,
       options.mapping,
       options.proofMapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly emailAddressPersistence: EmailAddressPersistence["Service"] },
@@ -195,16 +209,14 @@ export const makeMysqlEmailRegistrationServices = <
   Rq extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: EmailRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
   proofMapping: ProofMapping,
 ) =>
-  makeTargetEmailRegistrationServices<Registration>(
-    database,
-    mapping,
-    proofMapping,
-    configuration(database),
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) =>
+      makeTargetEmailRegistrationServices<Registration>(mapping, proofMapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentEmailSql, nativeDatabase(DatabaseService)));
 
 export function coordinateMysqlEmailRegistration<
   TargetId,
@@ -304,7 +316,7 @@ export function coordinateMysqlEmailRegistration<
       database,
       options.mapping,
       options.proofMapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly registrationAuthority: EmailRegistrationAuthority<Registration> },

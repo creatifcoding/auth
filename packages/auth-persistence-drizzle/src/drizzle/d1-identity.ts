@@ -18,7 +18,6 @@ import {
   is,
   sql,
   SQL,
-  type AnyRelations,
   type InferInsertModel,
   type Table,
 } from "drizzle-orm";
@@ -26,6 +25,7 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable, SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { Cause, Effect, Schema } from "effect";
 
+import { Database as DatabaseService } from "./d1-database";
 import {
   column,
   isMappedConstraintConflict,
@@ -92,15 +92,14 @@ const selectFields = <T extends Table>(
  * database-generated subject id from the first insert via last_insert_rowid;
  * the optional identifier then reads that stable id from the receipt.
  */
-export const makeD1SubjectProvisioningServices = <
+export const makeD1SubjectProvisioningServices = Effect.fnUntraced(function* <
   Subject extends AnySQLiteTable,
   Identifier extends AnySQLiteTable,
   Request extends AnySQLiteTable,
   NativeId,
->(
-  database: EffectSQLiteD1Database<AnyRelations> & { readonly $client: D1Client },
-  mapping: D1SubjectProvisioningMapping<Subject, Identifier, Request, NativeId>,
-) => {
+>(mapping: D1SubjectProvisioningMapping<Subject, Identifier, Request, NativeId>) {
+  const database = yield* DatabaseService;
+
   const db = database as RuntimeDatabase;
   const requestTable = mapping.provisioningRequest.table;
 
@@ -254,16 +253,15 @@ export const makeD1SubjectProvisioningServices = <
   }, mapUnavailable);
 
   return { subjectProvisioner: SubjectProvisioner.of({ provision }) } as const;
-};
+});
 
-export const makeD1ExternalIdentityServices = <
+export const makeD1ExternalIdentityServices = Effect.fnUntraced(function* <
   Subject extends AnySQLiteTable,
   External extends AnySQLiteTable,
   NativeId,
->(
-  database: EffectSQLiteD1Database<AnyRelations> & { readonly $client: D1Client },
-  mapping: D1ExternalIdentityMapping<Subject, External, NativeId>,
-) => {
+>(mapping: D1ExternalIdentityMapping<Subject, External, NativeId>) {
+  const database = yield* DatabaseService;
+
   const db = database as RuntimeDatabase;
   const externalTable = mapping.externalIdentity.table;
 
@@ -358,18 +356,17 @@ export const makeD1ExternalIdentityServices = <
   }, mapUnavailable);
 
   return { externalIdentityMutation: ExternalIdentityMutation.of({ bind }) } as const;
-};
+});
 
-export const makeD1IdentityServices = <
+export const makeD1IdentityServices = Effect.fnUntraced(function* <
   Subject extends AnySQLiteTable,
   Identifier extends AnySQLiteTable,
   External extends AnySQLiteTable,
   Request extends AnySQLiteTable,
   NativeId,
->(
-  database: EffectSQLiteD1Database<AnyRelations> & { readonly $client: D1Client },
-  mapping: D1GeneratedIdentityMapping<Subject, Identifier, External, Request, NativeId>,
-) => ({
-  ...makeD1SubjectProvisioningServices(database, mapping),
-  ...makeD1ExternalIdentityServices(database, mapping),
+>(mapping: D1GeneratedIdentityMapping<Subject, Identifier, External, Request, NativeId>) {
+  return {
+    ...(yield* makeD1SubjectProvisioningServices(mapping)),
+    ...(yield* makeD1ExternalIdentityServices(mapping)),
+  };
 });

@@ -7,13 +7,21 @@ import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
+import { Database as DatabaseService } from "./pg-database";
 import type { ProofPersistenceMapping } from "./proof-model";
+import { CurrentProofSql } from "./proof-sql";
 import type { ProofSqlQuery } from "./proof-sql";
 import {
   coordinateTargetProofPersistence,
   makeTargetProofPersistenceServices,
   sqlClientProofStandaloneGuard,
 } from "./proof-target";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 type Database = PostgresDatabase<AnyRelations> | PgliteDatabase<AnyRelations>;
@@ -46,10 +54,10 @@ type Mapping<
   NativeSubjectId
 >;
 
-const configuration = (database: Database) => ({
+const configuration = (service: TransactionService | undefined) => ({
   mode: "interactive" as const,
   locking: true,
-  standaloneGuard: sqlClientProofStandaloneGuard(database),
+  standaloneGuard: sqlClientProofStandaloneGuard(service),
   insertIfAbsent: (query: ProofSqlQuery) => query.onConflictDoNothing(),
 });
 
@@ -67,9 +75,12 @@ export const makePgProofPersistenceServices = <
   Cr extends AnyPgTable,
   NativeId,
 >(
-  database: Database,
   mapping: Mapping<Rq, S, G, Cn, Rs, A, F, C, Sub, I, Cr, NativeId>,
-) => makeTargetProofPersistenceServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetProofPersistenceServices(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentProofSql, nativeDatabase(DatabaseService)));
 
 export function coordinatePgProofPersistence<
   D extends Database,
@@ -174,7 +185,7 @@ export function coordinatePgProofPersistence<
     coordinateTargetProofPersistence<TransactionOf<D>, A, E, Exclude<R, ProofPersistence>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly proofPersistence: ProofPersistence["Service"] },

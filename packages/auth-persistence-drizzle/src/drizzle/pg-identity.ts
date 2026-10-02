@@ -10,8 +10,7 @@ import {
 import { reportPersistenceFailure } from "@yielded/auth/Persistence";
 import type { SubjectId } from "@yielded/auth/Schema";
 /* oxlint-disable no-explicit-any -- Drizzle's generic query builders lose the concrete consumer table through a runtime column map. Assertions stay in this adapter. */
-import { and, eq, type AnyRelations } from "drizzle-orm";
-import type { EffectPgDatabase as PgliteDatabase } from "drizzle-orm/effect-pglite";
+import { and, eq } from "drizzle-orm";
 import type { EffectPgDatabase as PgDatabase } from "drizzle-orm/effect-postgres";
 import { type AnyPgTable, type PgColumn } from "drizzle-orm/pg-core";
 import { Cause, Effect, Schema } from "effect";
@@ -25,8 +24,8 @@ import {
   type IdentityTables,
   type SubjectProvisioningTables,
 } from "./model";
+import { Database as DatabaseService } from "./pg-database";
 
-type Database = PgDatabase<AnyRelations> | PgliteDatabase<AnyRelations>;
 type RuntimeDatabase = PgDatabase<any>;
 
 const identityUnavailable = () => IdentityUnavailable.make();
@@ -41,15 +40,14 @@ const mapIdentityFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     ),
   );
 
-export const makePgSubjectProvisioningServices = <
+export const makePgSubjectProvisioningServices = Effect.fnUntraced(function* <
   Subject extends AnyPgTable,
   Identifier extends AnyPgTable,
   Request extends AnyPgTable,
   NativeId,
->(
-  database: Database,
-  mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
-) => {
+>(mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>) {
+  const database = yield* DatabaseService;
+
   const db = database as RuntimeDatabase;
   const requestTable = mapping.provisioningRequest.table;
   const requestIdColumn = column(requestTable, mapping.provisioningRequest.requestId);
@@ -174,16 +172,15 @@ export const makePgSubjectProvisioningServices = <
   return {
     subjectProvisioner: SubjectProvisioner.of({ provision }),
   } as const;
-};
+});
 
-export const makePgExternalIdentityServices = <
+export const makePgExternalIdentityServices = Effect.fnUntraced(function* <
   Subject extends AnyPgTable,
   External extends AnyPgTable,
   NativeId,
->(
-  database: Database,
-  mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => {
+>(mapping: ExternalIdentityTables<Subject, External, NativeId>) {
+  const database = yield* DatabaseService;
+
   const db = database as RuntimeDatabase;
   const externalTable = mapping.externalIdentity.table;
 
@@ -284,18 +281,17 @@ export const makePgExternalIdentityServices = <
   }, mapIdentityFailure);
 
   return { externalIdentityMutation: ExternalIdentityMutation.of({ bind }) } as const;
-};
+});
 
-export const makePgIdentityServices = <
+export const makePgIdentityServices = Effect.fnUntraced(function* <
   Subject extends AnyPgTable,
   Identifier extends AnyPgTable,
   External extends AnyPgTable,
   Request extends AnyPgTable,
   NativeId,
->(
-  database: Database,
-  mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => ({
-  ...makePgSubjectProvisioningServices(database, mapping),
-  ...makePgExternalIdentityServices(database, mapping),
+>(mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>) {
+  return {
+    ...(yield* makePgSubjectProvisioningServices(mapping)),
+    ...(yield* makePgExternalIdentityServices(mapping)),
+  };
 });

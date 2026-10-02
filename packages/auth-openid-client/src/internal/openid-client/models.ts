@@ -4,7 +4,6 @@ import {
   type OAuthVerifiedExternalIdentity,
 } from "@yielded/auth/OAuth";
 import { type Effect, type Redacted, Schema } from "effect";
-import type { CustomFetch } from "openid-client";
 
 import type { TokenCompatibility, tokenCompatibility } from "./compatibility";
 
@@ -79,6 +78,4 @@ export interface OpenIdClientOAuthProtocolOptions<R = never> {
   readonly providers: ReadonlyArray<OpenIdClientOidcProvider | OpenIdClientOAuthProvider<R>>;
   /** Per-request deadline; the method separately limits the complete exchange. */
   readonly timeoutSeconds: number;
-  /** Trusted server transport. Must honor abort and must not retry or log credentials. */
-  readonly fetch?: CustomFetch;
 }

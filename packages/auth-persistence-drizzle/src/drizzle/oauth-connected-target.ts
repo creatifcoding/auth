@@ -1,4 +1,3 @@
-import { LifecycleHooks } from "@yielded/auth/Hooks";
 import * as M from "@yielded/auth/OAuth";
 import {
   OAuthConnectedPersistence,
@@ -185,32 +184,24 @@ export const makeRevocations = (
   );
 
 export const makeTargetOAuthConnectedServices = (
-  database: any,
   mapping: S.Mapping,
   configuration: OAuthTargetConfiguration,
 ) => {
   const retained = captured(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    oauthConnectedPersistence: makeConnected(
-      retained,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(configuration), (execution) => ({
+    oauthConnectedPersistence: makeConnected(retained, execution),
   }));
 };
 
 export const makeTargetOAuthConnectedRevocationServices = (
-  database: any,
   mapping: S.Revocations,
   configuration: OAuthTargetConfiguration,
 ) => {
   const retained = captured(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    oauthConnectedRevocations: makeRevocations(
-      retained,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(configuration), (execution) => ({
+    oauthConnectedRevocations: makeRevocations(retained, execution),
   }));
 };
 
@@ -256,16 +247,24 @@ export const coordinateTargetOAuthConnectedRevocations = <Transaction, A, E, R>(
     owner,
   );
 
-export const oauthConnectedPersistenceLayer = (
-  services: ReturnType<typeof makeTargetOAuthConnectedServices>,
+export const oauthConnectedPersistenceLayer = <E, R>(
+  services: Effect.Effect<
+    Effect.Success<ReturnType<typeof makeTargetOAuthConnectedServices>>,
+    E,
+    R
+  >,
 ) =>
   Layer.effect(
     OAuthConnectedPersistence,
     Effect.map(services, (value) => value.oauthConnectedPersistence),
   );
 
-export const oauthConnectedRevocationsLayer = (
-  services: ReturnType<typeof makeTargetOAuthConnectedRevocationServices>,
+export const oauthConnectedRevocationsLayer = <E, R>(
+  services: Effect.Effect<
+    Effect.Success<ReturnType<typeof makeTargetOAuthConnectedRevocationServices>>,
+    E,
+    R
+  >,
 ) =>
   Layer.effect(
     OAuthConnectedRevocations,

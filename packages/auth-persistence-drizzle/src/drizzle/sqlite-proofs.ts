@@ -10,12 +10,19 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
 import type { ProofPersistenceMapping } from "./proof-model";
+import { CurrentProofSql } from "./proof-sql";
 import {
   coordinateTargetProofPersistence,
   makeTargetProofPersistenceServices,
   type ProofTargetConfiguration,
 } from "./proof-target";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 type Database =
@@ -52,11 +59,25 @@ export const sqliteProofConfiguration = (
   ...(coordinatorGuard === undefined ? {} : { coordinatorGuard }),
 });
 
-export const makeSqliteProofTarget = <D extends Database, Synchronous extends boolean = false>(
-  configuration: ProofTargetConfiguration | ((database: D) => ProofTargetConfiguration),
+export const makeSqliteProofTarget = <
+  DatabaseId,
+  D extends Database,
+  Synchronous extends boolean = false,
+>(
+  databaseService: Context.Service<DatabaseId, D>,
+  configuration:
+    | ProofTargetConfiguration
+    | ((service: TransactionService | undefined) => ProofTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
-    typeof configuration === "function" ? configuration(database) : configuration;
+    typeof configuration === "function"
+      ? configuration(transactionService(database))
+      : configuration;
+
+  const standaloneConfiguration =
+    typeof configuration === "function"
+      ? Effect.map(acquireTransactionService(databaseService), configuration)
+      : Effect.succeed(configuration);
 
   function coordinateProofPersistence<
     Database extends D,
@@ -194,9 +215,11 @@ export const makeSqliteProofTarget = <D extends Database, Synchronous extends bo
       Cr extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: Mapping<Rq, S, G, Cn, Rs, A, F, C, Sub, I, Cr, NativeId>,
-    ) => makeTargetProofPersistenceServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeTargetProofPersistenceServices(mapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentProofSql, nativeDatabase(databaseService))),
     coordinateProofPersistence,
   };
 };

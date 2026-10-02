@@ -50,7 +50,6 @@ import {
   CurrentPasswordSql,
   passwordSqlKernel as kernel,
   type PasswordSqlConfiguration,
-  type PasswordSqlDatabase,
   type PasswordSqlQuery,
 } from "./password-sql";
 import { checkProofCompletionIn, completeProofPlanIn } from "./proof-sql";
@@ -85,7 +84,6 @@ const translateContextFailure = <A, E, R>(
   );
 
 type Mapping = AnyPasswordPreparedPersistenceMapping;
-type Database = PasswordSqlDatabase;
 const nowMillis = DateTime.now.pipe(Effect.map(DateTime.toEpochMillis));
 
 const read = (query: PasswordSqlQuery, locking: boolean) =>
@@ -410,10 +408,10 @@ const terminal = Effect.fn("DrizzlePasswordPrepared.terminal")(function* (
 
 export const makeSqlPasswordPreparedPersistence = Effect.fn("makeSqlPasswordPreparedPersistence")(
   function* (
-    database: Database,
     mapping: Mapping,
     configuration: PasswordSqlConfiguration,
-  ): Effect.fn.Return<PasswordPreparedPersistence, never, LifecycleHooks> {
+  ): Effect.fn.Return<PasswordPreparedPersistence, never, LifecycleHooks | CurrentPasswordSql> {
+    const database = yield* CurrentPasswordSql;
     const hooks = yield* LifecycleHooks;
 
     const p = mapping.password,

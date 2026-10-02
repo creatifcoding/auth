@@ -10,7 +10,7 @@ import {
 import { reportPersistenceFailure } from "@yielded/auth/Persistence";
 import type { SubjectId } from "@yielded/auth/Schema";
 /* oxlint-disable no-explicit-any -- Drizzle generic query types are narrowed at this technology boundary. */
-import { and, eq, type AnyRelations } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { EffectMysql2Database } from "drizzle-orm/effect-mysql2";
 import type { AnyMySqlTable, MySqlColumn } from "drizzle-orm/mysql-core";
 import { Cause, Effect, Schema } from "effect";
@@ -24,8 +24,8 @@ import {
   type IdentityTables,
   type SubjectProvisioningTables,
 } from "./model";
+import { Database as DatabaseService } from "./mysql-database";
 
-type Database = EffectMysql2Database<AnyRelations>;
 type RuntimeDatabase = EffectMysql2Database<any>;
 const unavailable = () => IdentityUnavailable.make();
 const isIdentityFailure = Schema.is(Schema.Union([IdentityConflict, IdentityUnavailable]));
@@ -39,15 +39,14 @@ const mapUnavailable = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     ),
   );
 
-export const makeMysqlSubjectProvisioningServices = <
+export const makeMysqlSubjectProvisioningServices = Effect.fnUntraced(function* <
   Subject extends AnyMySqlTable,
   Identifier extends AnyMySqlTable,
   Request extends AnyMySqlTable,
   NativeId,
->(
-  database: Database,
-  mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
-) => {
+>(mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>) {
+  const database = yield* DatabaseService;
+
   const db = database as RuntimeDatabase;
   const requestTable = mapping.provisioningRequest.table;
 
@@ -190,16 +189,15 @@ export const makeMysqlSubjectProvisioningServices = <
   }, mapUnavailable);
 
   return { subjectProvisioner: SubjectProvisioner.of({ provision }) } as const;
-};
+});
 
-export const makeMysqlExternalIdentityServices = <
+export const makeMysqlExternalIdentityServices = Effect.fnUntraced(function* <
   Subject extends AnyMySqlTable,
   External extends AnyMySqlTable,
   NativeId,
->(
-  database: Database,
-  mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => {
+>(mapping: ExternalIdentityTables<Subject, External, NativeId>) {
+  const database = yield* DatabaseService;
+
   const db = database as RuntimeDatabase;
   const externalTable = mapping.externalIdentity.table;
 
@@ -307,18 +305,17 @@ export const makeMysqlExternalIdentityServices = <
   }, mapUnavailable);
 
   return { externalIdentityMutation: ExternalIdentityMutation.of({ bind }) } as const;
-};
+});
 
-export const makeMysqlIdentityServices = <
+export const makeMysqlIdentityServices = Effect.fnUntraced(function* <
   Subject extends AnyMySqlTable,
   Identifier extends AnyMySqlTable,
   External extends AnyMySqlTable,
   Request extends AnyMySqlTable,
   NativeId,
->(
-  database: Database,
-  mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => ({
-  ...makeMysqlSubjectProvisioningServices(database, mapping),
-  ...makeMysqlExternalIdentityServices(database, mapping),
+>(mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>) {
+  return {
+    ...(yield* makeMysqlSubjectProvisioningServices(mapping)),
+    ...(yield* makeMysqlExternalIdentityServices(mapping)),
+  };
 });

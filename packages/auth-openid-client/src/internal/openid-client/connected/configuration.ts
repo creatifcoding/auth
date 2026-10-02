@@ -10,6 +10,7 @@ import {
   snapshotOAuthSync,
 } from "@yielded/auth/OAuth";
 import { Effect, Predicate, Redacted, Schema } from "effect";
+import { FetchHttpClient } from "effect/http";
 import * as client from "openid-client";
 
 import type { ConnectedOptions, ProviderConnectedOAuth } from "../compatibility";
@@ -120,11 +121,6 @@ const optionsSchema = <R>(providerCohort: boolean) =>
         ]),
       ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
       timeoutSeconds: Schema.Finite.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
-      fetch: Schema.optionalKey(
-        Schema.declare<client.CustomFetch>((value): value is client.CustomFetch =>
-          Predicate.isFunction(value),
-        ),
-      ),
     }),
   );
 
@@ -295,13 +291,13 @@ export const installConnectedConfigurations = Effect.fn(
     catch: () => configurationError("provider"),
   });
 
-  const fetch: client.CustomFetch =
-    options.fetch ??
-    ((url, init) =>
-      globalThis.fetch(url, {
-        ...init,
-        body: init.body instanceof Uint8Array ? new Uint8Array(init.body) : init.body,
-      }));
+  const transport = yield* FetchHttpClient.Fetch;
+
+  const fetch: client.CustomFetch = (url, init) =>
+    transport(url, {
+      ...init,
+      body: init.body instanceof Uint8Array ? new Uint8Array(init.body) : init.body,
+    });
 
   yield* Effect.try({
     try: () => {

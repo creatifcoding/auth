@@ -10,7 +10,7 @@ import {
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { Effect, Schema } from "effect";
-import type * as SqlClient from "effect/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 export const customer = sqliteTable("phone_customer", {
   customerNo: integer().primaryKey(),
@@ -630,7 +630,9 @@ export const mapping: PhoneMapping<
 };
 
 /** The consumer owns these migrations. No session table exists in this application. */
-export const migrate = Effect.fn("PhoneConsumer.migrate")(function* (client: SqlClient.SqlClient) {
+export const migrate = Effect.gen(function* () {
+  const client = yield* SqlClient.SqlClient;
+
   for (const statement of [
     "create table phone_customer(customerNo integer primary key, enabled integer not null, security text not null,segment text not null,locale text not null)",
     "create table phone_identifier(namespace text not null,value text not null,customerNo integer not null,custody text not null,verifiedAt text,enabled integer not null,unique(namespace,value))",

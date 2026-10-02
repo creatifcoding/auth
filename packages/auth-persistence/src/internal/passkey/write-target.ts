@@ -341,35 +341,25 @@ export const makePasskeyWriteTargetKernel = (
   });
 
   const makeTargetPasskeyManagement = <M, RSetup>(
-    database: any,
     source: PasskeyMappingSource<M, RSetup>,
     configuration: PasskeyTargetConfiguration,
   ) =>
     Effect.gen(function* () {
       const mapping = yield* writeMapping(source, configuration, false);
-      const hooks = yield* LifecycleHooks;
+      const execution = yield* makePasskeyExecution(configuration);
 
-      return managementServices(
-        mapping,
-        makePasskeyExecution(database, hooks, configuration),
-        configuration,
-      );
+      return managementServices(mapping, execution, configuration);
     });
 
   const makeTargetPasskeyRegistrationWriter = <M, R, RSetup>(
-    database: any,
     source: PasskeyMappingSource<M, RSetup>,
     configuration: PasskeyTargetConfiguration,
   ) =>
     Effect.gen(function* () {
       const mapping = yield* writeMapping(source, configuration, true);
-      const hooks = yield* LifecycleHooks;
+      const execution = yield* makePasskeyExecution(configuration);
 
-      return registrationServices<R>(
-        mapping,
-        makePasskeyExecution(database, hooks, configuration),
-        configuration,
-      );
+      return registrationServices<R>(mapping, execution, configuration);
     });
 
   const coordinateTargetPasskeyManagement = <M, RSetup, Transaction, A, E, R>(

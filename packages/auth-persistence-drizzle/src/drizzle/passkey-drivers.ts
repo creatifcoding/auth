@@ -1,8 +1,10 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { LifecycleHooks } from "@yielded/auth/Hooks";
 import { PasskeyPersistence } from "@yielded/auth/Passkey";
 import type { Table } from "drizzle-orm";
 import { Effect, Context } from "effect";
 
+import { nativeDatabase } from "./native-database";
 import type {
   PasskeyCredentialMapping,
   PasskeyEnrollmentContextMapping,
@@ -33,11 +35,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
   : never;
 
 export const makePasskeyTarget = <
+  DatabaseId,
   D,
   T extends Table,
   Extra = unknown,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: PasskeyTargetConfiguration,
 ) => {
   function coordinatePasskeyPersistence<
@@ -304,9 +308,8 @@ export const makePasskeyTarget = <
   }
 
   return {
-    ...makePasskeyWriteTarget<D, T, Extra, Synchronous>(configuration),
+    ...makePasskeyWriteTarget<DatabaseId, D, T, Extra, Synchronous>(databaseService, configuration),
     makePasskeyCredentialServices: <
-      Database extends D,
       S extends T,
       C extends T,
       F extends T,
@@ -315,11 +318,12 @@ export const makePasskeyTarget = <
       N,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<PasskeyCredentialMapping<S, C, F, O, H, N> & Extra, RSetup>,
-    ) => makeTargetPasskeyCredentials(database, mapping, configuration),
+    ) =>
+      makeTargetPasskeyCredentials(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
+      ),
     makePasskeyEnrollmentContextServices: <
-      Database extends D,
       S extends T,
       C extends T,
       F extends T,
@@ -329,14 +333,15 @@ export const makePasskeyTarget = <
       N,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<
         PasskeyEnrollmentContextMapping<PasskeyCredentialMapping<S, C, F, O, H, N>, M, N> & Extra,
         RSetup
       >,
-    ) => makeTargetPasskeyEnrollmentContext(database, mapping, configuration),
+    ) =>
+      makeTargetPasskeyEnrollmentContext(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
+      ),
     makePasskeyPersistenceServices: <
-      Database extends D,
       S extends T,
       C extends T,
       F extends T,
@@ -349,7 +354,6 @@ export const makePasskeyTarget = <
       N,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<
         PasskeyPersistenceMapping<
           PasskeyCredentialMapping<S, C, F, O, H, N>,
@@ -362,9 +366,11 @@ export const makePasskeyTarget = <
           Extra,
         RSetup
       >,
-    ) => makeTargetPasskeyPersistence(database, mapping, configuration),
+    ) =>
+      makeTargetPasskeyPersistence(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
+      ),
     makePasskeyRegistrationCeremonyServices: <
-      Database extends D,
       M extends T,
       Flow extends T,
       Admission extends T,
@@ -373,12 +379,14 @@ export const makePasskeyTarget = <
       H extends T,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<
         PasskeyRegistrationCeremonyMapping<M, Flow, Admission, Charge, Intent, H> & Extra,
         RSetup
       >,
-    ) => makeTargetPasskeyRegistration(database, mapping, configuration),
+    ) =>
+      makeTargetPasskeyRegistration(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
+      ),
     coordinatePasskeyPersistence,
     coordinatePasskeyRegistrationCeremony,
   };

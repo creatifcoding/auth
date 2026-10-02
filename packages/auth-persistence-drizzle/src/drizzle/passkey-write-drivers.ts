@@ -1,8 +1,10 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { LifecycleHooks } from "@yielded/auth/Hooks";
 import { PasskeyManagementPersistence, PasskeyPersistence } from "@yielded/auth/Passkey";
 import type { Table } from "drizzle-orm";
 import { Context, Effect } from "effect";
 
+import { nativeDatabase } from "./native-database";
 import type { PasskeyMappingSource } from "./passkey-model";
 import type { PasskeyCoordinatorError, PasskeyTargetConfiguration } from "./passkey-target";
 import type {
@@ -23,11 +25,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
   : never;
 
 export const makePasskeyWriteTarget = <
+  DatabaseId,
   D,
   T extends Table,
   Extra = unknown,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: PasskeyTargetConfiguration,
 ) => {
   function coordinatePasskeyManagement<
@@ -180,7 +184,6 @@ export const makePasskeyWriteTarget = <
   }
 
   const makePasskeyManagementServices = <
-    Database extends D,
     S extends T,
     C extends T,
     F extends T,
@@ -194,12 +197,14 @@ export const makePasskeyWriteTarget = <
     N,
     RSetup = never,
   >(
-    database: Database,
     mapping: PasskeyMappingSource<
       PasskeyManagementMapping<S, C, F, O, H, M, Flow, Admission, Charge, Command, N> & Extra,
       RSetup
     >,
-  ) => makeTargetPasskeyManagement(database, mapping, configuration);
+  ) =>
+    makeTargetPasskeyManagement(mapping, configuration).pipe(
+      Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
+    );
 
   function coordinatePasskeyRegistration<
     Database extends D,
@@ -357,7 +362,6 @@ export const makePasskeyWriteTarget = <
   }
 
   const makePasskeyRegistrationServices = <
-    Database extends D,
     S extends T,
     C extends T,
     F extends T,
@@ -372,7 +376,6 @@ export const makePasskeyWriteTarget = <
     Value,
     RSetup = never,
   >(
-    database: Database,
     mapping: PasskeyMappingSource<
       PasskeyRegistrationMapping<S, C, F, O, H, M, Flow, Admission, Charge, Intent, N, Value> &
         Extra,
@@ -384,7 +387,9 @@ export const makePasskeyWriteTarget = <
         Extra,
       Value,
       RSetup
-    >(database, mapping, configuration);
+    >(mapping, configuration).pipe(
+      Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
+    );
 
   return {
     makePasskeyManagementServices,

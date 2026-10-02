@@ -151,30 +151,40 @@ outcome does not authorize issuing another credential or repeating delivery.
 
 ## Connect password storage
 
-For SQLite on Bun, create the Drizzle client and provide the resulting service:
+For SQLite on Bun, supply the driver database Layer and your table mapping:
 
 ```ts title="apps/server/auth-persistence.ts"
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
-import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Effect, Layer } from "effect";
-import { makePasswordPersistenceServices } from "@yielded/auth-persistence-drizzle/SqliteBun";
+import {
+  databaseLayer,
+  makePasswordPersistenceServices,
+} from "@yielded/auth-persistence-drizzle/SqliteBun";
 import { Password } from "@yielded/auth";
 
 import { passwordMapping } from "./schema";
 
-export const PasswordPersistenceLive = Layer.unwrap(
-  Effect.gen(function* () {
-    const db = yield* Drizzle.makeWithDefaults({});
-    const services = yield* makePasswordPersistenceServices(db, passwordMapping);
-
-    return Layer.succeed(Password.PasswordPersistence, services.passwordPersistence);
-  }),
-).pipe(Layer.provide(SqliteClient.layer({ filename: "auth.sqlite" })));
+export const PasswordPersistenceLive = Layer.effect(
+  Password.PasswordPersistence,
+  Effect.map(
+    makePasswordPersistenceServices(passwordMapping),
+    (services) => services.passwordPersistence,
+  ),
+).pipe(
+  Layer.provide(databaseLayer),
+  Layer.provide(SqliteClient.layer({ filename: "auth.sqlite" })),
+);
 ```
 
 `passwordMapping` maps your account, identifier, credential, revision, attempt,
 and receipt tables. It is a `PasswordPersistenceMapping` from `@yielded/auth-persistence-drizzle`.
 Supply `LifecycleHooks` and your other account/session Layers at the composition root.
+Every driver's `make*Services` factory requires its exported `Database` service.
+Use `databaseLayer` to acquire it from the platform SQL client, or provide your
+existing native database with `Layer.succeed(Database, db)` at the application
+boundary. Transaction coordinators retain their explicit acquisition Effects and
+transaction ownership contracts. Durable Object `databaseLayer` requires a SQL
+client configured with `storage`, which provides the synchronous commit boundary.
 
 ## Compose the application Layer
 
@@ -338,10 +348,10 @@ row mappings, wrap the explicit adapter services:
 <!-- #region phone-layers -->
 
 ```ts title="apps/server/auth-persistence.ts"
-import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Effect, Layer } from "effect";
 import { phonePersistenceLayer } from "@yielded/auth-persistence-drizzle";
 import {
+  databaseLayer,
   makePhonePersistenceServices,
   makeProofPersistenceServices,
 } from "@yielded/auth-persistence-drizzle/SqliteBun";
@@ -350,20 +360,18 @@ import { Proofs } from "@yielded/auth";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import { phoneMapping, proofMapping } from "./schema";
 
-const DatabaseLive = SqliteClient.layer({ filename: "auth.sqlite" });
+const DatabaseLive = databaseLayer.pipe(
+  Layer.provide(SqliteClient.layer({ filename: "auth.sqlite" })),
+);
 
 export const PhonePersistenceLive = phonePersistenceLayer(
-  Effect.gen(function* () {
-    const db = yield* Drizzle.makeWithDefaults({});
-    return yield* makePhonePersistenceServices(db, phoneMapping);
-  }),
+  makePhonePersistenceServices(phoneMapping),
 ).pipe(Layer.provide(DatabaseLive));
 
 export const ProofPersistenceLive = Layer.effect(
   Proofs.ProofPersistence,
   Effect.gen(function* () {
-    const db = yield* Drizzle.makeWithDefaults({});
-    const services = yield* makeProofPersistenceServices(db, proofMapping);
+    const services = yield* makeProofPersistenceServices(proofMapping);
     return services.proofPersistence;
   }),
 ).pipe(Layer.provide(DatabaseLive));

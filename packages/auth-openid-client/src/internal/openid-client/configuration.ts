@@ -9,6 +9,7 @@ import {
   freezeOAuth,
 } from "@yielded/auth/OAuth";
 import { Effect, Predicate, Redacted, Schema } from "effect";
+import { FetchHttpClient } from "effect/http";
 import * as client from "openid-client";
 
 import { TokenCompatibility, tokenCompatibility } from "./compatibility";
@@ -92,11 +93,6 @@ const optionsSchema = <R>() =>
         ]),
       ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
       timeoutSeconds: Schema.Finite.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
-      fetch: Schema.optionalKey(
-        Schema.declare<client.CustomFetch>((input): input is client.CustomFetch =>
-          Predicate.isFunction(input),
-        ),
-      ),
     }),
   );
 
@@ -279,13 +275,13 @@ export const installConfigurations = Effect.fn("OpenIdClient.installConfiguratio
         };
   });
 
-  const fetch: client.CustomFetch =
-    options.fetch ??
-    ((url, init) =>
-      globalThis.fetch(url, {
-        ...init,
-        body: init.body instanceof Uint8Array ? new Uint8Array(init.body) : init.body,
-      }));
+  const transport = yield* FetchHttpClient.Fetch;
+
+  const fetch: client.CustomFetch = (url, init) =>
+    transport(url, {
+      ...init,
+      body: init.body instanceof Uint8Array ? new Uint8Array(init.body) : init.body,
+    });
 
   yield* Effect.try({
     try: () => {

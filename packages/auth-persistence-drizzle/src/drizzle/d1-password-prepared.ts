@@ -32,6 +32,7 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Cause, DateTime, Effect, Predicate, Redacted, Schema, Context } from "effect";
 import type { Statement } from "effect/sql/Statement";
 
+import { Database as DatabaseService } from "./d1-database";
 import { balancedD1And as and, compactD1GeneratedStatement } from "./d1-generated-statement";
 import { passwordD1Kernel as kernel } from "./d1-passwords";
 import { CurrentD1PlanningDatabase, makeD1Owner } from "./d1-planning";
@@ -964,7 +965,7 @@ const makePreparedPlans = (mapping: Mapping, proofMapping?: any) => {
   return services;
 };
 
-export const makeD1PasswordPreparedPersistenceServices = <
+export const makeD1PasswordPreparedPersistenceServices = Effect.fnUntraced(function* <
   S extends AnySQLiteTable,
   I extends AnySQLiteTable,
   C extends AnySQLiteTable,
@@ -984,47 +985,47 @@ export const makeD1PasswordPreparedPersistenceServices = <
   PCr extends AnySQLiteTable = AnySQLiteTable,
   PNativeId = unknown,
 >(
-  database: Database,
   mapping: D1PasswordPreparedPersistenceMapping<S, I, C, AC, At, RS, CE, M, T, B, NativeId>,
   proofMapping?: D1PasswordPreparedProofMapping<PS, PC, PM, PSub, PI, PCr, PNativeId>,
-) =>
-  Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
-    const plans = makePreparedPlans(mapping as unknown as Mapping, proofMapping);
+) {
+  const database = yield* DatabaseService;
 
-    const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
-      Effect.gen(function* () {
-        if (yield* hasCommitScope) return yield* unavailable();
+  const hooks = yield* LifecycleHooks;
+  const plans = makePreparedPlans(mapping as unknown as Mapping, proofMapping);
 
-        return yield* executeStandalone(plan);
-      }).pipe(
-        Effect.provideService(CurrentD1PlanningDatabase, database),
-        Effect.provideService(CurrentPasswordSql, database as unknown as PasswordSqlDatabase),
-        Effect.provideService(LifecycleHooks, hooks),
-      );
+  const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
+    Effect.gen(function* () {
+      if (yield* hasCommitScope) return yield* unavailable();
 
-    const service: PasswordPreparedPersistence = {
-      reserve: (input, prepare) => run(plans.reserve(input, prepare)).pipe(translateFailure),
-      publishReady: (input, prepare) =>
-        run(plans.publishReady(input, prepare)).pipe(translateFailure),
-      context: (input) =>
-        plans
-          .context(input)
-          .pipe(
-            Effect.provideService(CurrentD1PlanningDatabase, database),
-            Effect.provideService(CurrentPasswordSql, database as unknown as PasswordSqlDatabase),
-            Effect.provideService(LifecycleHooks, hooks),
-            translateContextFailure,
-          ),
-      complete: (input, prepare) => run(plans.complete(input, prepare)).pipe(translateFailure),
-      resetWithProof: (input, prepare) =>
-        run(plans.resetWithProof(input, prepare)).pipe(translateFailure),
-      cancel: (input, prepare) => run(plans.cancel(input, prepare)).pipe(translateFailure),
-      cleanup: (input, prepare) => run(plans.cleanup(input, prepare)).pipe(translateFailure),
-    };
+      return yield* executeStandalone(plan);
+    }).pipe(
+      Effect.provideService(CurrentD1PlanningDatabase, database),
+      Effect.provideService(CurrentPasswordSql, database as unknown as PasswordSqlDatabase),
+      Effect.provideService(LifecycleHooks, hooks),
+    );
 
-    return { passwordPreparedPersistence: service };
-  });
+  const service: PasswordPreparedPersistence = {
+    reserve: (input, prepare) => run(plans.reserve(input, prepare)).pipe(translateFailure),
+    publishReady: (input, prepare) =>
+      run(plans.publishReady(input, prepare)).pipe(translateFailure),
+    context: (input) =>
+      plans
+        .context(input)
+        .pipe(
+          Effect.provideService(CurrentD1PlanningDatabase, database),
+          Effect.provideService(CurrentPasswordSql, database as unknown as PasswordSqlDatabase),
+          Effect.provideService(LifecycleHooks, hooks),
+          translateContextFailure,
+        ),
+    complete: (input, prepare) => run(plans.complete(input, prepare)).pipe(translateFailure),
+    resetWithProof: (input, prepare) =>
+      run(plans.resetWithProof(input, prepare)).pipe(translateFailure),
+    cancel: (input, prepare) => run(plans.cancel(input, prepare)).pipe(translateFailure),
+    cleanup: (input, prepare) => run(plans.cleanup(input, prepare)).pipe(translateFailure),
+  };
+
+  return { passwordPreparedPersistence: service };
+});
 
 export function coordinateD1PasswordPreparedPersistence<
   TargetId,

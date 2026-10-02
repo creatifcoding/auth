@@ -33,7 +33,7 @@ import {
 import { makePasskeyKernel } from "./passkey-kernel";
 import type { PasskeyTargetConfiguration } from "./passkey/target";
 import type { Backend } from "./persistence";
-import type { ProofSqlDatabase } from "./proof-kernel";
+import { CurrentProofSql } from "./proof-kernel";
 import type { SqlExpression as SQL, QueryOperations, TableModel } from "./query-operations";
 import { requireStandalone } from "./standalone";
 import { storageTables, type StorageRole } from "./storage-tables";
@@ -386,7 +386,7 @@ export const makeComposedPasskeys = (
   };
 
   const make: Backend<object, never>["passkeys"] = Effect.fn("AuthPersistence.passkeys")(
-    function* ({ database, storage, namespace, dialect, features, passwordModules }) {
+    function* ({ storage, namespace, dialect, features, passwordModules }) {
       const client = yield* SqlClient.SqlClient;
 
       const policies = yield* Effect.forEach(features, (feature) =>
@@ -409,11 +409,10 @@ export const makeComposedPasskeys = (
         mode: "interactive",
         dialect,
         locking: dialect === "pg",
-        standaloneGuard: () => requireStandalone(unavailable, client),
+        standaloneGuard: () => requireStandalone(unavailable, client.transactionService),
       };
 
-      // The backend has already checked the native query builder; schemas check stored values.
-      const native = database as ProofSqlDatabase;
+      const native = yield* CurrentProofSql;
 
       yield* client.withTransaction(
         Effect.gen(function* () {
@@ -492,7 +491,6 @@ export const makeComposedPasskeys = (
       );
 
       const credential = yield* makeTargetPasskeyCredentials<ReadMapping, never>(
-        database,
         m.read,
         configuration,
       );
@@ -510,7 +508,6 @@ export const makeComposedPasskeys = (
           });
 
           const services = yield* makeTargetPasskeyManagement<ManagementMapping, never>(
-            database,
             mapping,
             configuration,
           );
@@ -520,7 +517,6 @@ export const makeComposedPasskeys = (
           enrollment.set(
             feature.moduleId,
             (yield* makeTargetPasskeyEnrollmentContext<ManagementMapping, never>(
-              database,
               mapping,
               configuration,
             )).passkeyEnrollmentContext,
@@ -529,7 +525,6 @@ export const makeComposedPasskeys = (
           persistence.set(
             feature.moduleId,
             (yield* makeTargetPasskeyPersistence<BaseMapping, never>(
-              database,
               m.base(feature),
               configuration,
             )).passkeyPersistence,

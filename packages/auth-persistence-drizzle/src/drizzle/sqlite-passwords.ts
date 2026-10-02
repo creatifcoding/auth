@@ -11,8 +11,10 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
 import type { PasswordPersistenceMapping, PasswordRegistrationMapping } from "./password-model";
 import type { PasswordRegistrationAuthority } from "./password-registration";
+import { CurrentPasswordSql } from "./password-sql";
 import type { PasswordSqlQuery } from "./password-sql";
 import {
   coordinateTargetPasswordPersistence,
@@ -23,6 +25,11 @@ import {
 } from "./password-target";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 export type SqlitePasswordDatabase =
@@ -79,7 +86,6 @@ export const makeSqlitePasswordPersistenceServices = <
   M extends AnySQLiteTable,
   NativeId,
 >(
-  database: SqlitePasswordDatabase,
   mapping: Mapping<S, I, C, AC, A, RS, CE, M, NativeId>,
   configuration: PasswordTargetConfiguration,
   proofMapping?: ProofPersistenceMapping<
@@ -96,7 +102,7 @@ export const makeSqlitePasswordPersistenceServices = <
     any,
     any
   >,
-) => makeTargetPasswordPersistenceServices(database, mapping, configuration, proofMapping);
+) => makeTargetPasswordPersistenceServices(mapping, configuration, proofMapping);
 
 export const coordinateSqlitePasswordPersistence = <
   D extends SqlitePasswordDatabase,
@@ -142,10 +148,9 @@ export const makeSqlitePasswordRegistrationServices = <
   Rq extends AnySQLiteTable,
   NativeId,
 >(
-  database: SqlitePasswordDatabase,
   mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
   configuration: PasswordTargetConfiguration,
-) => makeTargetPasswordRegistrationServices<Registration>(database, mapping, configuration);
+) => makeTargetPasswordRegistrationServices<Registration>(mapping, configuration);
 
 export const coordinateSqlitePasswordRegistration = <
   Registration,
@@ -176,13 +181,24 @@ export const coordinateSqlitePasswordRegistration = <
   );
 
 export const makeSqlitePasswordTarget = <
+  DatabaseId,
   D extends SqlitePasswordDatabase,
   Synchronous extends boolean = false,
 >(
-  configuration: PasswordTargetConfiguration | ((database: D) => PasswordTargetConfiguration),
+  databaseService: Context.Service<DatabaseId, D>,
+  configuration:
+    | PasswordTargetConfiguration
+    | ((service: TransactionService | undefined) => PasswordTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
-    typeof configuration === "function" ? configuration(database) : configuration;
+    typeof configuration === "function"
+      ? configuration(transactionService(database))
+      : configuration;
+
+  const standaloneConfiguration =
+    typeof configuration === "function"
+      ? Effect.map(acquireTransactionService(databaseService), configuration)
+      : Effect.succeed(configuration);
 
   function coordinatePasswordPersistence<
     Database extends D,
@@ -456,7 +472,6 @@ export const makeSqlitePasswordTarget = <
       M extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: Mapping<S, I, C, AC, A, RS, CE, M, NativeId>,
       proofMapping?: ProofPersistenceMapping<
         any,
@@ -473,12 +488,9 @@ export const makeSqlitePasswordTarget = <
         any
       >,
     ) =>
-      makeSqlitePasswordPersistenceServices(
-        database,
-        mapping,
-        configurationFor(database),
-        proofMapping,
-      ),
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeSqlitePasswordPersistenceServices(mapping, configuration, proofMapping),
+      ).pipe(Effect.provideServiceEffect(CurrentPasswordSql, nativeDatabase(databaseService))),
     coordinatePasswordPersistence,
     makePasswordRegistrationServices: <
       Registration,
@@ -489,9 +501,11 @@ export const makeSqlitePasswordTarget = <
       Rq extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
-    ) => makeSqlitePasswordRegistrationServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeSqlitePasswordRegistrationServices(mapping, configuration),
+      ).pipe(Effect.provideServiceEffect(CurrentPasswordSql, nativeDatabase(databaseService))),
     coordinatePasswordRegistration,
   };
 };

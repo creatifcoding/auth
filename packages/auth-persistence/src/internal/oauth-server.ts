@@ -33,7 +33,7 @@ const layer = Layer.effect(
 
     if (!sql.onDialectOrElse({ sqlite: () => true, pg: () => true, orElse: () => false }))
       return yield* Unavailable.make({});
-    const standalone = requireStandalone(() => Unavailable.make({}), sql);
+    const standalone = requireStandalone(() => Unavailable.make({}), sql.transactionService);
 
     const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(Effect.mapError(() => Unavailable.make({})));

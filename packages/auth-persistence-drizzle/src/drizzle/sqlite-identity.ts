@@ -1,3 +1,4 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import {
   ExternalIdentityMutation,
   type ExternalIdentity,
@@ -10,7 +11,7 @@ import {
 import { reportPersistenceFailure } from "@yielded/auth/Persistence";
 import type { SubjectId } from "@yielded/auth/Schema";
 /* oxlint-disable no-explicit-any -- Drizzle generic query types are narrowed at this technology boundary. */
-import { and, eq, type AnyRelations } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { QueryEffectHKTBase } from "drizzle-orm/effect-core";
 import type { AnySQLiteTable, SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { SQLiteEffectDatabase } from "drizzle-orm/sqlite-core/effect/db";
@@ -27,16 +28,7 @@ import {
 } from "./model";
 
 type ClosedQueryEffectHKT = QueryEffectHKTBase & { readonly context: never };
-type Database<HKT extends ClosedQueryEffectHKT, RunResult> = SQLiteEffectDatabase<
-  HKT,
-  RunResult,
-  AnyRelations
->;
-type RuntimeDatabase<HKT extends ClosedQueryEffectHKT, RunResult> = SQLiteEffectDatabase<
-  HKT,
-  RunResult,
-  any
->;
+type RuntimeDatabase = SQLiteEffectDatabase<ClosedQueryEffectHKT, unknown, any>;
 const unavailable = () => IdentityUnavailable.make();
 const isIdentityFailure = Schema.is(Schema.Union([IdentityConflict, IdentityUnavailable]));
 
@@ -49,19 +41,18 @@ const mapUnavailable = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     ),
   );
 
-export const makeSqliteSubjectProvisioningServices = <
+export const makeSqliteSubjectProvisioningServices = Effect.fnUntraced(function* <
   Subject extends AnySQLiteTable,
   Identifier extends AnySQLiteTable,
   Request extends AnySQLiteTable,
   NativeId,
-  HKT extends ClosedQueryEffectHKT = ClosedQueryEffectHKT,
-  RunResult = unknown,
 >(
-  database: Database<HKT, RunResult>,
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
   mode: "interactive" | "synchronous",
-) => {
-  const db = database as RuntimeDatabase<HKT, RunResult>;
+) {
+  const database = yield* NativeDatabase;
+
+  const db = database as unknown as RuntimeDatabase;
   const requestTable = mapping.provisioningRequest.table;
 
   const requestIdColumn = column(
@@ -158,14 +149,7 @@ export const makeSqliteSubjectProvisioningServices = <
 
     const nativeId = yield* attempt.pipe(
       Effect.catchCause(
-        (
-          cause,
-        ): Effect.Effect<
-          NativeId,
-          | Effect.Error<typeof attempt>
-          | Effect.Error<ReturnType<typeof findReceipt>>
-          | IdentityConflict
-        > => {
+        (cause): Effect.Effect<NativeId, Effect.Error<typeof attempt> | IdentityConflict> => {
           if (
             cause.reasons.length === 0 ||
             !cause.reasons.every(
@@ -207,19 +191,16 @@ export const makeSqliteSubjectProvisioningServices = <
   }, mapUnavailable);
 
   return { subjectProvisioner: SubjectProvisioner.of({ provision }) } as const;
-};
+});
 
-export const makeSqliteExternalIdentityServices = <
+export const makeSqliteExternalIdentityServices = Effect.fnUntraced(function* <
   Subject extends AnySQLiteTable,
   External extends AnySQLiteTable,
   NativeId,
-  HKT extends ClosedQueryEffectHKT = ClosedQueryEffectHKT,
-  RunResult = unknown,
->(
-  database: Database<HKT, RunResult>,
-  mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => {
-  const db = database as RuntimeDatabase<HKT, RunResult>;
+>(mapping: ExternalIdentityTables<Subject, External, NativeId>) {
+  const database = yield* NativeDatabase;
+
+  const db = database as unknown as RuntimeDatabase;
   const externalTable = mapping.externalIdentity.table;
 
   const externalProviderColumn = column(
@@ -324,21 +305,20 @@ export const makeSqliteExternalIdentityServices = <
   }, mapUnavailable);
 
   return { externalIdentityMutation: ExternalIdentityMutation.of({ bind }) } as const;
-};
+});
 
-export const makeSqliteIdentityServices = <
+export const makeSqliteIdentityServices = Effect.fnUntraced(function* <
   Subject extends AnySQLiteTable,
   Identifier extends AnySQLiteTable,
   External extends AnySQLiteTable,
   Request extends AnySQLiteTable,
   NativeId,
-  HKT extends ClosedQueryEffectHKT = ClosedQueryEffectHKT,
-  RunResult = unknown,
 >(
-  database: Database<HKT, RunResult>,
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
   mode: "interactive" | "synchronous",
-) => ({
-  ...makeSqliteSubjectProvisioningServices(database, mapping, mode),
-  ...makeSqliteExternalIdentityServices(database, mapping),
+) {
+  return {
+    ...(yield* makeSqliteSubjectProvisioningServices(mapping, mode)),
+    ...(yield* makeSqliteExternalIdentityServices(mapping)),
+  };
 });
