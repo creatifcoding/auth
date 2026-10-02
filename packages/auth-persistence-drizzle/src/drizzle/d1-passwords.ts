@@ -56,6 +56,7 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Cause, DateTime, Effect, Option, Predicate, Redacted, Schema, Context } from "effect";
 import type { Statement } from "effect/sql/Statement";
 
+import { Database as DatabaseService } from "./d1-database";
 import { balancedD1And } from "./d1-generated-statement";
 import { CurrentD1PlanningDatabase, makeD1Owner } from "./d1-planning";
 import { compileD1ProofCompletionPlan, type D1ProtectedProofMutation } from "./d1-proofs";
@@ -1980,7 +1981,7 @@ const cleanupPlan = Effect.fn("Drizzle.cleanupPlan")(function* <A>(
   };
 });
 
-export const makeD1PasswordPersistenceServices = <
+export const makeD1PasswordPersistenceServices = Effect.fnUntraced(function* <
   S extends AnySQLiteTable,
   I extends AnySQLiteTable,
   C extends AnySQLiteTable,
@@ -1991,7 +1992,6 @@ export const makeD1PasswordPersistenceServices = <
   M extends AnySQLiteTable,
   NativeId,
 >(
-  database: Database,
   mapping: D1PasswordPersistenceMapping<S, I, C, AC, A, RS, CE, M, NativeId>,
   proofMapping?: D1ProofPersistenceMapping<
     any,
@@ -2007,62 +2007,62 @@ export const makeD1PasswordPersistenceServices = <
     any,
     any
   >,
-) =>
-  Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
-    const plans = makePasswordPlans(mapping as unknown as Mapping, proofMapping);
+) {
+  const database = yield* DatabaseService;
 
-    const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
-      Effect.gen(function* () {
-        if (yield* hasCommitScope) return yield* unavailable();
+  const hooks = yield* LifecycleHooks;
+  const plans = makePasswordPlans(mapping as unknown as Mapping, proofMapping);
 
-        return yield* executeStandalone(plan, 2);
-      }).pipe(
-        Effect.provideService(CurrentD1PlanningDatabase, database),
-        Effect.provideService(LifecycleHooks, hooks),
-      );
+  const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
+    Effect.gen(function* () {
+      if (yield* hasCommitScope) return yield* unavailable();
 
-    const service: PasswordPersistence["Service"] = {
-      admitAttempt: (input, prepare) =>
-        run(plans.admitAttempt(input, prepare)).pipe(translateFailure),
-      settleAttempt: (input, prepare) =>
-        run(plans.settleAttempt(input, prepare)).pipe(translateFailure),
-      readForSubject: (input) =>
-        plans
-          .readForSubject(input)
-          .pipe(
-            Effect.provideService(CurrentD1PlanningDatabase, database),
-            Effect.provideService(LifecycleHooks, hooks),
-            translateFailure,
-          ),
-      recoveryTarget: (input) =>
-        plans
-          .recoveryTarget(input)
-          .pipe(
-            Effect.provideService(CurrentD1PlanningDatabase, database),
-            Effect.provideService(LifecycleHooks, hooks),
-            translateFailure,
-          ),
-      addIfAbsent: (input, prepare) =>
-        run(plans.addIfAbsent(input, prepare)).pipe(translateFailure),
-      replaceIfCurrent: (input, prepare) =>
-        run(plans.replaceIfCurrent(input, prepare)).pipe(translateFailure),
-      checkReset: (input) =>
-        plans
-          .checkReset(input)
-          .pipe(
-            Effect.provideService(CurrentD1PlanningDatabase, database),
-            Effect.provideService(LifecycleHooks, hooks),
-            translateFailure,
-          ),
-      resetWithProof: (input, prepare) =>
-        run(plans.resetWithProof(input, prepare)).pipe(translateFailure),
-      cleanupAttempts: (input, prepare) =>
-        run(plans.cleanupAttempts(input, prepare)).pipe(translateFailure),
-    };
+      return yield* executeStandalone(plan, 2);
+    }).pipe(
+      Effect.provideService(CurrentD1PlanningDatabase, database),
+      Effect.provideService(LifecycleHooks, hooks),
+    );
 
-    return { passwordPersistence: service };
-  });
+  const service: PasswordPersistence["Service"] = {
+    admitAttempt: (input, prepare) =>
+      run(plans.admitAttempt(input, prepare)).pipe(translateFailure),
+    settleAttempt: (input, prepare) =>
+      run(plans.settleAttempt(input, prepare)).pipe(translateFailure),
+    readForSubject: (input) =>
+      plans
+        .readForSubject(input)
+        .pipe(
+          Effect.provideService(CurrentD1PlanningDatabase, database),
+          Effect.provideService(LifecycleHooks, hooks),
+          translateFailure,
+        ),
+    recoveryTarget: (input) =>
+      plans
+        .recoveryTarget(input)
+        .pipe(
+          Effect.provideService(CurrentD1PlanningDatabase, database),
+          Effect.provideService(LifecycleHooks, hooks),
+          translateFailure,
+        ),
+    addIfAbsent: (input, prepare) => run(plans.addIfAbsent(input, prepare)).pipe(translateFailure),
+    replaceIfCurrent: (input, prepare) =>
+      run(plans.replaceIfCurrent(input, prepare)).pipe(translateFailure),
+    checkReset: (input) =>
+      plans
+        .checkReset(input)
+        .pipe(
+          Effect.provideService(CurrentD1PlanningDatabase, database),
+          Effect.provideService(LifecycleHooks, hooks),
+          translateFailure,
+        ),
+    resetWithProof: (input, prepare) =>
+      run(plans.resetWithProof(input, prepare)).pipe(translateFailure),
+    cleanupAttempts: (input, prepare) =>
+      run(plans.cleanupAttempts(input, prepare)).pipe(translateFailure),
+  };
+
+  return { passwordPersistence: service };
+});
 
 type CoordinatorError<E> = E | PasswordUnavailable | HookConfigurationError;
 
@@ -2443,7 +2443,7 @@ const makeRegistrationPlans = <Registration>(mapping: RegistrationMapping<Regist
     }),
 });
 
-export const makeD1PasswordRegistrationServices = <
+export const makeD1PasswordRegistrationServices = Effect.fnUntraced(function* <
   Registration,
   S extends AnySQLiteTable,
   I extends AnySQLiteTable,
@@ -2451,30 +2451,28 @@ export const makeD1PasswordRegistrationServices = <
   AC extends AnySQLiteTable,
   Rq extends AnySQLiteTable,
   NativeId,
->(
-  database: Database,
-  mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
-) =>
-  Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
-    const plans = makeRegistrationPlans(mapping as unknown as RegistrationMapping<Registration>);
+>(mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>) {
+  const database = yield* DatabaseService;
 
-    const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
-      Effect.gen(function* () {
-        if (yield* hasCommitScope) return yield* unavailable();
+  const hooks = yield* LifecycleHooks;
+  const plans = makeRegistrationPlans(mapping as unknown as RegistrationMapping<Registration>);
 
-        return yield* executeStandalone(plan, 2);
-      }).pipe(
-        Effect.provideService(CurrentD1PlanningDatabase, database),
-        Effect.provideService(LifecycleHooks, hooks),
-      );
+  const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
+    Effect.gen(function* () {
+      if (yield* hasCommitScope) return yield* unavailable();
 
-    const service: PasswordRegistrationAuthority<Registration> = {
-      register: (input, prepare) => run(plans.register(input, prepare)).pipe(translateFailure),
-    };
+      return yield* executeStandalone(plan, 2);
+    }).pipe(
+      Effect.provideService(CurrentD1PlanningDatabase, database),
+      Effect.provideService(LifecycleHooks, hooks),
+    );
 
-    return { registrationAuthority: service };
-  });
+  const service: PasswordRegistrationAuthority<Registration> = {
+    register: (input, prepare) => run(plans.register(input, prepare)).pipe(translateFailure),
+  };
+
+  return { registrationAuthority: service };
+});
 
 export function coordinateD1PasswordRegistration<
   TargetId,

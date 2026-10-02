@@ -228,13 +228,13 @@ export const coordinateTargetSignedSessionValidity = <Transaction, A, E, R>(
     owner,
   );
 
-export const authenticationAuthorityLayer = (
+export const authenticationAuthorityLayer = <E, R>(
   services: Effect.Effect<
     {
       readonly authenticationAuthority: AuthenticationAuthority["Service"];
     },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(
@@ -242,7 +242,7 @@ export const authenticationAuthorityLayer = (
     Effect.map(services, (value) => value.authenticationAuthority),
   );
 
-export const statefulSessionLayers = <Claims>(
+export const statefulSessionLayers = <Claims, E, R>(
   module: {
     readonly StatefulSessionPersistence: any;
     readonly SessionRepository: any;
@@ -252,8 +252,8 @@ export const statefulSessionLayers = <Claims>(
       readonly statefulSessionPersistence: StatefulSessionPersistence<Claims>;
       readonly sessionRepository: SessionRepository;
     },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.merge(
@@ -267,14 +267,14 @@ export const statefulSessionLayers = <Claims>(
     ),
   );
 
-export const pendingAuthenticationLayer = <Claims>(
+export const pendingAuthenticationLayer = <Claims, E, R>(
   module: { readonly PendingAuthentication: any },
   services: Effect.Effect<
     {
       readonly pendingAuthentication: PendingAuthentication<Claims>;
     },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(
@@ -282,14 +282,14 @@ export const pendingAuthenticationLayer = <Claims>(
     Effect.map(services, (value) => value.pendingAuthentication),
   );
 
-export const signedSessionValidityLayer = (
+export const signedSessionValidityLayer = <E, R>(
   module: { readonly SignedSessionValidity: any },
   services: Effect.Effect<
     {
       readonly signedSessionValidity: SignedSessionValidity;
     },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(

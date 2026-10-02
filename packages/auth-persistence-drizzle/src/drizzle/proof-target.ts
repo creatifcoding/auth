@@ -109,12 +109,8 @@ export const coordinateTargetProofPersistence = <Transaction, A, E, R>(
     return result.value;
   });
 
-export const proofPersistenceLayer = (
-  services: Effect.Effect<
-    { readonly proofPersistence: ProofPersistence["Service"] },
-    never,
-    LifecycleHooks
-  >,
+export const proofPersistenceLayer = <E, R>(
+  services: Effect.Effect<{ readonly proofPersistence: ProofPersistence["Service"] }, E, R>,
 ) =>
   Layer.effect(
     ProofPersistence,

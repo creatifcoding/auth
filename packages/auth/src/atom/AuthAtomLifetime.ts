@@ -2,6 +2,7 @@ import { Context, Effect, Scope, Semaphore, SubscriptionRef } from "effect";
 import { Atom, AtomRegistry } from "effect/reactivity";
 
 import {
+  Client,
   makeAuthenticationCompletion,
   type OperationAuthenticationCompletion,
   type OperationFetchClient,
@@ -29,10 +30,10 @@ export class AuthAtomLifetime extends Context.Service<
  * only `current` in `controlRegistry`. All operation atoms, including auth
  * mutations and device workflows, belong to the current subject registry. Acquire
  * this lifetime in the host scope, then provide its value to the Atom runtime. */
-export const makeLifetime = Effect.fn("AuthAtom.makeLifetime")(function* (
-  client: OperationFetchClient,
-  options?: { readonly initialSubject?: string | null },
-) {
+export const makeLifetime = Effect.fn("AuthAtom.makeLifetime")(function* (options?: {
+  readonly initialSubject?: string | null;
+}) {
+  const client = yield* Client;
   const gate = yield* Semaphore.make(1);
   const controlRegistry = AtomRegistry.make();
 
@@ -82,6 +83,6 @@ export const makeLifetime = Effect.fn("AuthAtom.makeLifetime")(function* (
     get: SubscriptionRef.get(state),
     controlRegistry,
     replaceSubject,
-    completeAuthentication: makeAuthenticationCompletion(client, gate, publishSubject),
+    completeAuthentication: yield* makeAuthenticationCompletion(gate, publishSubject),
   };
 });

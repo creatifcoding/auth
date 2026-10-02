@@ -1,6 +1,5 @@
 import { type OAuthConnectedProfile, type OAuthProtocolConfiguration } from "@yielded/auth/OAuth";
 import type { Redacted } from "effect";
-import type { CustomFetch } from "openid-client";
 
 export { OpenIdClientConfigurationError } from "../openid-client/models";
 
@@ -19,8 +18,6 @@ export interface GitHubOAuthAppGeneration {
 export interface GitHubOAuthAppProtocolOptions {
   readonly registrations: ReadonlyArray<GitHubOAuthAppGeneration>;
   readonly timeoutSeconds: number;
-  /** Trusted transport: preserve endpoint authority and cancellation; never retry or log credentials. */
-  readonly fetch?: CustomFetch;
 }
 
 export interface GitHubOAuthAppConnectedProtocolOptions {
@@ -31,5 +28,4 @@ export interface GitHubOAuthAppConnectedProtocolOptions {
     }
   >;
   readonly timeoutSeconds: number;
-  readonly fetch?: CustomFetch;
 }

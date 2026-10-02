@@ -87,7 +87,7 @@ export const server = OperationHttpServer.make(transport).pipe(
 );
 
 /** Supply an Effect HttpClient Layer at the host boundary; React is optional. */
-export const fetchClient = OperationHttpClient.make({
+export const fetchClient = OperationHttpClient.layer({
   baseUrl: "https://account.example",
   csrfHeader: "x-example-csrf",
   csrfValue: "auth-operation",
@@ -96,8 +96,7 @@ export const fetchClient = OperationHttpClient.make({
 /** Mount current in controlRegistry. Render account atoms in current.registry.
  * UI event handlers only dispatch these atoms, including promise-mode dispatch. */
 export const atomClient = Effect.fn("Example.AtomClient")(function* () {
-  const client = yield* fetchClient;
-  const lifetime = yield* AuthAtom.makeLifetime(client);
+  const lifetime = yield* AuthAtom.makeLifetime().pipe(Effect.provide(fetchClient));
   const runtime = Atom.context()(Layer.succeed(AuthAtom.AuthAtomLifetime, lifetime));
 
   const currentSubject = AuthAtom.query(transport.routes.currentSubject, undefined, {

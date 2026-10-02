@@ -55,11 +55,16 @@ export type AuthActionAtom<Action extends AnyAuthAction, E = never> = Action["mo
       RouteFailure<Action["route"]> | OperationHttpError | E
     >;
 
-export type AuthAtoms<Id extends string, Actions extends ActionsWithSession, E = never> = {
+export type AuthAtoms<
+  Id extends string,
+  Actions extends ActionsWithSession,
+  E = never,
+  R = never,
+> = {
   readonly [Name in keyof Actions]: AuthActionAtom<Actions[Name], E>;
 } & {
   readonly session: QueryAtom<Actions["getSession"], E>;
-  readonly client: ClientDefinition<Id, Actions>;
+  readonly client: ClientDefinition<Id, Actions, R>;
   /** Account-scoped queries, effects, state and workflows. Named auth mutations
    * use the host lifetime so their own successful account change can settle. */
   readonly runtime: Atom.AtomRuntime<
@@ -80,16 +85,27 @@ class AuthAtomBinding extends Context.Service<AuthAtomBinding, Binding>()(
 /** Define importable atoms without acquiring a client. The host registry owns
  * one client Scope; private account registries are replaced internally. Supply
  * the same runtime factory as other application queries to share invalidation. */
-export const make = <const Id extends string, Actions extends ActionsWithSession, E = never>(
-  client: ClientDefinition<Id, Actions>,
-  ...args: [DecoderServices<Actions>] extends [never]
+export const make = <
+  const Id extends string,
+  Actions extends ActionsWithSession,
+  E = never,
+  R = never,
+>(
+  client: ClientDefinition<Id, Actions, R>,
+  ...args: [DecoderServices<Actions> | R] extends [never]
     ? [options?: AuthAtomOptions<Actions, E, Id>]
     : [
-        options: AuthAtomOptions<Actions, E, Id> & {
-          readonly services: Layer.Layer<DecoderServices<Actions>, E>;
-        },
+        options: AuthAtomOptions<Actions, E, Id> &
+          ([DecoderServices<Actions>] extends [never]
+            ? {}
+            : {
+                readonly services: Layer.Layer<DecoderServices<Actions>, E>;
+              }) &
+          ([R] extends [never]
+            ? {}
+            : { readonly layer: Layer.Layer<ClientService<Id, Actions>, E> }),
       ]
-): AuthAtoms<Id, Actions, E> => {
+): AuthAtoms<Id, Actions, E, R> => {
   const options = args[0] ?? {};
   const factory = options.runtime ?? Atom.runtime;
   const actions = client.contract.actions;
@@ -220,10 +236,11 @@ export const make = <const Id extends string, Actions extends ActionsWithSession
     return Context.make(AuthAtomBinding, binding).pipe(Context.add(AuthAtomLifetime, lifetime));
   });
 
-  const clientLayer: Layer.Layer<
+  // The options tuple requires a fully provided Layer whenever the client needs services.
+  const clientLayer = (options.layer ?? client.layerFetch) as Layer.Layer<
     ClientService<Id, Actions>,
     E | OperationHttpError
-  > = options.layer ?? client.layerFetch;
+  >;
 
   const host = factory(
     Layer.effectContext(acquire).pipe(

@@ -22,6 +22,7 @@ import {
   makeTargetEmailSignInServices,
   sqlClientEmailStandaloneGuard,
 } from "./email-target";
+import { Database as DatabaseService } from "./mysql-database";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
 import { sqlClientProofStandaloneGuard } from "./proof-target";
@@ -64,9 +65,11 @@ export const makeMysqlEmailSignInServices = <
   C extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: EmailSignInMapping<S, I, C, NativeId>,
-) => makeTargetEmailSignInServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetEmailSignInServices(database, mapping, configuration(database)),
+  );
 
 export const makeMysqlEmailAddressServices = <
   S extends AnyMySqlTable,
@@ -76,10 +79,12 @@ export const makeMysqlEmailAddressServices = <
   M extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: EmailAddressMapping<S, I, C, AC, M, NativeId>,
   proofMapping: ProofMapping,
-) => makeTargetEmailAddressServices(database, mapping, proofMapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetEmailAddressServices(database, mapping, proofMapping, configuration(database)),
+  );
 
 export function coordinateMysqlEmailAddress<
   D extends Database,
@@ -195,15 +200,16 @@ export const makeMysqlEmailRegistrationServices = <
   Rq extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: EmailRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
   proofMapping: ProofMapping,
 ) =>
-  makeTargetEmailRegistrationServices<Registration>(
-    database,
-    mapping,
-    proofMapping,
-    configuration(database),
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetEmailRegistrationServices<Registration>(
+      database,
+      mapping,
+      proofMapping,
+      configuration(database),
+    ),
   );
 
 export function coordinateMysqlEmailRegistration<

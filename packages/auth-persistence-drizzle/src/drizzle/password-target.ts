@@ -198,24 +198,20 @@ export const coordinateTargetPasswordRegistration = <Registration, Transaction, 
     return result.value;
   });
 
-export const passwordPersistenceLayer = (
-  services: Effect.Effect<
-    { readonly passwordPersistence: PasswordPersistence["Service"] },
-    never,
-    LifecycleHooks
-  >,
+export const passwordPersistenceLayer = <E, R>(
+  services: Effect.Effect<{ readonly passwordPersistence: PasswordPersistence["Service"] }, E, R>,
 ) =>
   Layer.effect(
     PasswordPersistence,
     Effect.map(services, (value) => value.passwordPersistence),
   );
 
-export const passwordRegistrationLayer = <Id, Registration>(
+export const passwordRegistrationLayer = <Id, Registration, E, R>(
   tag: Context.Key<Id, PasswordRegistrationAuthority<Registration>>,
   services: Effect.Effect<
     { readonly registrationAuthority: PasswordRegistrationAuthority<Registration> },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(

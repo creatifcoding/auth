@@ -13,7 +13,7 @@ import {
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { Effect, Schema } from "effect";
-import type * as SqlClient from "effect/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 export const subject = sqliteTable("passkey_subject", {
   id: text().primaryKey(),
@@ -651,7 +651,9 @@ export const registrationMapping = {
 >;
 
 /** The application owns these migrations and all identity/profile policy choices. */
-export const migrate = Effect.fn("PasskeyExample.migrate")(function* (client: SqlClient.SqlClient) {
+export const migrate = Effect.gen(function* () {
+  const client = yield* SqlClient.SqlClient;
+
   for (const ddl of migrations) yield* client.unsafe(ddl);
   yield* client.unsafe(
     "insert into passkey_module (moduleId,status,policyRevision,policy) values (?, ?, ?, ?)",

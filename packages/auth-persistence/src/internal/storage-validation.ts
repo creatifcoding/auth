@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import type { SqlClient } from "effect/sql/SqlClient";
+import { SqlClient } from "effect/sql/SqlClient";
 
 import { PersistenceConfigurationError } from "./configuration";
 import type { StorageTable } from "./storage-tables";
@@ -16,13 +16,14 @@ export const qualifiedTableName = (table: Pick<StorageTable, "name" | "schema">)
 
 /** Validate physical uniqueness before the first authentication operation. A
  * partial or expression index cannot establish these unconditional guarantees. */
-export const validateStorage = (
-  client: SqlClient,
-  dialect: "pg" | "sqlite",
-  table: StorageTable,
-  required: ReadonlyArray<ReadonlyArray<string>>,
-) =>
-  Effect.gen(function* () {
+export const validateStorage = Effect.fnUntraced(
+  function* (
+    dialect: "pg" | "sqlite",
+    table: StorageTable,
+    required: ReadonlyArray<ReadonlyArray<string>>,
+  ) {
+    const client = yield* SqlClient;
+
     const physicalKeys: ReadonlyArray<ReadonlyArray<string>> = yield* dialect === "sqlite"
       ? Effect.gen(function* () {
           if (table.schema !== undefined && table.schema !== "main")
@@ -106,12 +107,15 @@ export const validateStorage = (
           reason: `Missing unique key on ${table.name} (${keys.join(", ")})`,
         });
     }
-  }).pipe(
-    Effect.mapError((error) =>
-      Schema.is(PersistenceConfigurationError)(error)
-        ? error
-        : PersistenceConfigurationError.make({
-            reason: `Cannot validate SQL storage for ${table.name}`,
-          }),
+  },
+  (effect, _dialect, table) =>
+    effect.pipe(
+      Effect.mapError((error) =>
+        Schema.is(PersistenceConfigurationError)(error)
+          ? error
+          : PersistenceConfigurationError.make({
+              reason: `Cannot validate SQL storage for ${table.name}`,
+            }),
+      ),
     ),
-  );
+);

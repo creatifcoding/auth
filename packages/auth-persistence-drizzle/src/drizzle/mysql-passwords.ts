@@ -7,6 +7,7 @@ import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { Database as DatabaseService } from "./mysql-database";
 import type { PasswordPersistenceMapping, PasswordRegistrationMapping } from "./password-model";
 import type { PasswordRegistrationAuthority } from "./password-registration";
 import type { PasswordSqlQuery } from "./password-sql";
@@ -64,7 +65,6 @@ export const makeMysqlPasswordPersistenceServices = <
   M extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: Mapping<S, I, C, AC, A, RS, CE, M, NativeId>,
   proofMapping?: ProofPersistenceMapping<
     any,
@@ -81,7 +81,9 @@ export const makeMysqlPasswordPersistenceServices = <
     any
   >,
 ) =>
-  makeTargetPasswordPersistenceServices(database, mapping, configuration(database), proofMapping);
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPasswordPersistenceServices(database, mapping, configuration(database), proofMapping),
+  );
 
 export function coordinateMysqlPasswordPersistence<
   D extends Database,
@@ -215,10 +217,15 @@ export const makeMysqlPasswordRegistrationServices = <
   Rq extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
 ) =>
-  makeTargetPasswordRegistrationServices<Registration>(database, mapping, configuration(database));
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPasswordRegistrationServices<Registration>(
+      database,
+      mapping,
+      configuration(database),
+    ),
+  );
 
 export function coordinateMysqlPasswordRegistration<
   TargetId,

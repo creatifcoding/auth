@@ -12,12 +12,13 @@ import {
 } from "@yielded/auth";
 import { phonePersistenceLayer } from "@yielded/auth-persistence-drizzle";
 import {
+  Database,
+  databaseLayer,
   makeAuthenticationAuthorityServices,
   makePhonePersistenceServices,
   makeProofPersistenceServices,
 } from "@yielded/auth-persistence-drizzle/SqliteBun";
 import { eq } from "drizzle-orm";
-import * as Drizzle from "drizzle-orm/effect-sqlite-bun";
 import { Effect, Layer, Redacted } from "effect";
 
 import { keyring, phone, sessionPolicy, sessions, shopAuth } from "./phone-application";
@@ -38,15 +39,14 @@ const assert: (condition: unknown, message: string) => asserts condition = (cond
 };
 
 export const phoneConsumer = Effect.gen(function* () {
-  const client = yield* SqliteClient.SqliteClient,
-    database = yield* Drizzle.makeWithDefaults({});
+  const database = yield* Database;
 
-  yield* migrate(client);
+  yield* migrate;
 
-  const phoneStorage = phonePersistenceLayer(makePhonePersistenceServices(database, mapping));
-  const proofServices = yield* makeProofPersistenceServices(database, proofs);
+  const phoneStorage = phonePersistenceLayer(makePhonePersistenceServices(mapping));
+  const proofServices = yield* makeProofPersistenceServices(proofs);
 
-  const authority = yield* makeAuthenticationAuthorityServices(database, {
+  const authority = yield* makeAuthenticationAuthorityServices({
     subjectId,
     subject: {
       table: customer,
@@ -403,7 +403,7 @@ phoneConsumer.pipe(
   Effect.tap(Effect.log),
   Effect.provide(
     Layer.mergeAll(
-      SqliteClient.layer({ filename: ":memory:" }),
+      databaseLayer.pipe(Layer.provideMerge(SqliteClient.layer({ filename: ":memory:" }))),
       Hooks.LifecycleHooks.empty,
       WebCrypto.layerWebCrypto,
     ),

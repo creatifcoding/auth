@@ -1,28 +1,28 @@
 import { Http, OperationHttpServer as HttpServer, Operations } from "@yielded/auth";
-import { type AnyRelations, eq } from "drizzle-orm";
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
+import { Database } from "@yielded/auth-persistence-drizzle/Postgres";
+import { eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { StudioAuth } from "./studio-auth";
 import { subject } from "./studio-passkey-schema";
 import { MemberProfile, transport } from "./studio-transport";
 
-export const memberLayer = (db: EffectPgDatabase<AnyRelations>) =>
-  MemberProfile.handlerLayer(
-    Effect.fn(function* (_input, invocation) {
-      const caller = yield* Operations.requireAuthenticated(invocation);
+export const memberLayer = MemberProfile.handlerLayer(
+  Effect.fn(function* (_input, invocation) {
+    const caller = yield* Operations.requireAuthenticated(invocation);
+    const db = yield* Database;
 
-      const [member] = yield* db
-        .select()
-        .from(subject)
-        .where(eq(subject.id, caller.subjectId))
-        .pipe(Effect.orDie);
+    const [member] = yield* db
+      .select()
+      .from(subject)
+      .where(eq(subject.id, caller.subjectId))
+      .pipe(Effect.orDie);
 
-      if (member === undefined) return yield* Effect.die(new Error("Missing current member"));
+    if (member === undefined) return yield* Effect.die(new Error("Missing current member"));
 
-      return { memberId: caller.subjectId, organization: member.organization, name: member.name };
-    }),
-  );
+    return { memberId: caller.subjectId, organization: member.organization, name: member.name };
+  }),
+);
 
 /** Localhost uses an explicit insecure cookie override; production uses HTTPS defaults. */
 const http = Http.make(StudioAuth, {
@@ -32,7 +32,6 @@ const http = Http.make(StudioAuth, {
   maximumBodyBytes: 300000,
 });
 
-export const makeStudioHttp = (db: EffectPgDatabase<AnyRelations>) =>
-  HttpServer.make(transport).pipe(
-    Effect.provide(Layer.mergeAll(http.operationLayer, memberLayer(db))),
-  );
+export const studioHttp = HttpServer.make(transport).pipe(
+  Effect.provide(Layer.mergeAll(http.operationLayer, memberLayer)),
+);

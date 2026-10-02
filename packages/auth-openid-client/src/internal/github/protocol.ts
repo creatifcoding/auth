@@ -11,6 +11,7 @@ import {
 } from "@yielded/auth/OAuth";
 import { Effect, Layer, Predicate, Redacted, Schema } from "effect";
 import { Base64 } from "effect/encoding";
+import { FetchHttpClient } from "effect/http";
 import type { CustomFetch } from "openid-client";
 
 import {
@@ -74,19 +75,16 @@ const capture = <S extends Schema.Codec<unknown, unknown, never, never>>(
   registrations: S["Type"],
   options: {
     readonly timeoutSeconds: number;
-    readonly fetch?: GitHubOAuthAppProtocolOptions["fetch"];
   },
 ) =>
   Effect.try({
     try: () => {
       const result = snapshotOAuthSync(schema, registrations);
-      const fetch = options.fetch;
       const timeoutSeconds = options.timeoutSeconds;
 
-      if (!isTimeout(timeoutSeconds) || (fetch !== undefined && !Predicate.isFunction(fetch)))
-        throw invalid();
+      if (!isTimeout(timeoutSeconds)) throw invalid();
 
-      return { registrations: result, timeoutSeconds, ...(fetch === undefined ? {} : { fetch }) };
+      return { registrations: result, timeoutSeconds };
     },
     catch: invalid,
   });
@@ -216,62 +214,63 @@ const compatibility: ConnectedCompatibility = Object.freeze<ConnectedCompatibili
   includeRefreshScope: false,
 });
 
-const revocationLayer = (
-  options: Pick<GitHubOAuthAppConnectedProtocolOptions, "fetch" | "timeoutSeconds">,
-) => {
-  const fetch: CustomFetch =
-    options.fetch ??
-    ((url, init) =>
-      globalThis.fetch(url, {
-        ...init,
-        body: init.body instanceof Uint8Array ? new Uint8Array(init.body) : init.body,
-      }));
-
-  const timeoutSeconds = options.timeoutSeconds;
-
-  return Layer.succeed(
+const revocationLayer = (options: Pick<GitHubOAuthAppConnectedProtocolOptions, "timeoutSeconds">) =>
+  Layer.effect(
     ProviderRevocation,
-    ProviderRevocation.of({
-      revoke: Effect.fn("GitHubOAuthApp.revoke")(function* (input) {
-        yield* Effect.tryPromise({
-          try: async (effectSignal) => {
-            if (
-              input.authentication.method !== "client_secret_post" ||
-              input.context.configuration.profile.clientRegistrationId !== input.clientId ||
-              input.context.identity.provider !== gitHubOAuthAppProviderKey ||
-              input.context.identity.issuer !== issuer
-            )
-              throw unavailable();
-            const url = `https://api.github.com/applications/${encodeURIComponent(input.clientId)}/grant`;
+    Effect.gen(function* () {
+      const transport = yield* FetchHttpClient.Fetch;
 
-            const signal = AbortSignal.any([
-              effectSignal,
-              AbortSignal.timeout(Math.ceil(timeoutSeconds * 1000)),
-            ]);
-
-            const transport = boundedFetch(fetch, signal, new Set([url]));
-
-            const response = await transport(url, {
-              method: "DELETE",
-              redirect: "manual",
-              headers: {
-                ...headers,
-                "Content-Type": "application/json",
-                Authorization: `Basic ${Base64.encode(`${input.clientId}:${Redacted.value(input.authentication.secret)}`)}`,
-              },
-              body: encodeRevocation({ access_token: Redacted.value(input.material.accessToken) }),
-              signal,
-            });
-
-            signal.throwIfAborted();
-            if (response.status !== 204) throw unavailable();
-          },
-          catch: unavailable,
+      const fetch: CustomFetch = (url, init) =>
+        transport(url, {
+          ...init,
+          body: init.body instanceof Uint8Array ? new Uint8Array(init.body) : init.body,
         });
-      }),
+
+      const timeoutSeconds = options.timeoutSeconds;
+
+      return ProviderRevocation.of({
+        revoke: Effect.fn("GitHubOAuthApp.revoke")(function* (input) {
+          yield* Effect.tryPromise({
+            try: async (effectSignal) => {
+              if (
+                input.authentication.method !== "client_secret_post" ||
+                input.context.configuration.profile.clientRegistrationId !== input.clientId ||
+                input.context.identity.provider !== gitHubOAuthAppProviderKey ||
+                input.context.identity.issuer !== issuer
+              )
+                throw unavailable();
+              const url = `https://api.github.com/applications/${encodeURIComponent(input.clientId)}/grant`;
+
+              const signal = AbortSignal.any([
+                effectSignal,
+                AbortSignal.timeout(Math.ceil(timeoutSeconds * 1000)),
+              ]);
+
+              const transport = boundedFetch(fetch, signal, new Set([url]));
+
+              const response = await transport(url, {
+                method: "DELETE",
+                redirect: "manual",
+                headers: {
+                  ...headers,
+                  "Content-Type": "application/json",
+                  Authorization: `Basic ${Base64.encode(`${input.clientId}:${Redacted.value(input.authentication.secret)}`)}`,
+                },
+                body: encodeRevocation({
+                  access_token: Redacted.value(input.material.accessToken),
+                }),
+                signal,
+              });
+
+              signal.throwIfAborted();
+              if (response.status !== 204) throw unavailable();
+            },
+            catch: unavailable,
+          });
+        }),
+      });
     }),
   );
-};
 
 /** A GitHub.com OAuth App generation for the same provider list as generic OIDC.
  * Retains GitHub receipt/error rules and requests read:user, with no repository access.

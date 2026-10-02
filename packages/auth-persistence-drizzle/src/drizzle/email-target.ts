@@ -209,19 +209,19 @@ export const coordinateTargetEmailRegistration = <Registration, Transaction, A, 
     return result.value;
   });
 
-export const emailSignInTargetsLayer = (
-  services: Effect.Effect<{ readonly emailSignInTargets: EmailSignInTargets["Service"] }>,
+export const emailSignInTargetsLayer = <E, R>(
+  services: Effect.Effect<{ readonly emailSignInTargets: EmailSignInTargets["Service"] }, E, R>,
 ) =>
   Layer.effect(
     EmailSignInTargets,
     Effect.map(services, (value) => value.emailSignInTargets),
   );
 
-export const emailAddressPersistenceLayer = (
+export const emailAddressPersistenceLayer = <E, R>(
   services: Effect.Effect<
     { readonly emailAddressPersistence: EmailAddressPersistence["Service"] },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(
@@ -229,12 +229,12 @@ export const emailAddressPersistenceLayer = (
     Effect.map(services, (value) => value.emailAddressPersistence),
   );
 
-export const emailRegistrationLayer = <Id, Registration>(
+export const emailRegistrationLayer = <Id, Registration, E, R>(
   tag: Context.Key<Id, EmailRegistrationAuthority<Registration>>,
   services: Effect.Effect<
     { readonly registrationAuthority: EmailRegistrationAuthority<Registration> },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(

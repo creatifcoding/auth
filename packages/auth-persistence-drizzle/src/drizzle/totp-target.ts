@@ -66,55 +66,58 @@ const validateMapping = <M>(original: M, configuration: TotpTargetConfiguration)
   });
 };
 
-const services = (
+const services = Effect.fnUntraced(function* (
   mapping: any,
   execution: TransactionExecution<TotpUnavailable, CurrentTotpTransaction>,
-  hooks: LifecycleHooks["Service"],
-): TotpPersistenceServices => ({
-  totpPersistence: TotpPersistence.of({
-    snapshot: Effect.fn("TotpNative.snapshot")(
-      function* (input) {
-        const captured = { ...input };
+): Effect.fn.Return<TotpPersistenceServices, never, LifecycleHooks> {
+  const hooks = yield* LifecycleHooks;
 
-        invariant(captured.moduleId === mapping.moduleId);
-        yield* execution.admit;
+  return {
+    totpPersistence: TotpPersistence.of({
+      snapshot: Effect.fn("TotpNative.snapshot")(
+        function* (input) {
+          const captured = { ...input };
 
-        return yield* execution
-          .run(
-            Effect.map(captureTotp(mapping, captured.subjectId), (value) => value?.snapshot),
-            false,
-          )
-          .pipe(Effect.provideService(LifecycleHooks, hooks));
-      },
-      Effect.catchDefect(() => Effect.fail(unavailable())),
-    ),
-    mutate: (original, prepare) =>
-      Effect.suspend(() => {
-        // Detach caller-owned payloads before any driver or hook can suspend.
-        const codec = Schema.toCodecIso(TotpMutation);
-        const input = Schema.decodeSync(codec)(Schema.encodeSync(codec)(original));
+          invariant(captured.moduleId === mapping.moduleId);
+          yield* execution.admit;
 
-        return execution.admit.pipe(
-          Effect.andThen(
-            execution.run(
-              Effect.gen(function* () {
-                const decision = yield* mutateTotp(mapping, input),
-                  owner = yield* CurrentTotpTransaction;
+          return yield* execution
+            .run(
+              Effect.map(captureTotp(mapping, captured.subjectId), (value) => value?.snapshot),
+              false,
+            )
+            .pipe(Effect.provideService(LifecycleHooks, hooks));
+        },
+        Effect.catchDefect(() => Effect.fail(unavailable())),
+      ),
+      mutate: (original, prepare) =>
+        Effect.suspend(() => {
+          // Detach caller-owned payloads before any driver or hook can suspend.
+          const codec = Schema.toCodecIso(TotpMutation);
+          const input = Schema.decodeSync(codec)(Schema.encodeSync(codec)(original));
 
-                owner.guards.push(owner.journal.prepare(undefined));
-                const receipt = prepare(decision, owner.journal);
+          return execution.admit.pipe(
+            Effect.andThen(
+              execution.run(
+                Effect.gen(function* () {
+                  const decision = yield* mutateTotp(mapping, input),
+                    owner = yield* CurrentTotpTransaction;
 
-                invariant(receipt?._tag === "PreparedCommit" && Effect.isEffect(receipt.read));
-                owner.guards.push(receipt as any);
+                  owner.guards.push(owner.journal.prepare(undefined));
+                  const receipt = prepare(decision, owner.journal);
 
-                return receipt;
-              }),
+                  invariant(receipt?._tag === "PreparedCommit" && Effect.isEffect(receipt.read));
+                  owner.guards.push(receipt as any);
+
+                  return receipt;
+                }),
+              ),
             ),
-          ),
-          Effect.provideService(LifecycleHooks, hooks),
-        );
-      }).pipe(Effect.catchDefect(() => Effect.fail(unavailable()))),
-  }),
+            Effect.provideService(LifecycleHooks, hooks),
+          );
+        }).pipe(Effect.catchDefect(() => Effect.fail(unavailable()))),
+    }),
+  };
 });
 
 export const makeTargetTotpPersistence = <
@@ -129,7 +132,6 @@ export const makeTargetTotpPersistence = <
   configuration: TotpTargetConfiguration,
 ) =>
   Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
     const original = yield* Effect.isEffect(source) ? source : Effect.succeed(source);
 
     const mapping = yield* Effect.try({
@@ -145,7 +147,7 @@ export const makeTargetTotpPersistence = <
       randomId,
     );
 
-    return services(mapping, execution, hooks);
+    return yield* services(mapping, execution);
   });
 
 export const coordinateTargetTotp = <M, A, E, R, RSetup = never>(
@@ -159,7 +161,6 @@ export const coordinateTargetTotp = <M, A, E, R, RSetup = never>(
   ) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, TotpCoordinatorError<E>, R | RSetup | LifecycleHooks> =>
   Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
     const original = yield* Effect.isEffect(source) ? source : Effect.succeed(source);
 
     const mapping = yield* Effect.try({
@@ -174,8 +175,11 @@ export const coordinateTargetTotp = <M, A, E, R, RSetup = never>(
       Effect.void,
       unavailable,
       randomId,
-      (execution) => services(mapping, execution, hooks),
-      body,
+      (execution) => services(mapping, execution),
+      (transaction, acquireServices, append) =>
+        Effect.flatMap(acquireServices, (boundServices) =>
+          body(transaction, boundServices, append),
+        ),
     );
   });
 
@@ -185,11 +189,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
 
 /** Concrete driver wrappers select transaction mode; cryptography always precedes these owners. */
 export const makeTotpTarget = <
+  DatabaseId,
   D extends { readonly transaction: any },
   T extends Table,
   Extra = unknown,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: TotpTargetConfiguration,
 ) => {
   function coordinateTotpPersistence<
@@ -292,17 +298,12 @@ export const makeTotpTarget = <
   }
 
   return {
-    makeTotpPersistenceServices: <
-      Database extends D,
-      S extends T,
-      F extends T,
-      C extends T,
-      N,
-      RSetup = never,
-    >(
-      database: Database,
+    makeTotpPersistenceServices: <S extends T, F extends T, C extends T, N, RSetup = never>(
       mapping: TotpMappingSource<TotpMapping<S, F, C, N> & Extra, RSetup>,
-    ) => makeTargetTotpPersistence(database as any, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetTotpPersistence(database as any, mapping, configuration),
+      ),
     coordinateTotpPersistence,
   };
 };

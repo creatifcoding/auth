@@ -28,5 +28,5 @@ export const sqlClientStandaloneGuard = <Failure>(
 
   if (service === undefined) return Effect.suspend(() => Effect.fail(unavailable()));
 
-  return requireStandalone(unavailable, { transactionService: service });
+  return requireStandalone(unavailable, service);
 };

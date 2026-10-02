@@ -33,7 +33,7 @@ import { makePasswordKernel, type PasswordSqlDatabase } from "./password-kernel"
 import { makePhoneKernel, CurrentPhoneTransaction } from "./phone-kernel";
 import { makeProofKernel, type ProofSqlDatabase, type ProofSqlQuery } from "./proof-kernel";
 import type { QueryOperations } from "./query-operations";
-import { makeRegistrationAuthority, type CreateSubject } from "./registration";
+import { makeRegistrationAuthority } from "./registration";
 import { makeSessionKernel, type SessionSqlDatabase } from "./session-kernel";
 import { requireStandalone } from "./standalone";
 import { makeMappings } from "./storage-mapping";
@@ -164,14 +164,6 @@ export const createPersistence = <T extends object, R>(
     const ProvisioningKey = Context.Service<ProvisioningRequirement<A>, Provisioning<A>>()(
       `@yielded/auth-persistence/${auth.namespace}/Provisioning`,
     );
-
-    // Capability metadata controls the conditional requirement, and core has
-    // already decoded each registration with its strategy's Schema.
-    const provisioners = management
-      ? ProvisioningKey.pipe(
-          Effect.map((value) => value as Readonly<Record<string, CreateSubject>>),
-        )
-      : Effect.succeed<Readonly<Record<string, CreateSubject>>>({});
 
     const layout = <N, Instant>(
       options: {
@@ -317,14 +309,15 @@ export const createPersistence = <T extends object, R>(
             if (columns[name] === undefined)
               return yield* configError(`Missing ${role}.${name} column`);
           }
-          yield* validateStorage(client, dialect, description, storageTables[role].unique);
+          yield* validateStorage(dialect, description, storageTables[role].unique);
         }
-        yield* validateStorage(client, dialect, backend.describe(storage.subjects.table as T), [
+        yield* validateStorage(dialect, backend.describe(storage.subjects.table as T), [
           [storage.subjects.id],
         ]);
         const mappings = makeMappings(storage);
 
-        const standalone = <E>(error: () => E) => requireStandalone(error, client);
+        const standalone = <E>(error: () => E) =>
+          requireStandalone(error, client.transactionService);
 
         // Backend validation owns the foreign query-builder shape, never the decoded rows.
         const native = database as ProofSqlDatabase &
@@ -400,15 +393,12 @@ export const createPersistence = <T extends object, R>(
 
           context = Context.add(context, PasswordPersistence, persistence);
         }
-        const creators = yield* provisioners;
-
         for (const [name, strategy] of Object.entries(auth.strategies)) {
           if (strategy.persistence?.kind !== "password" || !strategy.persistence.management)
             continue;
           const key = strategy.RegistrationAuthority;
-          const create = creators[name];
 
-          if (key === undefined || create === undefined)
+          if (key === undefined)
             return yield* configError(`Missing subject provisioning for ${name}`);
 
           const registration = yield* makeRegistrationAuthority(
@@ -416,7 +406,8 @@ export const createPersistence = <T extends object, R>(
             mappings,
             backend.operations,
             standalone(() => PasswordUnavailable.make({})),
-            create,
+            ProvisioningKey,
+            name,
           );
 
           context = Context.add(context, key, registration);

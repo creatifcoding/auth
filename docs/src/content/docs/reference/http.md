@@ -92,6 +92,10 @@ injection and explicitly selected reveals.
 Encode expected response failures before leaving the request wrapper.
 
 `OperationHttpClient.make` requires the same Effect `HttpClient` service.
+`OperationHttpClient.layer(options)` provides `OperationHttpClient.Client` for
+consumers such as `AuthAtom.makeLifetime({ initialSubject })`. Supply this Layer
+at the application boundary and keep the lifetime's Scope open until the host
+finishes. The lifetime acquires its transport from the service environment.
 `AuthAtom.query`, `AuthAtom.mutation`, and `AuthAtom.workflow` remain available for
 custom integration. Private reveals belong in a finite
 collector, outside ordinary query caches, logs, and persisted client state.

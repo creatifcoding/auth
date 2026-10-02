@@ -7,6 +7,7 @@ import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
 import { updateValues } from "./model";
+import { Database as DatabaseService } from "./mysql-database";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
 import {
@@ -57,9 +58,11 @@ export const makeMysqlProofPersistenceServices = <
   Cr extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: Mapping<Rq, S, G, Cn, Rs, A, F, C, Sub, I, Cr, NativeId>,
-) => makeTargetProofPersistenceServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetProofPersistenceServices(database, mapping, configuration(database)),
+  );
 
 export function coordinateMysqlProofPersistence<
   D extends Database,

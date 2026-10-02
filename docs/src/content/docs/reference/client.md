@@ -58,14 +58,29 @@ export const AppClient = Client.make(AuthApi, {
 });
 ```
 
-| Option                 | Default and behavior                                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl`              | Required absolute server URL. Paths come from the shared contract.                                                   |
-| `requestTimeout`       | `"30 seconds"`; a positive, finite Effect duration covering HTTP execution and response consumption.                 |
-| `maximumResponseBytes` | 1 MiB; may only lower that limit. Decoding requires strict UTF-8.                                                    |
-| `csrf`                 | `{ header: "x-effect-auth-csrf", value: "1" }`; must match the server.                                               |
-| `native`               | Optional credential headers with `read` and `accept` Effects, instead of browser cookies.                            |
-| `privateOutput`        | Optional finite collector for explicitly declared private reveals; keep it outside query caches and persisted state. |
+| Option                 | Default and behavior                                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`              | Required absolute server URL. Paths come from the shared contract.                                                                |
+| `requestTimeout`       | `"30 seconds"`; a positive, finite Effect duration covering HTTP execution and response consumption.                              |
+| `maximumResponseBytes` | 1 MiB; may only lower that limit. Decoding requires strict UTF-8.                                                                 |
+| `csrf`                 | `{ header: "x-effect-auth-csrf", value: "1" }`; must match the server.                                                            |
+| `native`               | Optional credential headers plus a `credentials` service key implementing `Client.NativeCredentials`, instead of browser cookies. |
+| `privateOutput`        | Optional service key implementing `Client.PrivateOutput`; keep private reveals outside query caches and persisted state.          |
+
+These keys select application-owned stores. Their services remain required by
+`AppClient.make`, `AppClient.layer`, and `AppClient.layerFetch`; provide the stores'
+Layers when constructing the client. For example, with a `Reveals` service and its
+finite `RevealsLive` Layer:
+
+```ts
+const AppClient = Client.make(AuthApi, {
+  baseUrl: "https://app.example.com",
+  privateOutput: Reveals,
+});
+
+const ClientLive = AppClient.layerFetch.pipe(Layer.provide(RevealsLive));
+const auth = AuthAtom.make(AppClient, { layer: ClientLive });
+```
 
 A deadline fails with `OperationHttpError` reason `"timeout"`. The mutation may
 already have committed: reconcile with the server or start a fresh flow, never
@@ -79,13 +94,13 @@ middleware and finalizers must terminate for cleanup to finish.
 setup failures. Write an input to execute a mutation; refreshing its result view
 does not repeat the request.
 
-| Option           | Purpose                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| `runtime`        | Application runtime factory for shared Layers and invalidation; defaults to `Atom.runtime`. |
-| `reactivityKeys` | Additional keys invalidated by each successful named mutation.                              |
-| `services`       | Decoder service Layer; required by the types when response codecs need services.            |
-| `layer`          | Client service Layer with its dependencies provided; defaults to `AppClient.layerFetch`.    |
-| `initialSession` | Encoded public session for request-local server rendering.                                  |
+| Option           | Purpose                                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `runtime`        | Application runtime factory for shared Layers and invalidation; defaults to `Atom.runtime`.                                        |
+| `reactivityKeys` | Additional keys invalidated by each successful named mutation.                                                                     |
+| `services`       | Decoder service Layer; required by the types when response codecs need services.                                                   |
+| `layer`          | Client service Layer with its dependencies provided; required for configured stores, otherwise defaults to `AppClient.layerFetch`. |
+| `initialSession` | Encoded public session for request-local server rendering.                                                                         |
 
 ## Account lifetime
 

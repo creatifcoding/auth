@@ -5,7 +5,6 @@ import * as OAuth from "@yielded/auth/OAuth";
 import { SubjectId } from "@yielded/auth/Schema";
 import * as Sessions from "@yielded/auth/Sessions";
 import { and, eq, sql } from "drizzle-orm";
-import * as Drizzle from "drizzle-orm/effect-libsql";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -638,7 +637,9 @@ const identityKey = Effect.fn("OAuthStorage.identityKey")(function* (
  * reactivated or reassigned. Supply LifecycleHooks (empty is suitable here).
  */
 export const makeStorage = (options: StorageOptions) => {
-  const database = LibsqlClient.layer({ url: `file:${options.filename}`, intMode: "number" });
+  const database = Native.databaseLayer.pipe(
+    Layer.provideMerge(LibsqlClient.layer({ url: `file:${options.filename}`, intMode: "number" })),
+  );
 
   return Layer.effectContext(
     Effect.gen(function* () {
@@ -654,7 +655,7 @@ export const makeStorage = (options: StorageOptions) => {
       const key = yield* identityKey(identity);
       const credentialId = `oauth:${key}`;
       const sqlClient = yield* SqlClient.SqlClient;
-      const db = yield* Drizzle.makeWithDefaults({});
+      const db = yield* Native.Database;
 
       yield* db.transaction(() =>
         Effect.gen(function* () {
@@ -834,16 +835,16 @@ export const makeStorage = (options: StorageOptions) => {
         typeof revocations
       >;
 
-      const signInServices = yield* Native.makeOAuthSignInServices(db, signIn);
-      const connectedServices = yield* Native.makeOAuthConnectedServices(db, connected);
+      const signInServices = yield* Native.makeOAuthSignInServices(signIn);
+      const connectedServices = yield* Native.makeOAuthConnectedServices(connected);
 
-      const revocationServices = yield* Native.makeOAuthConnectedRevocationServices(db, {
+      const revocationServices = yield* Native.makeOAuthConnectedRevocationServices({
         ...connected,
         job,
         constraints: Mapping.requiredOAuthConnectedRevocationConstraints,
       });
 
-      const sessionServices = yield* Native.makeAuthenticationAuthorityServices(db, {
+      const sessionServices = yield* Native.makeAuthenticationAuthorityServices({
         subjectId,
         subject: { ...subject, decodeRequirement: () => Effect.succeed(requirement) },
         credential: authority,

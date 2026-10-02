@@ -11,6 +11,7 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect, Context } from "effect";
 
+import { Database as DatabaseService } from "./d1-database";
 import { makeD1Owner } from "./d1-planning";
 import { D1BatchStatements } from "./D1BatchStatements";
 import type {
@@ -54,9 +55,11 @@ export const makeD1OAuthAccountsServices = <
   U extends SQLiteTable,
   N,
 >(
-  database: Database,
   mapping: OAuthAccountsMapping<S, O, C, AC, F, T, U, N> & OAuthD1Mapping,
-) => makeTargetOAuthAccountsServices(database, mapping, configuration);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetOAuthAccountsServices(database, mapping, configuration),
+  );
 
 export const makeD1OAuthSignInServices = <
   S extends SQLiteTable,
@@ -66,9 +69,11 @@ export const makeD1OAuthSignInServices = <
   F extends SQLiteTable,
   N,
 >(
-  database: Database,
   mapping: OAuthSignInMapping<S, O, C, AC, F, N> & OAuthD1Mapping,
-) => makeTargetOAuthSignInServices(database, mapping, configuration);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetOAuthSignInServices(database, mapping, configuration),
+  );
 
 export const makeD1OAuthRegistrationIntentServices = <
   S extends SQLiteTable,
@@ -80,9 +85,11 @@ export const makeD1OAuthRegistrationIntentServices = <
   I extends SQLiteTable,
   N,
 >(
-  database: Database,
   mapping: OAuthRegistrationIntentMapping<S, O, C, AC, F, T, I, N> & OAuthD1Mapping,
-) => makeTargetOAuthRegistrationIntentServices(database, mapping, configuration);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetOAuthRegistrationIntentServices(database, mapping, configuration),
+  );
 
 export const makeD1OAuthRegistrationServices = <
   Registration,
@@ -95,9 +102,11 @@ export const makeD1OAuthRegistrationServices = <
   R extends SQLiteTable,
   N,
 >(
-  database: Database,
   mapping: OAuthRegistrationMapping<Registration, S, O, C, AC, T, I, R, N> & OAuthD1Mapping,
-) => makeTargetOAuthRegistrationServices<Registration>(database, mapping, configuration);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetOAuthRegistrationServices<Registration>(database, mapping, configuration),
+  );
 
 export function coordinateD1OAuthSignIn<
   S extends SQLiteTable,

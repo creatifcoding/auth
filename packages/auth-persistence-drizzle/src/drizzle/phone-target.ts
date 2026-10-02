@@ -95,12 +95,13 @@ const validateMapping = <M>(original: M, configuration: PhoneTargetConfiguration
   });
 };
 
-const services = (
+const services = Effect.fnUntraced(function* (
   mapping: any,
   execution: TransactionExecution<PhoneUnavailable, CurrentPhoneTransaction>,
-  hooks: LifecycleHooks["Service"],
   configuration: PhoneTargetConfiguration,
-): PhonePersistenceServices => {
+): Effect.fn.Return<PhonePersistenceServices, never, LifecycleHooks> {
+  const hooks = yield* LifecycleHooks;
+
   const run = <A, E, R>(effect: Effect.Effect<A, E, R>, mutation = true) =>
     execution.admit.pipe(
       Effect.andThen(execution.run(effect, mutation)),
@@ -253,7 +254,7 @@ const services = (
         }).pipe(Effect.catchDefect(() => Effect.fail(unavailable()))),
     }),
   };
-};
+});
 
 export const makeTargetPhonePersistence = <
   S extends Table,
@@ -268,7 +269,6 @@ export const makeTargetPhonePersistence = <
   configuration: PhoneTargetConfiguration,
 ) =>
   Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
     const original = yield* Effect.isEffect(source) ? source : Effect.succeed(source);
 
     const mapping = yield* Effect.try({
@@ -284,7 +284,7 @@ export const makeTargetPhonePersistence = <
       randomId,
     );
 
-    return services(mapping, execution, hooks, configuration);
+    return yield* services(mapping, execution, configuration);
   });
 
 export const coordinateTargetPhone = <M, A, E, R, RSetup = never>(
@@ -298,7 +298,6 @@ export const coordinateTargetPhone = <M, A, E, R, RSetup = never>(
   ) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, PhoneCoordinatorError<E>, R | RSetup | LifecycleHooks> =>
   Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
     const original = yield* Effect.isEffect(source) ? source : Effect.succeed(source);
 
     const mapping = yield* Effect.try({
@@ -313,8 +312,11 @@ export const coordinateTargetPhone = <M, A, E, R, RSetup = never>(
       Effect.void,
       unavailable,
       randomId,
-      (execution) => services(mapping, execution, hooks, configuration),
-      body,
+      (execution) => services(mapping, execution, configuration),
+      (transaction, acquireServices, append) =>
+        Effect.flatMap(acquireServices, (boundServices) =>
+          body(transaction, boundServices, append),
+        ),
     );
   });
 
@@ -324,11 +326,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
 
 /** Concrete driver wrappers select transaction mode; cryptography always precedes these owners. */
 export const makePhoneTarget = <
+  DatabaseId,
   D extends { readonly transaction: any },
   T extends Table,
   Extra = unknown,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: PhoneTargetConfiguration,
 ) => {
   function coordinatePhonePersistence<
@@ -456,7 +460,6 @@ export const makePhoneTarget = <
 
   return {
     makePhonePersistenceServices: <
-      Database extends D,
       S extends T,
       I extends T,
       F extends T,
@@ -464,9 +467,11 @@ export const makePhoneTarget = <
       N,
       RSetup = never,
     >(
-      database: Database,
       mapping: PhoneMappingSource<PhoneMapping<S, I, C, F, N> & Extra, RSetup>,
-    ) => makeTargetPhonePersistence(database as any, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetPhonePersistence(database as any, mapping, configuration),
+      ),
     coordinatePhonePersistence,
   };
 };

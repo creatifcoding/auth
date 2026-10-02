@@ -23,11 +23,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
   : never;
 
 export const makePasskeyWriteTarget = <
+  DatabaseId,
   D,
   T extends Table,
   Extra = unknown,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: PasskeyTargetConfiguration,
 ) => {
   function coordinatePasskeyManagement<
@@ -180,7 +182,6 @@ export const makePasskeyWriteTarget = <
   }
 
   const makePasskeyManagementServices = <
-    Database extends D,
     S extends T,
     C extends T,
     F extends T,
@@ -194,12 +195,14 @@ export const makePasskeyWriteTarget = <
     N,
     RSetup = never,
   >(
-    database: Database,
     mapping: PasskeyMappingSource<
       PasskeyManagementMapping<S, C, F, O, H, M, Flow, Admission, Charge, Command, N> & Extra,
       RSetup
     >,
-  ) => makeTargetPasskeyManagement(database, mapping, configuration);
+  ) =>
+    Effect.flatMap(databaseService, (database) =>
+      makeTargetPasskeyManagement(database, mapping, configuration),
+    );
 
   function coordinatePasskeyRegistration<
     Database extends D,
@@ -357,7 +360,6 @@ export const makePasskeyWriteTarget = <
   }
 
   const makePasskeyRegistrationServices = <
-    Database extends D,
     S extends T,
     C extends T,
     F extends T,
@@ -372,19 +374,20 @@ export const makePasskeyWriteTarget = <
     Value,
     RSetup = never,
   >(
-    database: Database,
     mapping: PasskeyMappingSource<
       PasskeyRegistrationMapping<S, C, F, O, H, M, Flow, Admission, Charge, Intent, N, Value> &
         Extra,
       RSetup
     >,
   ) =>
-    makeTargetPasskeyRegistrationWriter<
-      PasskeyRegistrationMapping<S, C, F, O, H, M, Flow, Admission, Charge, Intent, N, Value> &
-        Extra,
-      Value,
-      RSetup
-    >(database, mapping, configuration);
+    Effect.flatMap(databaseService, (database) =>
+      makeTargetPasskeyRegistrationWriter<
+        PasskeyRegistrationMapping<S, C, F, O, H, M, Flow, Admission, Charge, Intent, N, Value> &
+          Extra,
+        Value,
+        RSetup
+      >(database, mapping, configuration),
+    );
 
   return {
     makePasskeyManagementServices,

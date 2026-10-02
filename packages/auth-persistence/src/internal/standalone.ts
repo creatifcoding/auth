@@ -4,17 +4,15 @@ import type * as SqlClient from "effect/sql/SqlClient";
 /** Standalone operations must observe their own durable commit. */
 export const requireStandalone = <Failure>(
   unavailable: () => Failure,
-  client?: {
-    readonly transactionService: Context.Key<
-      SqlClient.TransactionConnection,
-      SqlClient.TransactionConnection.Service
-    >;
-  },
+  transactionService?: Context.Key<
+    SqlClient.TransactionConnection,
+    SqlClient.TransactionConnection.Service
+  >,
 ): Effect.Effect<void, Failure> =>
   Effect.withFiber((fiber) => {
     const services = fiber.context.mapUnsafe;
 
-    if (client !== undefined && services.has(client.transactionService.key))
+    if (transactionService !== undefined && services.has(transactionService.key))
       return Effect.fail(unavailable());
 
     // rc.117 libSQL uses a private per-client marker that is not exposed through

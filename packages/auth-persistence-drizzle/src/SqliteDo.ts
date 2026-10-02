@@ -1,7 +1,31 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { PersistenceConfigurationError } from "@yielded/auth-persistence/Adapter";
 import type { AnyRelations } from "drizzle-orm";
-import type { EffectSQLiteDoDatabase } from "drizzle-orm/effect-sqlite-do";
+import { type EffectSQLiteDoDatabase, makeWithDefaults } from "drizzle-orm/effect-sqlite-do";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
+
+/** The application-owned Drizzle database used to construct persistence services. */
+export class Database extends Context.Service<Database, EffectSQLiteDoDatabase<AnyRelations>>()(
+  "effect-auth/persistence-drizzle/SqliteDo/Database",
+) {}
+
+/** The SQL-client Layer must configure storage so Drizzle owns transactionSync. */
+export const databaseLayer = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    const client = yield* SqliteClient;
+    const storage = client.config.storage;
+
+    if (storage === undefined)
+      return yield* PersistenceConfigurationError.make({
+        reason:
+          "SqliteDo requires a SQL client configured with storage for synchronous transactions",
+      });
+
+    return yield* makeWithDefaults({ storage });
+  }),
+);
 
 import type {
   ExternalIdentityTables,
@@ -18,19 +42,24 @@ import { makeSqlitePasswordTarget, sqlitePasswordConfiguration } from "./drizzle
 import { makeSqliteProofTarget, sqliteProofConfiguration } from "./drizzle/sqlite-proofs";
 import { makeSqliteSessionTarget, sqliteSessionConfiguration } from "./drizzle/sqlite-sessions";
 
-const sessionTarget = makeSqliteSessionTarget<EffectSQLiteDoDatabase<AnyRelations>, true>(
+const sessionTarget = makeSqliteSessionTarget<Database, EffectSQLiteDoDatabase<AnyRelations>, true>(
+  Database,
   sqliteSessionConfiguration("synchronous", Effect.void),
 );
 
-const proofTarget = makeSqliteProofTarget<EffectSQLiteDoDatabase<AnyRelations>, true>(
+const proofTarget = makeSqliteProofTarget<Database, EffectSQLiteDoDatabase<AnyRelations>, true>(
+  Database,
   sqliteProofConfiguration("synchronous", Effect.void),
 );
 
-const passwordTarget = makeSqlitePasswordTarget<EffectSQLiteDoDatabase<AnyRelations>, true>(
-  sqlitePasswordConfiguration("synchronous", Effect.void, Effect.void),
-);
+const passwordTarget = makeSqlitePasswordTarget<
+  Database,
+  EffectSQLiteDoDatabase<AnyRelations>,
+  true
+>(Database, sqlitePasswordConfiguration("synchronous", Effect.void, Effect.void));
 
-const emailTarget = makeSqliteEmailTarget<EffectSQLiteDoDatabase<AnyRelations>, true>(
+const emailTarget = makeSqliteEmailTarget<Database, EffectSQLiteDoDatabase<AnyRelations>, true>(
+  Database,
   sqliteEmailConfiguration("synchronous", Effect.void, Effect.void),
 );
 
@@ -95,9 +124,9 @@ export const makeIdentityServices = <
   Request extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteDoDatabase<AnyRelations>,
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => makeSqliteIdentityServices(database, mapping, "synchronous");
+) =>
+  Effect.map(Database, (database) => makeSqliteIdentityServices(database, mapping, "synchronous"));
 
 export const makeSubjectProvisioningServices = <
   Subject extends AnySQLiteTable,
@@ -105,25 +134,27 @@ export const makeSubjectProvisioningServices = <
   Request extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteDoDatabase<AnyRelations>,
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
-) => makeSqliteSubjectProvisioningServices(database, mapping, "synchronous");
+) =>
+  Effect.map(Database, (database) =>
+    makeSqliteSubjectProvisioningServices(database, mapping, "synchronous"),
+  );
 
 export const makeExternalIdentityServices = <
   Subject extends AnySQLiteTable,
   External extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteDoDatabase<AnyRelations>,
   mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => makeSqliteExternalIdentityServices(database, mapping);
+) => Effect.map(Database, (database) => makeSqliteExternalIdentityServices(database, mapping));
 
 import { makeSqlitePasswordPreparedTarget } from "./drizzle/sqlite-password-prepared";
 
 const passwordPreparedTarget = makeSqlitePasswordPreparedTarget<
+  Database,
   EffectSQLiteDoDatabase<AnyRelations>,
   true
->(sqlitePasswordConfiguration("synchronous", Effect.void, Effect.void));
+>(Database, sqlitePasswordConfiguration("synchronous", Effect.void, Effect.void));
 
 export const { makePasswordPreparedPersistenceServices, coordinatePasswordPreparedPersistence } =
   passwordPreparedTarget;
@@ -133,10 +164,11 @@ export { passwordPreparedPersistenceLayer } from "./drizzle/password-prepared-ta
 import { makeOAuthTarget } from "./drizzle/oauth-drivers";
 
 const oauthTarget = makeOAuthTarget<
+  Database,
   EffectSQLiteDoDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>,
   true
->({
+>(Database, {
   mode: "synchronous",
   dialect: "sqlite",
   locking: false,
@@ -161,11 +193,12 @@ export const {
 import { makePasskeyTarget } from "./drizzle/passkey-drivers";
 
 const passkeyTarget = makePasskeyTarget<
+  Database,
   EffectSQLiteDoDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>,
   unknown,
   true
->({
+>(Database, {
   mode: "synchronous",
   dialect: "sqlite",
   locking: false,
@@ -188,11 +221,12 @@ export const {
 import { makeTotpTarget } from "./drizzle/totp-target";
 
 const totpTarget = makeTotpTarget<
+  Database,
   EffectSQLiteDoDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>,
   unknown,
   true
->({
+>(Database, {
   mode: "synchronous",
   dialect: "sqlite",
   locking: false,
@@ -204,11 +238,12 @@ export const { makeTotpPersistenceServices, coordinateTotpPersistence } = totpTa
 import { makePhoneTarget } from "./drizzle/phone-target";
 
 const phoneTarget = makePhoneTarget<
+  Database,
   EffectSQLiteDoDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>,
   unknown,
   true
->({
+>(Database, {
   mode: "synchronous",
   dialect: "sqlite",
   locking: false,

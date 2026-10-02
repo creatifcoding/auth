@@ -73,9 +73,11 @@ export const sqliteEmailConfiguration = (
 });
 
 export const makeSqliteEmailTarget = <
+  DatabaseId,
   D extends SqliteEmailDatabase,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: EmailTargetConfiguration | ((database: D) => EmailTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
@@ -325,9 +327,11 @@ export const makeSqliteEmailTarget = <
       C extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: EmailSignInMapping<S, I, C, NativeId>,
-    ) => makeTargetEmailSignInServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetEmailSignInServices(database, mapping, configurationFor(database)),
+      ),
     makeEmailAddressServices: <
       S extends AnySQLiteTable,
       I extends AnySQLiteTable,
@@ -336,11 +340,12 @@ export const makeSqliteEmailTarget = <
       M extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: EmailAddressMapping<S, I, C, AC, M, NativeId>,
       proofMapping: ProofMapping,
     ) =>
-      makeTargetEmailAddressServices(database, mapping, proofMapping, configurationFor(database)),
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetEmailAddressServices(database, mapping, proofMapping, configurationFor(database)),
+      ),
     coordinateEmailAddress,
     makeEmailRegistrationServices: <
       Registration,
@@ -351,15 +356,16 @@ export const makeSqliteEmailTarget = <
       Rq extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: EmailRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
       proofMapping: ProofMapping,
     ) =>
-      makeTargetEmailRegistrationServices<Registration>(
-        database,
-        mapping,
-        proofMapping,
-        configurationFor(database),
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetEmailRegistrationServices<Registration>(
+          database,
+          mapping,
+          proofMapping,
+          configurationFor(database),
+        ),
       ),
     coordinateEmailRegistration,
   };

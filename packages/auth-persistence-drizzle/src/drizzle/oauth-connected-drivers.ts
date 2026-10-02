@@ -28,11 +28,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
 const unavailable = () => OAuthUnavailable.make({});
 
 export const makeOAuthConnectedTarget = <
+  DatabaseId,
   Database,
   Family extends Table,
   Extra = {},
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, Database>,
   configuration: OAuthTargetConfiguration,
 ) => {
   function coordinateOAuthConnected<
@@ -300,9 +302,11 @@ export const makeOAuthConnectedTarget = <
       N,
       J extends Family = never,
     >(
-      database: Database,
       mapping: OAuthConnectedMapping<S, AC, T, O, F, G, C, H, UA, DC, N, J> & Extra,
-    ) => makeTargetOAuthConnectedServices(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetOAuthConnectedServices(database, mapping, configuration),
+      ),
     makeOAuthConnectedRevocationServices: <
       T extends Family,
       O extends Family,
@@ -313,15 +317,18 @@ export const makeOAuthConnectedTarget = <
       J extends Family,
       N,
     >(
-      database: Database,
       mapping: OAuthConnectedRevocationMapping<T, O, F, G, C, H, J, N> & Extra,
-    ) => makeTargetOAuthConnectedRevocationServices(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetOAuthConnectedRevocationServices(database, mapping, configuration),
+      ),
     coordinateOAuthConnected,
     coordinateOAuthConnectedRevocations,
   };
 };
 
-export const makeD1OAuthConnectedTarget = <Database, Family extends Table, Extra>(
+export const makeD1OAuthConnectedTarget = <DatabaseId, Database, Family extends Table, Extra>(
+  databaseService: Context.Service<DatabaseId, Database>,
   configuration: OAuthTargetConfiguration,
 ) => {
   function coordinateOAuthConnected<
@@ -461,7 +468,10 @@ export const makeD1OAuthConnectedTarget = <Database, Family extends Table, Extra
   }
 
   return {
-    ...makeOAuthConnectedTarget<Database, Family, Extra>(configuration),
+    ...makeOAuthConnectedTarget<DatabaseId, Database, Family, Extra>(
+      databaseService,
+      configuration,
+    ),
     coordinateOAuthConnected,
     coordinateOAuthConnectedRevocations,
   };

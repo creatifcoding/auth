@@ -8,4 +8,8 @@ Applications own credentials, callback destinations, persistence, identity mappi
 and authorization. Token exchanges are never retried automatically. Retain retired
 client registrations while stored flows and grants still reference them.
 
+Transport uses Effect’s `FetchHttpClient.Fetch` service, defaulting to the platform
+Fetch implementation. Provide a custom Fetch service when building the protocol
+Layer; it must honor cancellation and never retry requests or log credentials.
+
 See the [OAuth guide](https://yielded.dev/auth/guide/oauth).

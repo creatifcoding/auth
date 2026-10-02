@@ -176,9 +176,11 @@ export const coordinateSqlitePasswordRegistration = <
   );
 
 export const makeSqlitePasswordTarget = <
+  DatabaseId,
   D extends SqlitePasswordDatabase,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: PasswordTargetConfiguration | ((database: D) => PasswordTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
@@ -456,7 +458,6 @@ export const makeSqlitePasswordTarget = <
       M extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: Mapping<S, I, C, AC, A, RS, CE, M, NativeId>,
       proofMapping?: ProofPersistenceMapping<
         any,
@@ -473,11 +474,13 @@ export const makeSqlitePasswordTarget = <
         any
       >,
     ) =>
-      makeSqlitePasswordPersistenceServices(
-        database,
-        mapping,
-        configurationFor(database),
-        proofMapping,
+      Effect.flatMap(databaseService, (database) =>
+        makeSqlitePasswordPersistenceServices(
+          database,
+          mapping,
+          configurationFor(database),
+          proofMapping,
+        ),
       ),
     coordinatePasswordPersistence,
     makePasswordRegistrationServices: <
@@ -489,9 +492,11 @@ export const makeSqlitePasswordTarget = <
       Rq extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
-    ) => makeSqlitePasswordRegistrationServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeSqlitePasswordRegistrationServices(database, mapping, configurationFor(database)),
+      ),
     coordinatePasswordRegistration,
   };
 };

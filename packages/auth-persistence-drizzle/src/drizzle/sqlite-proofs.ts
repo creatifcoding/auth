@@ -52,7 +52,12 @@ export const sqliteProofConfiguration = (
   ...(coordinatorGuard === undefined ? {} : { coordinatorGuard }),
 });
 
-export const makeSqliteProofTarget = <D extends Database, Synchronous extends boolean = false>(
+export const makeSqliteProofTarget = <
+  DatabaseId,
+  D extends Database,
+  Synchronous extends boolean = false,
+>(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: ProofTargetConfiguration | ((database: D) => ProofTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
@@ -194,9 +199,11 @@ export const makeSqliteProofTarget = <D extends Database, Synchronous extends bo
       Cr extends AnySQLiteTable,
       NativeId,
     >(
-      database: D,
       mapping: Mapping<Rq, S, G, Cn, Rs, A, F, C, Sub, I, Cr, NativeId>,
-    ) => makeTargetProofPersistenceServices(database, mapping, configurationFor(database)),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetProofPersistenceServices(database, mapping, configurationFor(database)),
+      ),
     coordinateProofPersistence,
   };
 };

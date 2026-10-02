@@ -17,6 +17,11 @@ All consumer files are checked by the root validation command. TOTP adapter
 fixtures that exercise private implementation helpers live under the library’s
 `test/fixtures`, where they remain typechecked.
 
+The Studio example's storage and HTTP Layers require `Postgres.Database`; provide
+`Postgres.databaseLayer` with an Effect PostgreSQL client at the application boundary.
+`makeStudioLive(binding)` also requires `TotpSecretKeys`. Supply its Layer alongside
+the database Layer; shared dependencies stay visible in Layer requirements.
+
 `login-contract.ts`, `login-server.ts`, and `login-client.ts` compose email OTP +
 GitHub with shared sessions, HTTP, and Atom workflows. Google is optional.
 See the [OAuth guide](../../docs/src/content/docs/guide/oauth.mdx) for setup.

@@ -1,8 +1,10 @@
 import {
+  Context,
   DateTime,
   Duration,
   Effect,
   Function,
+  Layer,
   Option,
   Redacted,
   Schema,
@@ -25,7 +27,20 @@ import { OperationHttpError } from "./errors";
 import type { HttpCredentials } from "./models";
 import { CredentialWire, RevealWire, credentialSlots, decodeRevealWire } from "./private";
 
-export interface OperationFetchOptions {
+/** Client-owned finite reveal storage. Its Layer owns allocation and disposal. */
+export interface PrivateOutput extends AuthRevealCommandCollector {
+  readonly clear: Effect.Effect<void>;
+}
+
+/** Native credential storage, separate from HTTP header configuration. */
+export interface NativeCredentials {
+  readonly read: Effect.Effect<HttpCredentials, OperationHttpError>;
+  readonly accept: (
+    commands: ReadonlyArray<AuthCredentialCommand>,
+  ) => Effect.Effect<void, OperationHttpError>;
+}
+
+export interface OperationFetchOptions<R = never, RNative = never> {
   readonly baseUrl: string;
   readonly csrfHeader: string;
   readonly csrfValue: string;
@@ -33,15 +48,12 @@ export interface OperationFetchOptions {
   /** Finite deadline for request dispatch and response body consumption. Defaults to 30 seconds.
    * A timeout does not establish whether a mutation committed and never authorizes a retry. */
   readonly requestTimeout?: Duration.Input;
-  readonly privateOutput?: AuthRevealCommandCollector & { readonly clear: Effect.Effect<void> };
+  readonly privateOutput?: Context.Key<R, PrivateOutput>;
   readonly native?: {
     readonly modeHeader: string;
     readonly requestHeaders: Readonly<Record<CredentialSlot, string>>;
     readonly responseHeaders: Readonly<Record<CredentialSlot, string>>;
-    readonly read: Effect.Effect<HttpCredentials, OperationHttpError>;
-    readonly accept: (
-      commands: ReadonlyArray<AuthCredentialCommand>,
-    ) => Effect.Effect<void, OperationHttpError>;
+    readonly credentials: Context.Key<RNative, NativeCredentials>;
   };
 }
 
@@ -69,6 +81,12 @@ export interface OperationFetchClient {
   readonly generation: Effect.Effect<number>;
 }
 
+/** One transport instance per application or request Scope. Provide its Layer
+ * to consumers so credential admission and generation fencing share an owner. */
+export class Client extends Context.Service<Client, OperationFetchClient>()(
+  "effect-auth/OperationHttpClient",
+) {}
+
 /** Complete an authentication operation and publish its subject while its
  * credential response remains admitted. Undefined preserves a pending flow. */
 export interface OperationAuthenticationCompletion {
@@ -87,12 +105,15 @@ export interface OperationAuthenticationCompletion {
 
 /** The caller owns the lifecycle gate and publisher. Publishers must not call
  * the transport: they run under credential admission, before reveal acceptance. */
-export const makeAuthenticationCompletion = (
-  client: OperationFetchClient,
+export const makeAuthenticationCompletion = Effect.fnUntraced(function* (
   gate: Semaphore.Semaphore,
   publishSubject: (subject: string | null) => Effect.Effect<void>,
-): OperationAuthenticationCompletion =>
-  Effect.fn("OperationHttpClient.completeAuthentication")(function* <R extends AnyRoute>(
+) {
+  const client = yield* Client;
+
+  const complete: OperationAuthenticationCompletion = Effect.fn(
+    "OperationHttpClient.completeAuthentication",
+  )(function* <R extends AnyRoute>(
     route: R,
     input: RouteInput<R>,
     fromSuccess: (success: RouteSuccess<R>) => string | null | undefined,
@@ -138,6 +159,9 @@ export const makeAuthenticationCompletion = (
       }),
     );
   });
+
+  return complete;
+});
 
 const responseCodec = Schema.fromJsonString(
   Schema.Union([
@@ -187,9 +211,17 @@ const readBody = Effect.fnUntraced(function* (
 /** One instance owns credential ordering and stale-result fencing. Share it within
  * an authentication lifetime. Supply a non-retrying, non-redirecting HttpClient;
  * each call owns its request Scope, including response consumption. */
-export const make = Effect.fn("OperationHttpClient.make")(function* (
-  options: OperationFetchOptions,
-): Effect.fn.Return<OperationFetchClient, OperationHttpError, HttpClient.HttpClient> {
+export const make = Effect.fn("OperationHttpClient.make")(function* <R = never, RNative = never>(
+  options: OperationFetchOptions<R, RNative>,
+): Effect.fn.Return<OperationFetchClient, OperationHttpError, HttpClient.HttpClient | R | RNative> {
+  const privateOutput =
+    options.privateOutput === undefined ? undefined : yield* options.privateOutput;
+
+  const native =
+    options.native === undefined
+      ? undefined
+      : { config: options.native, store: yield* options.native.credentials };
+
   const base = yield* Effect.try({
     try: () => new URL(options.baseUrl),
     catch: () => OperationHttpError.make({ reason: "request" }),
@@ -214,13 +246,13 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
     base.hash !== ""
   )
     return yield* OperationHttpError.make({ reason: "request" });
-  if (options.native !== undefined) {
+  if (native !== undefined) {
     const names = [
-      options.native.modeHeader,
-      ...credentialSlots.map((slot) => options.native!.requestHeaders[slot]),
+      native.config.modeHeader,
+      ...credentialSlots.map((slot) => native.config.requestHeaders[slot]),
     ];
 
-    const response = credentialSlots.map((slot) => options.native!.responseHeaders[slot]);
+    const response = credentialSlots.map((slot) => native.config.responseHeaders[slot]);
 
     if (
       [...names, ...response].some((name) => !Schema.is(headerName)(name)) ||
@@ -236,7 +268,7 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
 
   const advance = Effect.gen(function* () {
     generation++;
-    if (options.privateOutput !== undefined) yield* options.privateOutput.clear;
+    if (privateOutput !== undefined) yield* privateOutput.clear;
   });
 
   const call = Effect.fn("OperationHttpClient.call")(function* <R extends AnyRoute>(
@@ -279,8 +311,8 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
     if (
       route.operation.reveals.some(
         (kind) =>
-          options.privateOutput === undefined ||
-          !options.privateOutput.supportedKinds.includes(kind) ||
+          privateOutput === undefined ||
+          !privateOutput.supportedKinds.includes(kind) ||
           !route.reveals.includes(kind),
       )
     )
@@ -310,15 +342,15 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
         request = HttpClientRequest.setHeader(request, options.csrfHeader, options.csrfValue);
       }
 
-      if (options.native !== undefined) {
-        request = HttpClientRequest.setHeader(request, options.native.modeHeader, "native");
-        const credentials = yield* options.native.read;
+      if (native !== undefined) {
+        request = HttpClientRequest.setHeader(request, native.config.modeHeader, "native");
+        const credentials = yield* native.store.read;
 
         for (const slot of credentialSlots)
           if (credentials[slot] !== undefined)
             request = HttpClientRequest.setHeader(
               request,
-              options.native.requestHeaders[slot],
+              native.config.requestHeaders[slot],
               Redacted.value(credentials[slot]!),
             );
       }
@@ -359,7 +391,7 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
       }).pipe(
         // Native credential header names are application-defined. Preserve any
         // transport-captured redaction policy and keep these exchanges out of HTTP spans.
-        options.native === undefined
+        native === undefined
           ? Function.identity
           : Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
         Effect.scoped,
@@ -417,13 +449,13 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
         )
       )
         return yield* OperationHttpError.make({ reason: "private-output" });
-      if (privateCommands.length > 0 && options.privateOutput === undefined)
+      if (privateCommands.length > 0 && privateOutput === undefined)
         return yield* OperationHttpError.make({ reason: "private-output" });
-      if (options.native !== undefined) {
+      if (native !== undefined) {
         const commands: AuthCredentialCommand[] = [];
 
         for (const slot of credentialSlots) {
-          const raw = response.headers[options.native.responseHeaders[slot]];
+          const raw = response.headers[native.config.responseHeaders[slot]];
 
           if (raw === undefined) continue;
           if (!route.operation.credentials)
@@ -441,7 +473,7 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
               : { ...command, slot, credential: Redacted.make(command.credential) },
           );
         }
-        if (commands.length > 0) yield* options.native.accept(commands);
+        if (commands.length > 0) yield* native.store.accept(commands);
       }
       const projectSubject = callOptions?.replaceSubject;
 
@@ -457,7 +489,8 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
         yield* advance;
         if (callOptions?.onTransition !== undefined) yield* callOptions.onTransition;
       }
-      if (privateCommands.length > 0) yield* options.privateOutput!.accept(privateCommands);
+      if (privateCommands.length > 0 && privateOutput !== undefined)
+        yield* privateOutput.accept(privateCommands);
 
       return value as RouteSuccess<R>;
     });
@@ -479,3 +512,6 @@ export const make = Effect.fn("OperationHttpClient.make")(function* (
     generation: Effect.sync(() => generation),
   };
 });
+
+export const layer = <R = never, RNative = never>(options: OperationFetchOptions<R, RNative>) =>
+  Layer.effect(Client, make(options));

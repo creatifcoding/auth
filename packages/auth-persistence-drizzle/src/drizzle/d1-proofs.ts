@@ -47,6 +47,7 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Cause, Effect, Schema, Context } from "effect";
 import type { Statement } from "effect/sql/Statement";
 
+import { Database as DatabaseService } from "./d1-database";
 import { balancedD1And } from "./d1-generated-statement";
 import { CurrentD1PlanningDatabase, makeD1Owner } from "./d1-planning";
 import { D1BatchStatements } from "./D1BatchStatements";
@@ -1985,7 +1986,7 @@ const makeProofPlans = (mapping: Mapping) => {
   };
 };
 
-export const makeD1ProofPersistenceServices = <
+export const makeD1ProofPersistenceServices = Effect.fnUntraced(function* <
   Rq extends AnySQLiteTable,
   S extends AnySQLiteTable,
   G extends AnySQLiteTable,
@@ -1998,38 +1999,36 @@ export const makeD1ProofPersistenceServices = <
   I extends AnySQLiteTable,
   Cr extends AnySQLiteTable,
   NativeId,
->(
-  database: Database,
-  mapping: D1ProofPersistenceMapping<Rq, S, G, Cn, Rs, A, F, C, Sub, I, Cr, NativeId>,
-) =>
-  Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
-    const plans = makeProofPlans(mapping as unknown as Mapping);
+>(mapping: D1ProofPersistenceMapping<Rq, S, G, Cn, Rs, A, F, C, Sub, I, Cr, NativeId>) {
+  const database = yield* DatabaseService;
 
-    const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
-      Effect.gen(function* () {
-        if (yield* hasCommitScope) return yield* unavailable();
+  const hooks = yield* LifecycleHooks;
+  const plans = makeProofPlans(mapping as unknown as Mapping);
 
-        return yield* executeStandalone(plan, 2);
-      }).pipe(
-        Effect.provideService(CurrentD1PlanningDatabase, database),
-        Effect.provideService(LifecycleHooks, hooks),
-      );
+  const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
+    Effect.gen(function* () {
+      if (yield* hasCommitScope) return yield* unavailable();
 
-    const service: ProofPersistence["Service"] = {
-      issue: (input, prepare) => run(plans.issue(input, prepare)).pipe(translateIssueFailure),
-      attempt: (input, prepare) => run(plans.attempt(input, prepare)).pipe(translateFailure),
-      complete: (input, prepare) => run(plans.complete(input, prepare)).pipe(translateFailure),
-      claimDelivery: (input, prepare) =>
-        run(plans.claimDelivery(input, prepare)).pipe(translateFailure),
-      settleDelivery: (input, prepare) =>
-        run(plans.settleDelivery(input, prepare)).pipe(translateFailure),
-      cancel: (input, prepare) => run(plans.cancel(input, prepare)).pipe(translateFailure),
-      cleanup: (input, prepare) => run(plans.cleanup(input, prepare)).pipe(translateFailure),
-    };
+      return yield* executeStandalone(plan, 2);
+    }).pipe(
+      Effect.provideService(CurrentD1PlanningDatabase, database),
+      Effect.provideService(LifecycleHooks, hooks),
+    );
 
-    return { proofPersistence: service };
-  });
+  const service: ProofPersistence["Service"] = {
+    issue: (input, prepare) => run(plans.issue(input, prepare)).pipe(translateIssueFailure),
+    attempt: (input, prepare) => run(plans.attempt(input, prepare)).pipe(translateFailure),
+    complete: (input, prepare) => run(plans.complete(input, prepare)).pipe(translateFailure),
+    claimDelivery: (input, prepare) =>
+      run(plans.claimDelivery(input, prepare)).pipe(translateFailure),
+    settleDelivery: (input, prepare) =>
+      run(plans.settleDelivery(input, prepare)).pipe(translateFailure),
+    cancel: (input, prepare) => run(plans.cancel(input, prepare)).pipe(translateFailure),
+    cleanup: (input, prepare) => run(plans.cleanup(input, prepare)).pipe(translateFailure),
+  };
+
+  return { proofPersistence: service };
+});
 
 type CoordinatorError<E> = E | ProofUnavailable | HookConfigurationError;
 

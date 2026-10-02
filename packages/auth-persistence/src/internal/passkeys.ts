@@ -409,7 +409,7 @@ export const makeComposedPasskeys = (
         mode: "interactive",
         dialect,
         locking: dialect === "pg",
-        standaloneGuard: () => requireStandalone(unavailable, client),
+        standaloneGuard: () => requireStandalone(unavailable, client.transactionService),
       };
 
       // The backend has already checked the native query builder; schemas check stored values.

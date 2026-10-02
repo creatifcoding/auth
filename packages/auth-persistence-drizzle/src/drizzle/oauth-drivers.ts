@@ -35,7 +35,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
   : never;
 
 /** Driver-specific entry points instantiate both the database and table family. */
-export const makeOAuthTarget = <D, T extends Table, Synchronous extends boolean = false>(
+export const makeOAuthTarget = <
+  DatabaseId,
+  D,
+  T extends Table,
+  Synchronous extends boolean = false,
+>(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: OAuthTargetConfiguration,
 ) => {
   function coordinateOAuthSignIn<
@@ -516,7 +522,7 @@ export const makeOAuthTarget = <D, T extends Table, Synchronous extends boolean 
   }
 
   return {
-    ...makeOAuthConnectedTarget<D, T, {}, Synchronous>(configuration),
+    ...makeOAuthConnectedTarget<DatabaseId, D, T, {}, Synchronous>(databaseService, configuration),
     coordinateOAuthSignIn,
     coordinateOAuthRegistrationIntents,
     coordinateOAuthAccounts,
@@ -530,13 +536,17 @@ export const makeOAuthTarget = <D, T extends Table, Synchronous extends boolean 
       U extends T,
       N,
     >(
-      database: D,
       mapping: OAuthAccountsMapping<S, O, C, AC, F, TA, U, N>,
-    ) => makeTargetOAuthAccountsServices(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetOAuthAccountsServices(database, mapping, configuration),
+      ),
     makeOAuthSignInServices: <S extends T, O extends T, C extends T, AC extends T, F extends T, N>(
-      database: D,
       mapping: OAuthSignInMapping<S, O, C, AC, F, N>,
-    ) => makeTargetOAuthSignInServices(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetOAuthSignInServices(database, mapping, configuration),
+      ),
     makeOAuthRegistrationIntentServices: <
       S extends T,
       O extends T,
@@ -547,9 +557,11 @@ export const makeOAuthTarget = <D, T extends Table, Synchronous extends boolean 
       I extends T,
       N,
     >(
-      database: D,
       mapping: OAuthRegistrationIntentMapping<S, O, C, AC, F, TA, I, N>,
-    ) => makeTargetOAuthRegistrationIntentServices(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetOAuthRegistrationIntentServices(database, mapping, configuration),
+      ),
     makeOAuthRegistrationServices: <
       Registration,
       S extends T,
@@ -561,9 +573,11 @@ export const makeOAuthTarget = <D, T extends Table, Synchronous extends boolean 
       R extends T,
       N,
     >(
-      database: D,
       mapping: OAuthRegistrationMapping<Registration, S, O, C, AC, TA, I, R, N>,
-    ) => makeTargetOAuthRegistrationServices<Registration>(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetOAuthRegistrationServices<Registration>(database, mapping, configuration),
+      ),
     coordinateOAuthRegistration,
   };
 };

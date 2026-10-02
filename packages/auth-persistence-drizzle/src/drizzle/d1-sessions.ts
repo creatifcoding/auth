@@ -52,6 +52,7 @@ import { Cause, Context, Data, DateTime, Effect, Schema } from "effect";
 import type * as SqlError from "effect/sql/SqlError";
 import type { Statement } from "effect/sql/Statement";
 
+import { Database as DatabaseService } from "./d1-database";
 import { compactD1GeneratedStatement } from "./d1-generated-statement";
 import {
   CurrentD1PlanningDatabase,
@@ -1832,7 +1833,6 @@ export const makeD1AuthenticationAuthorityServices = <
   Pending extends AnySQLiteTable,
   NativeSubjectId,
 >(
-  database: Database,
   mapping: D1AuthenticationAuthorityMapping<
     Claims,
     Subject,
@@ -1841,7 +1841,10 @@ export const makeD1AuthenticationAuthorityServices = <
     Pending,
     NativeSubjectId
   >,
-) => makeD1SessionServiceEffects.authority<Claims>(database, mapping as any);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeD1SessionServiceEffects.authority<Claims>(database, mapping as any),
+  );
 
 export const makeD1PendingAuthenticationServices = <
   Claims,
@@ -1851,7 +1854,6 @@ export const makeD1PendingAuthenticationServices = <
   Flow extends AnySQLiteTable,
   NativeSubjectId,
 >(
-  database: Database,
   mapping: D1PendingAuthenticationMapping<
     Claims,
     Subject,
@@ -1860,7 +1862,10 @@ export const makeD1PendingAuthenticationServices = <
     Flow,
     NativeSubjectId
   >,
-) => makeD1SessionServiceEffects.pending<Claims>(database, mapping as any);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeD1SessionServiceEffects.pending<Claims>(database, mapping as any),
+  );
 
 export const makeD1StatefulSessionServices = <
   Claims,
@@ -1872,7 +1877,6 @@ export const makeD1StatefulSessionServices = <
   NativeSubjectId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: D1StatefulSessionMapping<
     Claims,
     Subject,
@@ -1883,7 +1887,10 @@ export const makeD1StatefulSessionServices = <
     NativeSubjectId,
     NativeSessionId
   >,
-) => makeD1SessionServiceEffects.stateful<Claims>(database, mapping as any);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeD1SessionServiceEffects.stateful<Claims>(database, mapping as any),
+  );
 
 export const makeD1SignedSessionValidityServices = <
   Subject extends AnySQLiteTable,
@@ -1891,9 +1898,11 @@ export const makeD1SignedSessionValidityServices = <
   NativeSubjectId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: D1SignedSessionValidityMapping<Subject, Tombstone, NativeSubjectId, NativeSessionId>,
-) => makeD1SessionServiceEffects.validity(database, mapping as any);
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeD1SessionServiceEffects.validity(database, mapping as any),
+  );
 
 export function coordinateD1AuthenticationAuthority<
   Claims,
@@ -2733,7 +2742,7 @@ export const makeD1SessionStepUp = <Claims>(
   };
 };
 
-export const makeD1SessionStepUpServices = <
+export const makeD1SessionStepUpServices = Effect.fnUntraced(function* <
   Claims,
   Id,
   S extends AnySQLiteTable,
@@ -2744,38 +2753,38 @@ export const makeD1SessionStepUpServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: D1SessionStepUpMapping<NoInfer<Claims>, S, C, I, Session, T, NativeId, NativeSessionId>,
   target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
-) =>
-  Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
-    const raw = makeD1SessionStepUp<Claims>(mapping as any);
+) {
+  const database = yield* DatabaseService;
 
-    const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.gen(function* () {
-        if (
-          (yield* Effect.serviceOption(CurrentD1SessionBatch))._tag === "Some" ||
-          (yield* hasCommitScope)
-        )
-          return yield* unavailable();
+  const hooks = yield* LifecycleHooks;
+  const raw = makeD1SessionStepUp<Claims>(mapping as any);
 
-        return yield* effect.pipe(
-          Effect.provideService(CurrentD1PlanningDatabase, database),
-          Effect.provideService(LifecycleHooks, hooks),
-        );
-      });
+  const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      if (
+        (yield* Effect.serviceOption(CurrentD1SessionBatch))._tag === "Some" ||
+        (yield* hasCommitScope)
+      )
+        return yield* unavailable();
 
-    const sessionStepUpPersistence = target.of({
-      create: (input, now, prepare) => run(raw.create(input, now, prepare)),
-      context: (input) => run(raw.context(input)),
-      read: (input) => run(raw.read(input)),
-      reject: (input, prepare) => run(raw.reject(input, prepare)),
-      complete: (plan, prepare) => run(raw.complete(plan, prepare)),
+      return yield* effect.pipe(
+        Effect.provideService(CurrentD1PlanningDatabase, database),
+        Effect.provideService(LifecycleHooks, hooks),
+      );
     });
 
-    return { sessionStepUpPersistence };
+  const sessionStepUpPersistence = target.of({
+    create: (input, now, prepare) => run(raw.create(input, now, prepare)),
+    context: (input) => run(raw.context(input)),
+    read: (input) => run(raw.read(input)),
+    reject: (input, prepare) => run(raw.reject(input, prepare)),
+    complete: (plan, prepare) => run(raw.complete(plan, prepare)),
   });
+
+  return { sessionStepUpPersistence };
+});
 
 export function coordinateD1SessionStepUp<
   Claims,

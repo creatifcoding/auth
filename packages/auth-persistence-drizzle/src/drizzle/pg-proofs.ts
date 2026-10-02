@@ -7,6 +7,7 @@ import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { Database as DatabaseService } from "./pg-database";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
 import {
@@ -67,9 +68,11 @@ export const makePgProofPersistenceServices = <
   Cr extends AnyPgTable,
   NativeId,
 >(
-  database: Database,
   mapping: Mapping<Rq, S, G, Cn, Rs, A, F, C, Sub, I, Cr, NativeId>,
-) => makeTargetProofPersistenceServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetProofPersistenceServices(database, mapping, configuration(database)),
+  );
 
 export function coordinatePgProofPersistence<
   D extends Database,

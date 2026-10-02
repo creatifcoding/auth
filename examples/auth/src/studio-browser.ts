@@ -8,12 +8,14 @@ import { transport } from "./studio-transport";
 /** Keep this effect's scope open for the browser application. Render `current`
  * in the control registry and all account atoms in the current subject registry.
  * The host supplies an Effect HttpClient and the finite TOTP private reveal collector. */
-export const makeStudioBrowser = Effect.fn("Studio.browser")(function* (
-  options: Fetch.OperationFetchOptions,
+export const makeStudioBrowser = Effect.fn("Studio.browser")(function* <R = never, RNative = never>(
+  options: Fetch.OperationFetchOptions<R, RNative>,
   initialSubject: string | null = null,
 ) {
-  const client = yield* Fetch.make(options);
-  const lifetime = yield* AuthAtom.makeLifetime(client, { initialSubject });
+  const lifetime = yield* AuthAtom.makeLifetime({ initialSubject }).pipe(
+    Effect.provide(Fetch.layer(options)),
+  );
+
   const browser = yield* PasskeyBrowser.make();
   const runtime = Atom.context()(Layer.succeed(AuthAtom.AuthAtomLifetime, lifetime));
   const accountKeys = ["studio/member", "studio/keys", "studio/session"];

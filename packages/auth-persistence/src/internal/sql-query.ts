@@ -1,5 +1,5 @@
 import { Effect, Predicate } from "effect";
-import type { SqlClient } from "effect/sql/SqlClient";
+import { SqlClient } from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 
 import { PersistenceMappingError } from "./mapping-error";
@@ -213,7 +213,9 @@ const compile = (state: QueryState, compiler: Compiler): string => {
 };
 
 /** Captures one Effect SQL client. Its transaction service remains the physical owner. */
-export const makeSqlDatabase = (client: SqlClient, dialect: Dialect): SqlDatabase => {
+export const makeSqlDatabase = Effect.fnUntraced(function* (dialect: Dialect) {
+  const client = yield* SqlClient;
+
   const query = (state: QueryState): Query => {
     const execute = Effect.suspend(() => {
       const compiler: Compiler = { dialect, parameters: [] };
@@ -267,7 +269,7 @@ export const makeSqlDatabase = (client: SqlClient, dialect: Dialect): SqlDatabas
   };
 
   return database;
-};
+});
 
 interface Query extends Effect.Effect<Row[], SqlError> {
   toSQL(): { readonly sql: string; readonly params: ReadonlyArray<unknown> };

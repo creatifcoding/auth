@@ -18,6 +18,7 @@ import {
   makeTargetPasswordRegistrationServices,
   sqlClientPasswordStandaloneGuard,
 } from "./password-target";
+import { Database as DatabaseService } from "./pg-database";
 import type { ProofPersistenceMapping } from "./proof-model";
 import type { ProofSqlQuery } from "./proof-sql";
 import { sqlClientProofStandaloneGuard } from "./proof-target";
@@ -63,7 +64,6 @@ export const makePgPasswordPersistenceServices = <
   M extends AnyPgTable,
   NativeId,
 >(
-  database: Database,
   mapping: PasswordMapping<S, I, C, AC, A, RS, CE, M, NativeId>,
   proofMapping?: ProofPersistenceMapping<
     any,
@@ -80,7 +80,9 @@ export const makePgPasswordPersistenceServices = <
     any
   >,
 ) =>
-  makeTargetPasswordPersistenceServices(database, mapping, configuration(database), proofMapping);
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPasswordPersistenceServices(database, mapping, configuration(database), proofMapping),
+  );
 
 export function coordinatePgPasswordPersistence<
   D extends Database,
@@ -214,10 +216,15 @@ export const makePgPasswordRegistrationServices = <
   Rq extends AnyPgTable,
   NativeId,
 >(
-  database: Database,
   mapping: PasswordRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
 ) =>
-  makeTargetPasswordRegistrationServices<Registration>(database, mapping, configuration(database));
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPasswordRegistrationServices<Registration>(
+      database,
+      mapping,
+      configuration(database),
+    ),
+  );
 
 export function coordinatePgPasswordRegistration<
   TargetId,

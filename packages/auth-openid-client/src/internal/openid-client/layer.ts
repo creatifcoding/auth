@@ -5,7 +5,6 @@ import type { OpenIdClientConnectedOidcProvider } from "./connected/models";
 import { makeOpenIdClientConnectedProtocol } from "./connected/protocol";
 import type {
   OpenIdClientConfigurationError,
-  OpenIdClientOAuthProtocolOptions,
   OpenIdClientOAuthProvider,
   OpenIdClientOidcProvider,
 } from "./models";
@@ -25,8 +24,6 @@ export interface Options<R = never> {
   readonly providers: ReadonlyArray<Provider<R>>;
   /** Per-request timeout in seconds, from 1 to 30. Defaults to 10. */
   readonly timeoutSeconds?: number;
-  /** Trusted transport: honor abort; never retry token requests or log credentials. */
-  readonly fetch?: OpenIdClientOAuthProtocolOptions<R>["fetch"];
 }
 
 type WithoutBinding<P> = P extends unknown
@@ -45,7 +42,7 @@ export type ProviderRegistration<R = never> = WithoutBinding<Provider<R>> & {
   >;
 };
 
-export type ProviderOptions<R = never> = Pick<Options<R>, "timeoutSeconds" | "fetch"> &
+export type ProviderOptions<R = never> = Pick<Options<R>, "timeoutSeconds"> &
   (ProviderRegistration<R> | { readonly registrations: ReadonlyArray<ProviderRegistration<R>> });
 
 const resolve = <R>(providers: ReadonlyArray<Provider<R>>) =>
@@ -85,7 +82,6 @@ export const provider = <R = never>(
       const protocol = yield* makeOpenIdClientOAuthProtocol<R>({
         providers: registrations,
         timeoutSeconds: options.timeoutSeconds ?? 10,
-        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       });
 
       const access = "registrations" in options ? options.registrations : [options];
@@ -101,7 +97,6 @@ export const provider = <R = never>(
       const connected = yield* makeOpenIdClientConnectedProtocol<R>({
         providers: connectedProviders,
         timeoutSeconds: options.timeoutSeconds ?? 10,
-        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       });
 
       return { ...protocol, connected };
@@ -124,6 +119,5 @@ export const layer = <R = never>(options: Options<R>) =>
     resolveOptions(() => ({
       providers: resolve(options.providers),
       timeoutSeconds: options.timeoutSeconds === undefined ? 10 : options.timeoutSeconds,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     })).pipe(Effect.flatMap(makeOpenIdClientOAuthProtocol<R>)),
   );

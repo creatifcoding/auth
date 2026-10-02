@@ -1,4 +1,3 @@
-import { LifecycleHooks } from "@yielded/auth/Hooks";
 import * as M from "@yielded/auth/OAuth";
 import {
   OAuthConnectedPersistence,
@@ -191,11 +190,8 @@ export const makeTargetOAuthConnectedServices = (
 ) => {
   const retained = captured(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    oauthConnectedPersistence: makeConnected(
-      retained,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+    oauthConnectedPersistence: makeConnected(retained, execution),
   }));
 };
 
@@ -206,11 +202,8 @@ export const makeTargetOAuthConnectedRevocationServices = (
 ) => {
   const retained = captured(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    oauthConnectedRevocations: makeRevocations(
-      retained,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+    oauthConnectedRevocations: makeRevocations(retained, execution),
   }));
 };
 
@@ -256,16 +249,24 @@ export const coordinateTargetOAuthConnectedRevocations = <Transaction, A, E, R>(
     owner,
   );
 
-export const oauthConnectedPersistenceLayer = (
-  services: ReturnType<typeof makeTargetOAuthConnectedServices>,
+export const oauthConnectedPersistenceLayer = <E, R>(
+  services: Effect.Effect<
+    Effect.Success<ReturnType<typeof makeTargetOAuthConnectedServices>>,
+    E,
+    R
+  >,
 ) =>
   Layer.effect(
     OAuthConnectedPersistence,
     Effect.map(services, (value) => value.oauthConnectedPersistence),
   );
 
-export const oauthConnectedRevocationsLayer = (
-  services: ReturnType<typeof makeTargetOAuthConnectedRevocationServices>,
+export const oauthConnectedRevocationsLayer = <E, R>(
+  services: Effect.Effect<
+    Effect.Success<ReturnType<typeof makeTargetOAuthConnectedRevocationServices>>,
+    E,
+    R
+  >,
 ) =>
   Layer.effect(
     OAuthConnectedRevocations,

@@ -33,11 +33,13 @@ type TransactionOf<D> = D extends { readonly transaction: (...args: any[]) => an
   : never;
 
 export const makePasskeyTarget = <
+  DatabaseId,
   D,
   T extends Table,
   Extra = unknown,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: PasskeyTargetConfiguration,
 ) => {
   function coordinatePasskeyPersistence<
@@ -304,9 +306,8 @@ export const makePasskeyTarget = <
   }
 
   return {
-    ...makePasskeyWriteTarget<D, T, Extra, Synchronous>(configuration),
+    ...makePasskeyWriteTarget<DatabaseId, D, T, Extra, Synchronous>(databaseService, configuration),
     makePasskeyCredentialServices: <
-      Database extends D,
       S extends T,
       C extends T,
       F extends T,
@@ -315,11 +316,12 @@ export const makePasskeyTarget = <
       N,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<PasskeyCredentialMapping<S, C, F, O, H, N> & Extra, RSetup>,
-    ) => makeTargetPasskeyCredentials(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetPasskeyCredentials(database, mapping, configuration),
+      ),
     makePasskeyEnrollmentContextServices: <
-      Database extends D,
       S extends T,
       C extends T,
       F extends T,
@@ -329,14 +331,15 @@ export const makePasskeyTarget = <
       N,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<
         PasskeyEnrollmentContextMapping<PasskeyCredentialMapping<S, C, F, O, H, N>, M, N> & Extra,
         RSetup
       >,
-    ) => makeTargetPasskeyEnrollmentContext(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetPasskeyEnrollmentContext(database, mapping, configuration),
+      ),
     makePasskeyPersistenceServices: <
-      Database extends D,
       S extends T,
       C extends T,
       F extends T,
@@ -349,7 +352,6 @@ export const makePasskeyTarget = <
       N,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<
         PasskeyPersistenceMapping<
           PasskeyCredentialMapping<S, C, F, O, H, N>,
@@ -362,9 +364,11 @@ export const makePasskeyTarget = <
           Extra,
         RSetup
       >,
-    ) => makeTargetPasskeyPersistence(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetPasskeyPersistence(database, mapping, configuration),
+      ),
     makePasskeyRegistrationCeremonyServices: <
-      Database extends D,
       M extends T,
       Flow extends T,
       Admission extends T,
@@ -373,12 +377,14 @@ export const makePasskeyTarget = <
       H extends T,
       RSetup = never,
     >(
-      database: Database,
       mapping: PasskeyMappingSource<
         PasskeyRegistrationCeremonyMapping<M, Flow, Admission, Charge, Intent, H> & Extra,
         RSetup
       >,
-    ) => makeTargetPasskeyRegistration(database, mapping, configuration),
+    ) =>
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetPasskeyRegistration(database, mapping, configuration),
+      ),
     coordinatePasskeyPersistence,
     coordinatePasskeyRegistrationCeremony,
   };

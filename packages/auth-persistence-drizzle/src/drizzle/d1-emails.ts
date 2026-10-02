@@ -37,6 +37,7 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Schema, Cause, DateTime, Effect, Option, Context } from "effect";
 import type { Statement } from "effect/sql/Statement";
 
+import { Database as DatabaseService } from "./d1-database";
 import { CurrentD1PlanningDatabase, makeD1Owner } from "./d1-planning";
 import { compileD1ProofCompletionPlan } from "./d1-proofs";
 import { D1BatchStatements } from "./D1BatchStatements";
@@ -1268,10 +1269,9 @@ export const makeD1EmailSignInServices = <
   C extends AnySQLiteTable,
   NativeId,
 >(
-  database: Database,
   mapping: EmailSignInMapping<S, I, C, NativeId>,
 ) =>
-  Effect.succeed({
+  Effect.map(DatabaseService, (database) => ({
     emailSignInTargets: EmailSignInTargets.of({
       lookup: (input) => {
         if (!validEmailSignInConstraints(mapping as any)) return Effect.fail(unavailable());
@@ -1293,9 +1293,9 @@ export const makeD1EmailSignInServices = <
         );
       },
     }),
-  });
+  }));
 
-export const makeD1EmailAddressServices = <
+export const makeD1EmailAddressServices = Effect.fnUntraced(function* <
   S extends AnySQLiteTable,
   I extends AnySQLiteTable,
   C extends AnySQLiteTable,
@@ -1315,7 +1315,6 @@ export const makeD1EmailAddressServices = <
   PCr extends AnySQLiteTable,
   PNativeId,
 >(
-  database: Database,
   mapping: D1EmailAddressMapping<S, I, C, AC, M, NativeId>,
   proofMapping: D1ProofPersistenceMapping<
     PRq,
@@ -1331,56 +1330,57 @@ export const makeD1EmailAddressServices = <
     PCr,
     PNativeId
   >,
-) =>
-  Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
+) {
+  const database = yield* DatabaseService;
 
-    const plans = makeAddressPlans(
-      mapping as unknown as AddressMapping,
-      proofMapping as unknown as ProofMapping,
+  const hooks = yield* LifecycleHooks;
+
+  const plans = makeAddressPlans(
+    mapping as unknown as AddressMapping,
+    proofMapping as unknown as ProofMapping,
+  );
+
+  const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
+    Effect.gen(function* () {
+      if (yield* hasCommitScope) return yield* unavailable();
+
+      return yield* executeStandalone(plan, 2);
+    }).pipe(
+      Effect.provideService(CurrentD1PlanningDatabase, database),
+      Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
+      Effect.provideService(LifecycleHooks, hooks),
     );
 
-    const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
-      Effect.gen(function* () {
-        if (yield* hasCommitScope) return yield* unavailable();
+  const service: EmailAddressPersistence["Service"] = {
+    target: (input) =>
+      plans
+        .target(input)
+        .pipe(
+          Effect.provideService(CurrentD1PlanningDatabase, database),
+          Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
+          Effect.provideService(LifecycleHooks, hooks),
+          translateFailure,
+        ),
+    checkCompletion: (input) =>
+      plans
+        .checkCompletion(input)
+        .pipe(
+          Effect.provideService(CurrentD1PlanningDatabase, database),
+          Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
+          Effect.provideService(LifecycleHooks, hooks),
+          translateFailure,
+        ),
+    verifyWithProof: (input, prepare) =>
+      run(plans.verifyWithProof(input, prepare)).pipe(translateFailure),
+    changeWithProof: (input, prepare) =>
+      run(plans.changeWithProof(input, prepare)).pipe(translateFailure),
+    cleanup: (input, prepare) => run(plans.cleanup(input, prepare)).pipe(translateFailure),
+  };
 
-        return yield* executeStandalone(plan, 2);
-      }).pipe(
-        Effect.provideService(CurrentD1PlanningDatabase, database),
-        Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
-        Effect.provideService(LifecycleHooks, hooks),
-      );
+  return { emailAddressPersistence: service };
+});
 
-    const service: EmailAddressPersistence["Service"] = {
-      target: (input) =>
-        plans
-          .target(input)
-          .pipe(
-            Effect.provideService(CurrentD1PlanningDatabase, database),
-            Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
-            Effect.provideService(LifecycleHooks, hooks),
-            translateFailure,
-          ),
-      checkCompletion: (input) =>
-        plans
-          .checkCompletion(input)
-          .pipe(
-            Effect.provideService(CurrentD1PlanningDatabase, database),
-            Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
-            Effect.provideService(LifecycleHooks, hooks),
-            translateFailure,
-          ),
-      verifyWithProof: (input, prepare) =>
-        run(plans.verifyWithProof(input, prepare)).pipe(translateFailure),
-      changeWithProof: (input, prepare) =>
-        run(plans.changeWithProof(input, prepare)).pipe(translateFailure),
-      cleanup: (input, prepare) => run(plans.cleanup(input, prepare)).pipe(translateFailure),
-    };
-
-    return { emailAddressPersistence: service };
-  });
-
-export const makeD1EmailRegistrationServices = <
+export const makeD1EmailRegistrationServices = Effect.fnUntraced(function* <
   Registration,
   S extends AnySQLiteTable,
   I extends AnySQLiteTable,
@@ -1401,7 +1401,6 @@ export const makeD1EmailRegistrationServices = <
   PCr extends AnySQLiteTable,
   PNativeId,
 >(
-  database: Database,
   mapping: D1EmailRegistrationMapping<Registration, S, I, C, AC, Rq, NativeId>,
   proofMapping: D1ProofPersistenceMapping<
     PRq,
@@ -1417,44 +1416,45 @@ export const makeD1EmailRegistrationServices = <
     PCr,
     PNativeId
   >,
-) =>
-  Effect.gen(function* () {
-    const hooks = yield* LifecycleHooks;
+) {
+  const database = yield* DatabaseService;
 
-    const plans = makeRegistrationPlans(
-      mapping as unknown as RegistrationMapping<Registration> & {
-        readonly d1: AddressMapping["d1"];
-      },
-      proofMapping as unknown as ProofMapping,
+  const hooks = yield* LifecycleHooks;
+
+  const plans = makeRegistrationPlans(
+    mapping as unknown as RegistrationMapping<Registration> & {
+      readonly d1: AddressMapping["d1"];
+    },
+    proofMapping as unknown as ProofMapping,
+  );
+
+  const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
+    Effect.gen(function* () {
+      if (yield* hasCommitScope) return yield* unavailable();
+
+      return yield* executeStandalone(plan, 2);
+    }).pipe(
+      Effect.provideService(CurrentD1PlanningDatabase, database),
+      Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
+      Effect.provideService(LifecycleHooks, hooks),
     );
 
-    const run = <Out, Err, Env>(plan: Effect.Effect<Planned<Out>, Err, Env>) =>
-      Effect.gen(function* () {
-        if (yield* hasCommitScope) return yield* unavailable();
+  const service: EmailRegistrationAuthority<Registration> = {
+    inspect: (input) =>
+      plans
+        .inspect(input)
+        .pipe(
+          Effect.provideService(CurrentD1PlanningDatabase, database),
+          Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
+          Effect.provideService(LifecycleHooks, hooks),
+          translateFailure,
+        ),
+    registerWithProof: (input, prepare) =>
+      run(plans.registerWithProof(input, prepare)).pipe(translateFailure),
+  };
 
-        return yield* executeStandalone(plan, 2);
-      }).pipe(
-        Effect.provideService(CurrentD1PlanningDatabase, database),
-        Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
-        Effect.provideService(LifecycleHooks, hooks),
-      );
-
-    const service: EmailRegistrationAuthority<Registration> = {
-      inspect: (input) =>
-        plans
-          .inspect(input)
-          .pipe(
-            Effect.provideService(CurrentD1PlanningDatabase, database),
-            Effect.provideService(CurrentEmailSql, database as unknown as EmailSqlDatabase),
-            Effect.provideService(LifecycleHooks, hooks),
-            translateFailure,
-          ),
-      registerWithProof: (input, prepare) =>
-        run(plans.registerWithProof(input, prepare)).pipe(translateFailure),
-    };
-
-    return { registrationAuthority: service };
-  });
+  return { registrationAuthority: service };
+});
 
 type CoordinatorError<E> = E | EmailUnavailable | HookConfigurationError;
 

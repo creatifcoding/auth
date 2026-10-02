@@ -14,6 +14,7 @@ import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { Database as DatabaseService } from "./mysql-database";
 import type {
   AuthenticationAuthorityMapping,
   PendingAuthenticationMapping,
@@ -52,9 +53,11 @@ export const makeMysqlAuthenticationAuthorityServices = <
   P extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: AuthenticationAuthorityMapping<Claims, S, C, F, P, NativeId>,
-) => makeTargetAuthenticationAuthorityServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetAuthenticationAuthorityServices<Claims>(database, mapping, configuration(database)),
+  );
 
 export const makeMysqlPendingAuthenticationServices = <
   Claims,
@@ -64,9 +67,11 @@ export const makeMysqlPendingAuthenticationServices = <
   F extends AnyMySqlTable,
   NativeId,
 >(
-  database: Database,
   mapping: PendingAuthenticationMapping<Claims, S, C, P, F, NativeId>,
-) => makeTargetPendingAuthenticationServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPendingAuthenticationServices<Claims>(database, mapping, configuration(database)),
+  );
 
 export const makeMysqlStatefulSessionServices = <
   Claims,
@@ -78,9 +83,11 @@ export const makeMysqlStatefulSessionServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: StatefulSessionMapping<Claims, S, C, Session, F, P, NativeId, NativeSessionId>,
-) => makeTargetStatefulSessionServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetStatefulSessionServices<Claims>(database, mapping, configuration(database)),
+  );
 
 export const makeMysqlSignedSessionValidityServices = <
   S extends AnyMySqlTable,
@@ -88,9 +95,11 @@ export const makeMysqlSignedSessionValidityServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SignedSessionValidityMapping<S, T, NativeId, NativeSessionId>,
-) => makeTargetSignedSessionValidityServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetSignedSessionValidityServices(database, mapping, configuration(database)),
+  );
 
 export function coordinateMysqlAuthenticationAuthority<
   D extends Database,
@@ -579,10 +588,12 @@ export const makeMysqlSessionStepUpServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SessionStepUpMapping<NoInfer<Claims>, S, C, I, Session, T, NativeId, NativeSessionId>,
   target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
-) => makeTargetSessionStepUpServices(database, mapping, target, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetSessionStepUpServices(database, mapping, target, configuration(database)),
+  );
 
 export function coordinateMysqlSessionStepUp<
   Claims,

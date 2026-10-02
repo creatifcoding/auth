@@ -5,7 +5,6 @@ import { resolveOptions, resolveProvider, type ProviderOptions } from "../option
 import type {
   OpenIdClientConnectedOAuthProvider,
   OpenIdClientConnectedOidcProvider,
-  OpenIdClientConnectedProtocolOptions,
 } from "./models";
 import { makeOpenIdClientConnectedProtocol } from "./protocol";
 
@@ -17,8 +16,6 @@ export interface Options<R = never> {
   readonly providers: ReadonlyArray<Provider<R>>;
   /** Per-request timeout in seconds, from 1 to 30. Defaults to 10. */
   readonly timeoutSeconds?: number;
-  /** Trusted transport: honor abort; never retry token requests or log credentials. */
-  readonly fetch?: OpenIdClientConnectedProtocolOptions<R>["fetch"];
 }
 
 /** Connected grants with the same registration/authentication defaults as
@@ -44,6 +41,5 @@ export const layer = <R = never>(options: Options<R>) =>
             },
       ),
       timeoutSeconds: options.timeoutSeconds === undefined ? 10 : options.timeoutSeconds,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     })).pipe(Effect.flatMap(makeOpenIdClientConnectedProtocol<R>)),
   );

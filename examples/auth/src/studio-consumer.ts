@@ -12,8 +12,7 @@ import * as TotpCrypto from "@yielded/auth-crypto/Totp";
 import * as Mapping from "@yielded/auth-persistence-drizzle";
 import * as Native from "@yielded/auth-persistence-drizzle/Postgres";
 import * as PasskeyProtocol from "@yielded/auth-simplewebauthn/Server";
-import { type AnyRelations, eq } from "drizzle-orm";
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
+import { eq } from "drizzle-orm";
 import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { Redacted } from "effect";
 import { DateTime, Effect, Layer, Schema } from "effect";
@@ -312,321 +311,322 @@ const actionEvidence = Effect.fn("Studio.actionEvidence")(function* (
   });
 });
 
-export const makeStudioStorage = Effect.fn("Studio.storage")(function* (
-  db: EffectPgDatabase<AnyRelations>,
-) {
-  const authMapping = {
-    ...nativeCommon,
-    pending: { pending: pendingMapping, flow: flowMapping },
-    constraints: Mapping.requiredPendingAuthenticationConstraints,
-  };
+export const studioStorage = Layer.unwrap(
+  Effect.gen(function* () {
+    const db = yield* Native.Database;
 
-  const { authenticationAuthority } = yield* Native.makeAuthenticationAuthorityServices(
-    db,
-    authMapping,
-  );
-
-  const { pendingAuthentication } = yield* Native.makePendingAuthenticationServices(db, {
-    ...nativeCommon,
-    pending: pendingMapping,
-    flow: flowMapping,
-    constraints: Mapping.requiredPendingAuthenticationConstraints,
-  });
-
-  const state = yield* Native.makeStatefulSessionServices(db, {
-    ...nativeCommon,
-    session: sessionMapping,
-    sessionId,
-    flow: flowMapping,
-    pending: pendingMapping,
-    constraints: Mapping.requiredStatefulPendingConstraints,
-  });
-
-  const stepUp = yield* Native.makeSessionStepUpServices(
-    db,
-    {
+    const authMapping = {
       ...nativeCommon,
-      intent: {
-        table: stepUpIntents,
-        digest: "digest",
-        version: "version",
-        flowId: "flowId",
-        subjectId: "subjectId",
-        bindingDigest: "bindingDigest",
-        snapshot: "snapshot",
-        expiresAt: "expiresAt",
-        attemptLimit: "attemptLimit",
-        failedAttempts: "failedAttempts",
-        consumed: "consumed",
-        encodeInstant: DateTime.toDateUtc,
-        encodeInsert: (intent, ids) => ({
-          digest: intent.digest,
-          version: intent.version,
-          flowId: intent.flowId,
-          subjectId: ids.subjectId,
-          bindingDigest: intent.bindingDigest,
-          snapshot: Schema.encodeSync(Schema.fromJsonString(Sessions.SessionStepUpIntent))(intent),
-          expiresAt: DateTime.toDateUtc(intent.expiresAt),
-          attemptLimit: intent.attemptLimit,
-          failedAttempts: 0,
-          consumed: false,
-        }),
-        allocateVersionSync: nextRevision,
-      },
-      source: {
-        kind: "Stateful",
-        session: {
-          ...sessionMapping,
-          credentialVersion: "credentialVersion",
-          authenticatedAt: "authenticatedAt",
+      pending: { pending: pendingMapping, flow: flowMapping },
+      constraints: Mapping.requiredPendingAuthenticationConstraints,
+    };
+
+    const { authenticationAuthority } =
+      yield* Native.makeAuthenticationAuthorityServices(authMapping);
+
+    const { pendingAuthentication } = yield* Native.makePendingAuthenticationServices({
+      ...nativeCommon,
+      pending: pendingMapping,
+      flow: flowMapping,
+      constraints: Mapping.requiredPendingAuthenticationConstraints,
+    });
+
+    const state = yield* Native.makeStatefulSessionServices({
+      ...nativeCommon,
+      session: sessionMapping,
+      sessionId,
+      flow: flowMapping,
+      pending: pendingMapping,
+      constraints: Mapping.requiredStatefulPendingConstraints,
+    });
+
+    const stepUp = yield* Native.makeSessionStepUpServices(
+      {
+        ...nativeCommon,
+        intent: {
+          table: stepUpIntents,
+          digest: "digest",
+          version: "version",
+          flowId: "flowId",
+          subjectId: "subjectId",
+          bindingDigest: "bindingDigest",
+          snapshot: "snapshot",
+          expiresAt: "expiresAt",
+          attemptLimit: "attemptLimit",
+          failedAttempts: "failedAttempts",
+          consumed: "consumed",
+          encodeInstant: DateTime.toDateUtc,
+          encodeInsert: (intent, ids) => ({
+            digest: intent.digest,
+            version: intent.version,
+            flowId: intent.flowId,
+            subjectId: ids.subjectId,
+            bindingDigest: intent.bindingDigest,
+            snapshot: Schema.encodeSync(Schema.fromJsonString(Sessions.SessionStepUpIntent))(
+              intent,
+            ),
+            expiresAt: DateTime.toDateUtc(intent.expiresAt),
+            attemptLimit: intent.attemptLimit,
+            failedAttempts: 0,
+            consumed: false,
+          }),
+          allocateVersionSync: nextRevision,
         },
-        sessionId,
-        constraints: { sessionDigest: "unique(session.digest)" },
+        source: {
+          kind: "Stateful",
+          session: {
+            ...sessionMapping,
+            credentialVersion: "credentialVersion",
+            authenticatedAt: "authenticatedAt",
+          },
+          sessionId,
+          constraints: { sessionDigest: "unique(session.digest)" },
+        },
+        constraints: Mapping.requiredSessionStepUpConstraints,
       },
-      constraints: Mapping.requiredSessionStepUpConstraints,
-    },
-    sessions.SessionStepUpPersistence,
-  );
+      sessions.SessionStepUpPersistence,
+    );
 
-  const registration = yield* Native.makePasskeyRegistrationServices(
-    db,
-    Studio.registrationMapping,
-  );
+    const registration = yield* Native.makePasskeyRegistrationServices(Studio.registrationMapping);
 
-  // Subject security revision is the shared native authority for both existing
-  // sessions and pending logins, so credential changes invalidate them immediately.
-  const management = yield* Native.makePasskeyManagementServices(db, {
-    ...Studio.managementMapping,
-    write: {
-      ...Studio.write,
-      policy: { ...Studio.write.policy, requirement: (row) => Effect.succeed(requirementFor(row)) },
-    },
-    invalidation: { ...Studio.managementMapping.invalidation, mutations: [] },
-  });
+    // Subject security revision is the shared native authority for both existing
+    // sessions and pending logins, so credential changes invalidate them immediately.
+    const management = yield* Native.makePasskeyManagementServices({
+      ...Studio.managementMapping,
+      write: {
+        ...Studio.write,
+        policy: {
+          ...Studio.write.policy,
+          requirement: (row) => Effect.succeed(requirementFor(row)),
+        },
+      },
+      invalidation: { ...Studio.managementMapping.invalidation, mutations: [] },
+    });
 
-  const assertions = yield* Native.makePasskeyPersistenceServices(db, Studio.base);
-  const credentials = yield* Native.makePasskeyCredentialServices(db, Studio.read);
+    const assertions = yield* Native.makePasskeyPersistenceServices(Studio.base);
+    const credentials = yield* Native.makePasskeyCredentialServices(Studio.read);
 
-  const enrollment = yield* Native.makePasskeyEnrollmentContextServices(db, {
-    moduleId: Studio.base.moduleId,
-    read: Studio.read,
-    module: Studio.base.module,
-  });
+    const enrollment = yield* Native.makePasskeyEnrollmentContextServices({
+      moduleId: Studio.base.moduleId,
+      read: Studio.read,
+      module: Studio.base.module,
+    });
 
-  const select = (purpose: string) =>
-    purpose === "registration"
-      ? registration.passkeyPersistence
-      : purpose === "enrollment"
-        ? management.passkeyPersistence
-        : assertions.passkeyPersistence;
+    const select = (purpose: string) =>
+      purpose === "registration"
+        ? registration.passkeyPersistence
+        : purpose === "enrollment"
+          ? management.passkeyPersistence
+          : assertions.passkeyPersistence;
 
-  const persistence = Passkey.PasskeyPersistence.of({
-    ...assertions.passkeyPersistence,
-    context: (input) => select(input.purpose).context(input),
-    claim: (input, prepare) => select(input.ceremony.purpose).claim(input, prepare),
-    settle: (input, prepare) => select(input.claim.ceremony.purpose).settle(input, prepare),
-  });
+    const persistence = Passkey.PasskeyPersistence.of({
+      ...assertions.passkeyPersistence,
+      context: (input) => select(input.purpose).context(input),
+      claim: (input, prepare) => select(input.ceremony.purpose).claim(input, prepare),
+      settle: (input, prepare) => select(input.claim.ceremony.purpose).settle(input, prepare),
+    });
 
-  const totp = yield* Native.makeTotpPersistenceServices(db, {
-    moduleId: "studio/totp",
-    policy: authenticatorPolicy,
-    constraints: Mapping.requiredTotpConstraints,
-    subjectIds: Studio.read.subjectIds,
-    subject: {
-      table: Studio.subject,
-      id: "id",
-      securityRevision: "securityRevision",
-      factorEnabled: "totpEnabled",
-      activeCondition: Studio.read.subject.activeCondition,
-      encodeEnabled: (value) => value,
-      decodeRequirement: requirementFor,
-    },
-    factor: {
-      table: factorSecrets,
-      scope: "scope",
-      state: "state",
-      version: "version",
-      encodeInsert: (value) => value,
-    },
-    credential: {
-      table: Studio.factor,
-      id: "credentialId",
-      subjectId: "subjectId",
-      revision: "revision",
-      status: "status",
-      activeCondition: Studio.read.authority.activeCondition,
-      encodeStatus: (active) => (active ? "active" : "removed"),
-      encodeInsert: (value) => ({
-        credentialId: value.credentialId,
-        subjectId: value.subjectId,
-        revision: value.revision,
-        status: value.active ? "active" : "removed",
+    const totp = yield* Native.makeTotpPersistenceServices({
+      moduleId: "studio/totp",
+      policy: authenticatorPolicy,
+      constraints: Mapping.requiredTotpConstraints,
+      subjectIds: Studio.read.subjectIds,
+      subject: {
+        table: Studio.subject,
+        id: "id",
+        securityRevision: "securityRevision",
+        factorEnabled: "totpEnabled",
+        activeCondition: Studio.read.subject.activeCondition,
+        encodeEnabled: (value) => value,
+        decodeRequirement: requirementFor,
+      },
+      factor: {
+        table: factorSecrets,
+        scope: "scope",
+        state: "state",
+        version: "version",
+        encodeInsert: (value) => value,
+      },
+      credential: {
+        table: Studio.factor,
+        id: "credentialId",
+        subjectId: "subjectId",
+        revision: "revision",
+        status: "status",
+        activeCondition: Studio.read.authority.activeCondition,
+        encodeStatus: (active) => (active ? "active" : "removed"),
+        encodeInsert: (value) => ({
+          credentialId: value.credentialId,
+          subjectId: value.subjectId,
+          revision: value.revision,
+          status: value.active ? "active" : "removed",
+        }),
+      },
+      engineNowMillis: Studio.base.clock.engineNowMillis,
+    });
+
+    return Layer.mergeAll(
+      Layer.succeed(Sessions.AuthenticationAuthority, authenticationAuthority),
+      Layer.succeed(sessions.PendingAuthentication, pendingAuthentication),
+      Layer.succeed(sessions.StatefulSessionPersistence, state.statefulSessionPersistence),
+      Layer.succeed(sessions.SessionRepository, state.sessionRepository),
+      Layer.succeed(sessions.SessionStepUpPersistence, stepUp.sessionStepUpPersistence),
+      Layer.succeed(Passkey.PasskeyPersistence, persistence),
+      Layer.succeed(Passkey.PasskeyCredentials, credentials.passkeyCredentials),
+      Layer.succeed(Passkey.PasskeyEnrollmentContext, enrollment.passkeyEnrollmentContext),
+      Layer.succeed(Passkey.PasskeyManagementPersistence, management.passkeyManagementPersistence),
+      Layer.succeed(
+        StudioAuth.strategies.registration.RegistrationAuthority,
+        registration.passkeyRegistrationAuthority,
+      ),
+      Layer.succeed(Totp.TotpPersistence, totp.totpPersistence),
+      Layer.succeed(StudioAuth.strategies.passkey.SessionClaims, {
+        resolve: ({ subjectId }) =>
+          Effect.gen(function* () {
+            const [member] = yield* db
+              .select()
+              .from(Studio.subject)
+              .where(eq(Studio.subject.id, subjectId));
+
+            if (member === undefined) return yield* Passkey.PasskeyUnavailable.make({});
+
+            return {
+              memberId: member.id,
+              organization: member.organization,
+              permissions: ["design:edit"] as const,
+            };
+          }).pipe(Effect.mapError(() => Passkey.PasskeyUnavailable.make({}))),
       }),
-    },
-    engineNowMillis: Studio.base.clock.engineNowMillis,
-  });
+    );
+  }),
+);
 
-  return Layer.mergeAll(
-    Layer.succeed(Sessions.AuthenticationAuthority, authenticationAuthority),
-    Layer.succeed(sessions.PendingAuthentication, pendingAuthentication),
-    Layer.succeed(sessions.StatefulSessionPersistence, state.statefulSessionPersistence),
-    Layer.succeed(sessions.SessionRepository, state.sessionRepository),
-    Layer.succeed(sessions.SessionStepUpPersistence, stepUp.sessionStepUpPersistence),
-    Layer.succeed(Passkey.PasskeyPersistence, persistence),
-    Layer.succeed(Passkey.PasskeyCredentials, credentials.passkeyCredentials),
-    Layer.succeed(Passkey.PasskeyEnrollmentContext, enrollment.passkeyEnrollmentContext),
-    Layer.succeed(Passkey.PasskeyManagementPersistence, management.passkeyManagementPersistence),
-    Layer.succeed(
-      StudioAuth.strategies.registration.RegistrationAuthority,
-      registration.passkeyRegistrationAuthority,
-    ),
-    Layer.succeed(Totp.TotpPersistence, totp.totpPersistence),
-    Layer.succeed(StudioAuth.strategies.passkey.SessionClaims, {
-      resolve: ({ subjectId }) =>
-        Effect.gen(function* () {
-          const [member] = yield* db
-            .select()
-            .from(Studio.subject)
-            .where(eq(Studio.subject.id, subjectId));
+export const makeStudioLive = (binding: Operations.RequestBindingConfiguration) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const db = yield* Native.Database;
+      const hook = Hooks.hookContribution("studio/registration-audit");
 
-          if (member === undefined) return yield* Passkey.PasskeyUnavailable.make({});
+      const hookLayer = Hooks.composeHooks(hook).pipe(
+        Layer.provide(
+          hook.layer({
+            after: (event) =>
+              event.snapshot.action === "registration"
+                ? db
+                    .insert(registrationEvents)
+                    .values({
+                      id: event.id,
+                      snapshot: Schema.encodeSync(Schema.fromJsonString(Hooks.LifecycleSnapshot))(
+                        event.snapshot,
+                      ),
+                    })
+                    .onConflictDoNothing()
+                    .pipe(Effect.asVoid)
+                : Effect.void,
+          }),
+        ),
+      );
 
-          return {
-            memberId: member.id,
-            organization: member.organization,
-            permissions: ["design:edit"] as const,
-          };
-        }).pipe(Effect.mapError(() => Passkey.PasskeyUnavailable.make({}))),
+      const storage = studioStorage.pipe(Layer.provide(hookLayer));
+
+      const base = Layer.mergeAll(
+        storage,
+        Passkey.PasskeyConfig.layer({ profiles: [Studio.profile] }),
+        hookLayer,
+        WebCrypto.layerWebCrypto,
+        Auth.RequestBindingConfig.layer(binding),
+        TotpCrypto.layer,
+      );
+
+      const strategy = sessions.statefulLayer(sessionPolicy).pipe(Layer.provide(base));
+
+      const completions = Layer.mergeAll(
+        sessions.completionLayer({ pendingLifetimeMillis: 120000, attemptLimit: 5 }),
+        sessions.stepUpLayer([
+          {
+            profileId: Sessions.SessionStepUpProfileId.make("management"),
+            generation: 1,
+            requirement,
+            lifetimeMillis: 120000,
+            attemptLimit: 5,
+          },
+        ]),
+      ).pipe(Layer.provideMerge(strategy), Layer.provide(base));
+
+      const actions = Layer.mergeAll(
+        Layer.effect(
+          Passkey.PasskeyActionEvidence,
+          Effect.gen(function* () {
+            const sessionStrategy = yield* sessions.SessionStrategy;
+            const authority = yield* Sessions.AuthenticationAuthority;
+
+            return Passkey.PasskeyActionEvidence.of({
+              verify: (input) =>
+                actionEvidence(
+                  input.proof,
+                  input.challenge.revision.subjectId,
+                  input.challenge.flowId,
+                  input.challenge.bindingDigest,
+                ).pipe(
+                  Effect.flatMap((evidence) =>
+                    authority
+                      .requirements(evidence)
+                      .pipe(Effect.map((requirement) => ({ evidence, requirement }))),
+                  ),
+                  Effect.mapError(() => Passkey.PasskeyActionRequired.make({})),
+                  Effect.provideService(sessions.SessionStrategy, sessionStrategy),
+                ),
+            });
+          }),
+        ),
+        Layer.effect(
+          Totp.TotpActionEvidence,
+          Effect.map(sessions.SessionStrategy, (sessionStrategy) => ({
+            verify: (input) =>
+              actionEvidence(
+                input.proof,
+                input.challenge.revision.subjectId,
+                input.challenge.flowId,
+                input.challenge.bindingDigest,
+              ).pipe(
+                Effect.mapError(() => Totp.TotpActionRequired.make({})),
+                Effect.provideService(sessions.SessionStrategy, sessionStrategy),
+              ),
+          })),
+        ),
+      );
+
+      const modules = StudioAuth.strategies;
+
+      const moduleServices = Layer.mergeAll(
+        modules.passkey.layer,
+        modules.registration.layer,
+        modules.keys.layer,
+        modules.authenticator.layer,
+      ).pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(
+            modules.passkey.binding.layer,
+            modules.registration.binding.layer,
+            modules.keys.binding.layer,
+          ),
+        ),
+        Layer.provideMerge(PasskeyProtocol.layer),
+      );
+
+      return Layer.mergeAll(
+        StudioAuth.layer,
+        modules.passkey.handlersLayer,
+        modules.registration.handlersLayer,
+        modules.keys.handlersLayer,
+        modules.authenticator.handlersLayer,
+        sessions.handlersLayer({ maximumAgeMillis: 120000 }),
+        sessions.stepUpHandlersLayer,
+      ).pipe(
+        Layer.provideMerge(moduleServices),
+        Layer.provideMerge(actions),
+        Layer.provideMerge(completions),
+        Layer.provideMerge(base),
+      );
     }),
   );
-});
-
-export const makeStudioLive = Effect.fn("Studio.live")(function* (
-  db: EffectPgDatabase<AnyRelations>,
-  binding: Operations.RequestBindingConfiguration,
-  keys: Totp.TotpSecretKeys["Service"],
-) {
-  const hook = Hooks.hookContribution("studio/registration-audit");
-
-  const hookLayer = Hooks.composeHooks(hook).pipe(
-    Layer.provide(
-      hook.layer({
-        after: (event) =>
-          event.snapshot.action === "registration"
-            ? db
-                .insert(registrationEvents)
-                .values({
-                  id: event.id,
-                  snapshot: Schema.encodeSync(Schema.fromJsonString(Hooks.LifecycleSnapshot))(
-                    event.snapshot,
-                  ),
-                })
-                .onConflictDoNothing()
-                .pipe(Effect.asVoid)
-            : Effect.void,
-      }),
-    ),
-  );
-
-  const storage = yield* makeStudioStorage(db).pipe(Effect.provide(hookLayer));
-
-  const base = Layer.mergeAll(
-    storage,
-    Passkey.PasskeyConfig.layer({ profiles: [Studio.profile] }),
-    hookLayer,
-    WebCrypto.layerWebCrypto,
-    Auth.RequestBindingConfig.layer(binding),
-    TotpCrypto.layer.pipe(Layer.provide(Layer.succeed(Totp.TotpSecretKeys, keys))),
-  );
-
-  const strategy = sessions.statefulLayer(sessionPolicy).pipe(Layer.provide(base));
-
-  const completions = Layer.mergeAll(
-    sessions.completionLayer({ pendingLifetimeMillis: 120000, attemptLimit: 5 }),
-    sessions.stepUpLayer([
-      {
-        profileId: Sessions.SessionStepUpProfileId.make("management"),
-        generation: 1,
-        requirement,
-        lifetimeMillis: 120000,
-        attemptLimit: 5,
-      },
-    ]),
-  ).pipe(Layer.provideMerge(strategy), Layer.provide(base));
-
-  const actions = Layer.mergeAll(
-    Layer.effect(
-      Passkey.PasskeyActionEvidence,
-      Effect.gen(function* () {
-        const sessionStrategy = yield* sessions.SessionStrategy;
-        const authority = yield* Sessions.AuthenticationAuthority;
-
-        return Passkey.PasskeyActionEvidence.of({
-          verify: (input) =>
-            actionEvidence(
-              input.proof,
-              input.challenge.revision.subjectId,
-              input.challenge.flowId,
-              input.challenge.bindingDigest,
-            ).pipe(
-              Effect.flatMap((evidence) =>
-                authority
-                  .requirements(evidence)
-                  .pipe(Effect.map((requirement) => ({ evidence, requirement }))),
-              ),
-              Effect.mapError(() => Passkey.PasskeyActionRequired.make({})),
-              Effect.provideService(sessions.SessionStrategy, sessionStrategy),
-            ),
-        });
-      }),
-    ),
-    Layer.effect(
-      Totp.TotpActionEvidence,
-      Effect.map(sessions.SessionStrategy, (sessionStrategy) => ({
-        verify: (input) =>
-          actionEvidence(
-            input.proof,
-            input.challenge.revision.subjectId,
-            input.challenge.flowId,
-            input.challenge.bindingDigest,
-          ).pipe(
-            Effect.mapError(() => Totp.TotpActionRequired.make({})),
-            Effect.provideService(sessions.SessionStrategy, sessionStrategy),
-          ),
-      })),
-    ),
-  );
-
-  const modules = StudioAuth.strategies;
-
-  const moduleServices = Layer.mergeAll(
-    modules.passkey.layer,
-    modules.registration.layer,
-    modules.keys.layer,
-    modules.authenticator.layer,
-  ).pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        modules.passkey.binding.layer,
-        modules.registration.binding.layer,
-        modules.keys.binding.layer,
-      ),
-    ),
-    Layer.provideMerge(PasskeyProtocol.layer),
-  );
-
-  return Layer.mergeAll(
-    StudioAuth.layer,
-    modules.passkey.handlersLayer,
-    modules.registration.handlersLayer,
-    modules.keys.handlersLayer,
-    modules.authenticator.handlersLayer,
-    sessions.handlersLayer({ maximumAgeMillis: 120000 }),
-    sessions.stepUpHandlersLayer,
-  ).pipe(
-    Layer.provideMerge(moduleServices),
-    Layer.provideMerge(actions),
-    Layer.provideMerge(completions),
-    Layer.provideMerge(base),
-  );
-});

@@ -15,6 +15,7 @@ import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { Database as DatabaseService } from "./pg-database";
 import type {
   AuthenticationAuthorityMapping,
   PendingAuthenticationMapping,
@@ -53,7 +54,6 @@ export const makePgAuthenticationAuthorityServices = <
   Pending extends AnyPgTable,
   NativeSubjectId,
 >(
-  database: Database,
   mapping: AuthenticationAuthorityMapping<
     Claims,
     Subject,
@@ -62,7 +62,10 @@ export const makePgAuthenticationAuthorityServices = <
     Pending,
     NativeSubjectId
   >,
-) => makeTargetAuthenticationAuthorityServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetAuthenticationAuthorityServices<Claims>(database, mapping, configuration(database)),
+  );
 
 export const makePgPendingAuthenticationServices = <
   Claims,
@@ -72,7 +75,6 @@ export const makePgPendingAuthenticationServices = <
   Flow extends AnyPgTable,
   NativeSubjectId,
 >(
-  database: Database,
   mapping: PendingAuthenticationMapping<
     Claims,
     Subject,
@@ -81,7 +83,10 @@ export const makePgPendingAuthenticationServices = <
     Flow,
     NativeSubjectId
   >,
-) => makeTargetPendingAuthenticationServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPendingAuthenticationServices<Claims>(database, mapping, configuration(database)),
+  );
 
 export const makePgStatefulSessionServices = <
   Claims,
@@ -93,7 +98,6 @@ export const makePgStatefulSessionServices = <
   NativeSubjectId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: StatefulSessionMapping<
     Claims,
     Subject,
@@ -104,7 +108,10 @@ export const makePgStatefulSessionServices = <
     NativeSubjectId,
     NativeSessionId
   >,
-) => makeTargetStatefulSessionServices<Claims>(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetStatefulSessionServices<Claims>(database, mapping, configuration(database)),
+  );
 
 export const makePgSignedSessionValidityServices = <
   Subject extends AnyPgTable,
@@ -112,9 +119,11 @@ export const makePgSignedSessionValidityServices = <
   NativeSubjectId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SignedSessionValidityMapping<Subject, Tombstone, NativeSubjectId, NativeSessionId>,
-) => makeTargetSignedSessionValidityServices(database, mapping, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetSignedSessionValidityServices(database, mapping, configuration(database)),
+  );
 
 export function coordinatePgAuthenticationAuthority<
   Claims,
@@ -603,10 +612,12 @@ export const makePgSessionStepUpServices = <
   NativeId,
   NativeSessionId,
 >(
-  database: Database,
   mapping: SessionStepUpMapping<NoInfer<Claims>, S, C, I, Session, T, NativeId, NativeSessionId>,
   target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
-) => makeTargetSessionStepUpServices(database, mapping, target, configuration(database));
+) =>
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetSessionStepUpServices(database, mapping, target, configuration(database)),
+  );
 
 export function coordinatePgSessionStepUp<
   Claims,

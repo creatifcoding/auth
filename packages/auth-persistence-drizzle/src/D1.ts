@@ -1,8 +1,11 @@
 import type { D1Client } from "@effect/sql-d1/D1Client";
 export { makeTotpPersistenceServices, coordinateTotpPersistence } from "./drizzle/d1-totp";
 import type { AnyRelations } from "drizzle-orm";
-import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
+import { type EffectSQLiteD1Database, makeWithDefaults } from "drizzle-orm/effect-d1";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
+
+import { Database } from "./drizzle/d1-database";
+export { Database } from "./drizzle/d1-database";
 
 export {
   makeD1OAuthAccountsServices as makeOAuthAccountsServices,
@@ -52,12 +55,28 @@ export {
   makeD1EmailSignInServices as makeEmailSignInServices,
 } from "./drizzle/d1-emails";
 
-import { type D1GeneratedIdentityMapping } from "./drizzle/model";
+import type {
+  D1GeneratedIdentityMapping,
+  D1SubjectProvisioningMapping,
+  D1ExternalIdentityMapping,
+} from "./drizzle/model";
 
-export {
-  makeD1ExternalIdentityServices as makeExternalIdentityServices,
-  makeD1SubjectProvisioningServices as makeSubjectProvisioningServices,
-};
+export const makeSubjectProvisioningServices = <
+  Subject extends AnySQLiteTable,
+  Identifier extends AnySQLiteTable,
+  Request extends AnySQLiteTable,
+  NativeId,
+>(
+  mapping: D1SubjectProvisioningMapping<Subject, Identifier, Request, NativeId>,
+) => Effect.map(Database, (database) => makeD1SubjectProvisioningServices(database, mapping));
+
+export const makeExternalIdentityServices = <
+  Subject extends AnySQLiteTable,
+  External extends AnySQLiteTable,
+  NativeId,
+>(
+  mapping: D1ExternalIdentityMapping<Subject, External, NativeId>,
+) => Effect.map(Database, (database) => makeD1ExternalIdentityServices(database, mapping));
 
 export const commitMode = "batch" as const;
 
@@ -68,9 +87,8 @@ export const makeIdentityServices = <
   Request extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteD1Database<AnyRelations> & { readonly $client: D1Client },
   mapping: D1GeneratedIdentityMapping<Subject, Identifier, External, Request, NativeId>,
-) => makeD1IdentityServices(database, mapping);
+) => Effect.map(Database, (database) => makeD1IdentityServices(database, mapping));
 
 export {
   makeD1SessionStepUpServices as makeSessionStepUpServices,
@@ -84,16 +102,22 @@ export {
 
 export { passwordPreparedPersistenceLayer } from "./drizzle/password-prepared-target";
 
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 
 import { makeD1OAuthConnectedTarget } from "./drizzle/oauth-connected-drivers";
 import type { OAuthD1Mapping } from "./drizzle/oauth-model";
 
 const connectedTarget = makeD1OAuthConnectedTarget<
+  Database,
   EffectSQLiteD1Database<AnyRelations> & { readonly $client: D1Client },
   AnySQLiteTable<{ dialect: "sqlite" }>,
   OAuthD1Mapping
->({ mode: "batch", dialect: "sqlite", locking: false, standaloneGuard: () => Effect.void });
+>(Database, {
+  mode: "batch",
+  dialect: "sqlite",
+  locking: false,
+  standaloneGuard: () => Effect.void,
+});
 
 export const {
   makeOAuthConnectedServices,
@@ -118,3 +142,6 @@ export {
 export { D1BatchStatements } from "./drizzle/D1BatchStatements";
 
 export { makePhonePersistenceServices, coordinatePhonePersistence } from "./drizzle/d1-phone";
+
+/** Construct Drizzle from the driver's SQL-client Layer. */
+export const databaseLayer = Layer.effect(Database, makeWithDefaults({}));

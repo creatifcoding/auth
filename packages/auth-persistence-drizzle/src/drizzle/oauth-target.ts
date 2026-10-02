@@ -86,11 +86,12 @@ export const sqlClientOAuthStandaloneGuard = (
   database: Parameters<typeof sqlClientTransactionStandaloneGuard>[1],
 ) => sqlClientTransactionStandaloneGuard(unavailable, database);
 
-export const makeOAuthExecution = (
+export const makeOAuthExecution = Effect.fnUntraced(function* (
   database: OAuthNativeDatabase,
-  hooks: LifecycleHooks["Service"],
   configuration: OAuthTargetConfiguration,
-): OAuthExecution => {
+): Effect.fn.Return<OAuthExecution, never, LifecycleHooks> {
+  const hooks = yield* LifecycleHooks;
+
   const execution = makeTransactionExecution(
     CurrentOAuthTransaction,
     database,
@@ -104,7 +105,7 @@ export const makeOAuthExecution = (
     run: (operation, mutation) =>
       execution.run(operation, mutation).pipe(Effect.provideService(LifecycleHooks, hooks)),
   };
-};
+});
 
 const prepareValue = <Value, A>(value: Value, prepare: PrepareOAuthCommit<Value, A>) =>
   Effect.flatMap(CurrentOAuthTransaction, (owner) =>
@@ -394,11 +395,8 @@ export const makeTargetOAuthSignInServices = (
 ) => {
   const captured = captureOAuthMapping(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    oauthSignInPersistence: makeOAuthSignIn(
-      captured,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+    oauthSignInPersistence: makeOAuthSignIn(captured, execution),
   }));
 };
 
@@ -409,11 +407,8 @@ export const makeTargetOAuthRegistrationIntentServices = (
 ) => {
   const captured = captureOAuthMapping(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    oauthRegistrationIntents: makeOAuthRegistrationIntents(
-      captured,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+    oauthRegistrationIntents: makeOAuthRegistrationIntents(captured, execution),
   }));
 };
 
@@ -424,11 +419,8 @@ export const makeTargetOAuthRegistrationServices = <Registration>(
 ) => {
   const captured = captureOAuthMapping(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    registrationAuthority: makeOAuthRegistration<Registration>(
-      captured,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+    registrationAuthority: makeOAuthRegistration<Registration>(captured, execution),
   }));
 };
 
@@ -704,44 +696,45 @@ export const makeTargetOAuthAccountsServices = (
 ) => {
   const captured = captureOAuthMapping(mapping);
 
-  return Effect.map(LifecycleHooks, (hooks) => ({
-    oauthAccountsPersistence: makeOAuthAccounts(
-      captured,
-      makeOAuthExecution(database, hooks, configuration),
-    ),
+  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+    oauthAccountsPersistence: makeOAuthAccounts(captured, execution),
   }));
 };
 
-export const oauthAccountsPersistenceLayer = (
-  services: ReturnType<typeof makeTargetOAuthAccountsServices>,
+export const oauthAccountsPersistenceLayer = <E, R>(
+  services: Effect.Effect<Effect.Success<ReturnType<typeof makeTargetOAuthAccountsServices>>, E, R>,
 ) =>
   Layer.effect(
     OAuthAccountsPersistence,
     Effect.map(services, (value) => value.oauthAccountsPersistence),
   );
 
-export const oauthSignInPersistenceLayer = (
-  services: ReturnType<typeof makeTargetOAuthSignInServices>,
+export const oauthSignInPersistenceLayer = <E, R>(
+  services: Effect.Effect<Effect.Success<ReturnType<typeof makeTargetOAuthSignInServices>>, E, R>,
 ) =>
   Layer.effect(
     OAuthSignInPersistence,
     Effect.map(services, (value) => value.oauthSignInPersistence),
   );
 
-export const oauthRegistrationIntentsLayer = (
-  services: ReturnType<typeof makeTargetOAuthRegistrationIntentServices>,
+export const oauthRegistrationIntentsLayer = <E, R>(
+  services: Effect.Effect<
+    Effect.Success<ReturnType<typeof makeTargetOAuthRegistrationIntentServices>>,
+    E,
+    R
+  >,
 ) =>
   Layer.effect(
     OAuthRegistrationIntents,
     Effect.map(services, (value) => value.oauthRegistrationIntents),
   );
 
-export const oauthRegistrationAuthorityLayer = <Id, Registration>(
+export const oauthRegistrationAuthorityLayer = <Id, Registration, E, R>(
   tag: Context.Key<Id, OAuthRegistrationAuthority<Registration>>,
   services: Effect.Effect<
     { readonly registrationAuthority: OAuthRegistrationAuthority<Registration> },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(

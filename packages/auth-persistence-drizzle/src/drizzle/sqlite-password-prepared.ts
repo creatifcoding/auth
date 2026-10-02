@@ -20,9 +20,11 @@ type TransactionOf<D extends SqlitePasswordDatabase> = Parameters<
 >[0];
 
 export const makeSqlitePasswordPreparedTarget = <
+  DatabaseId,
   D extends SqlitePasswordDatabase,
   Synchronous extends boolean = false,
 >(
+  databaseService: Context.Service<DatabaseId, D>,
   configuration: PasswordTargetConfiguration | ((database: D) => PasswordTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
@@ -245,15 +247,16 @@ export const makeSqlitePasswordPreparedTarget = <
       PCr extends AnySQLiteTable = AnySQLiteTable,
       PNativeId = unknown,
     >(
-      database: D,
       mapping: PasswordPreparedPersistenceMapping<S, I, C, AC, A, RS, CE, M, T, B, NativeId>,
       proofMapping?: PasswordPreparedProofMapping<PS, PC, PM, PSub, PI, PCr, PNativeId>,
     ) =>
-      makeTargetPasswordPreparedPersistenceServices(
-        database,
-        mapping,
-        configurationFor(database),
-        proofMapping,
+      Effect.flatMap(databaseService, (database) =>
+        makeTargetPasswordPreparedPersistenceServices(
+          database,
+          mapping,
+          configurationFor(database),
+          proofMapping,
+        ),
       ),
     coordinatePasswordPreparedPersistence,
   };

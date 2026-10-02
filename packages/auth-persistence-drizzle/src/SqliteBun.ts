@@ -1,7 +1,15 @@
 import type { AnyRelations } from "drizzle-orm";
 import { type EffectSQLiteBunDatabase, makeWithDefaults } from "drizzle-orm/effect-sqlite-bun";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
+
+/** The application-owned Drizzle database used to construct persistence services. */
+export class Database extends Context.Service<Database, EffectSQLiteBunDatabase<AnyRelations>>()(
+  "effect-auth/persistence-drizzle/SqliteBun/Database",
+) {}
+
+/** Construct Drizzle from the driver's SQL-client Layer. */
+export const databaseLayer = Layer.effect(Database, makeWithDefaults({}));
 
 import { sqlClientEmailStandaloneGuard } from "./drizzle/email-target";
 import type {
@@ -22,28 +30,35 @@ import { makeSqlitePasswordTarget, sqlitePasswordConfiguration } from "./drizzle
 import { makeSqliteProofTarget, sqliteProofConfiguration } from "./drizzle/sqlite-proofs";
 import { makeSqliteSessionTarget, sqliteSessionConfiguration } from "./drizzle/sqlite-sessions";
 
-const sessionTarget = makeSqliteSessionTarget<EffectSQLiteBunDatabase<AnyRelations>>((database) =>
-  sqliteSessionConfiguration("interactive", sqlClientSessionStandaloneGuard(database)),
+const sessionTarget = makeSqliteSessionTarget<Database, EffectSQLiteBunDatabase<AnyRelations>>(
+  Database,
+  (database) =>
+    sqliteSessionConfiguration("interactive", sqlClientSessionStandaloneGuard(database)),
 );
 
-const proofTarget = makeSqliteProofTarget<EffectSQLiteBunDatabase<AnyRelations>>((database) =>
-  sqliteProofConfiguration("interactive", sqlClientProofStandaloneGuard(database)),
+const proofTarget = makeSqliteProofTarget<Database, EffectSQLiteBunDatabase<AnyRelations>>(
+  Database,
+  (database) => sqliteProofConfiguration("interactive", sqlClientProofStandaloneGuard(database)),
 );
 
-const passwordTarget = makeSqlitePasswordTarget<EffectSQLiteBunDatabase<AnyRelations>>((database) =>
-  sqlitePasswordConfiguration(
-    "interactive",
-    sqlClientPasswordStandaloneGuard(database),
-    sqlClientProofStandaloneGuard(database),
-  ),
+const passwordTarget = makeSqlitePasswordTarget<Database, EffectSQLiteBunDatabase<AnyRelations>>(
+  Database,
+  (database) =>
+    sqlitePasswordConfiguration(
+      "interactive",
+      sqlClientPasswordStandaloneGuard(database),
+      sqlClientProofStandaloneGuard(database),
+    ),
 );
 
-const emailTarget = makeSqliteEmailTarget<EffectSQLiteBunDatabase<AnyRelations>>((database) =>
-  sqliteEmailConfiguration(
-    "interactive",
-    sqlClientEmailStandaloneGuard(database),
-    sqlClientProofStandaloneGuard(database),
-  ),
+const emailTarget = makeSqliteEmailTarget<Database, EffectSQLiteBunDatabase<AnyRelations>>(
+  Database,
+  (database) =>
+    sqliteEmailConfiguration(
+      "interactive",
+      sqlClientEmailStandaloneGuard(database),
+      sqlClientProofStandaloneGuard(database),
+    ),
 );
 
 export const {
@@ -85,9 +100,9 @@ export const makeIdentityServices = <
   Request extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteBunDatabase<AnyRelations>,
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => makeSqliteIdentityServices(database, mapping, "interactive");
+) =>
+  Effect.map(Database, (database) => makeSqliteIdentityServices(database, mapping, "interactive"));
 
 export const makeSubjectProvisioningServices = <
   Subject extends AnySQLiteTable,
@@ -95,24 +110,26 @@ export const makeSubjectProvisioningServices = <
   Request extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteBunDatabase<AnyRelations>,
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
-) => makeSqliteSubjectProvisioningServices(database, mapping, "interactive");
+) =>
+  Effect.map(Database, (database) =>
+    makeSqliteSubjectProvisioningServices(database, mapping, "interactive"),
+  );
 
 export const makeExternalIdentityServices = <
   Subject extends AnySQLiteTable,
   External extends AnySQLiteTable,
   NativeId,
 >(
-  database: EffectSQLiteBunDatabase<AnyRelations>,
   mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => makeSqliteExternalIdentityServices(database, mapping);
+) => Effect.map(Database, (database) => makeSqliteExternalIdentityServices(database, mapping));
 
 import { makeSqlitePasswordPreparedTarget } from "./drizzle/sqlite-password-prepared";
 
 const passwordPreparedTarget = makeSqlitePasswordPreparedTarget<
+  Database,
   EffectSQLiteBunDatabase<AnyRelations>
->((database) =>
+>(Database, (database) =>
   sqlitePasswordConfiguration(
     "interactive",
     sqlClientPasswordStandaloneGuard(database),
@@ -129,9 +146,10 @@ import { makeOAuthTarget } from "./drizzle/oauth-drivers";
 import { sqlClientOAuthStandaloneGuard } from "./drizzle/oauth-target";
 
 const oauthTarget = makeOAuthTarget<
+  Database,
   EffectSQLiteBunDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,
@@ -157,9 +175,10 @@ import { makePasskeyTarget } from "./drizzle/passkey-drivers";
 import { sqlClientPasskeyStandaloneGuard } from "./drizzle/passkey-target";
 
 const passkeyTarget = makePasskeyTarget<
+  Database,
   EffectSQLiteBunDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,
@@ -182,9 +201,10 @@ export const {
 import { makeTotpTarget, sqlClientTotpStandaloneGuard } from "./drizzle/totp-target";
 
 const totpTarget = makeTotpTarget<
+  Database,
   EffectSQLiteBunDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,
@@ -196,9 +216,10 @@ export const { makeTotpPersistenceServices, coordinateTotpPersistence } = totpTa
 import { makePhoneTarget, sqlClientPhoneStandaloneGuard } from "./drizzle/phone-target";
 
 const phoneTarget = makePhoneTarget<
+  Database,
   EffectSQLiteBunDatabase<AnyRelations>,
   AnySQLiteTable<{ dialect: "sqlite" }>
->({
+>(Database, {
   mode: "interactive",
   dialect: "sqlite",
   locking: false,

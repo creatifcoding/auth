@@ -15,6 +15,7 @@ import {
   makeTargetPasswordPreparedPersistenceServices,
   coordinateTargetPasswordPreparedPersistence,
 } from "./password-prepared-target";
+import { Database as DatabaseService } from "./pg-database";
 import { pgPasswordConfiguration as configuration } from "./pg-passwords";
 import type { SuppliedService } from "./SuppliedService";
 type Database = PostgresDatabase<AnyRelations> | PgliteDatabase<AnyRelations>;
@@ -40,15 +41,16 @@ export const makePgPasswordPreparedPersistenceServices = <
   PCr extends AnyPgTable = AnyPgTable,
   PNativeId = unknown,
 >(
-  database: Database,
   mapping: PasswordPreparedPersistenceMapping<S, I, C, AC, A, RS, CE, M, T, B, NativeId>,
   proofMapping?: PasswordPreparedProofMapping<PS, PC, PM, PSub, PI, PCr, PNativeId>,
 ) =>
-  makeTargetPasswordPreparedPersistenceServices(
-    database,
-    mapping,
-    configuration(database),
-    proofMapping,
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPasswordPreparedPersistenceServices(
+      database,
+      mapping,
+      configuration(database),
+      proofMapping,
+    ),
   );
 
 export function coordinatePgPasswordPreparedPersistence<

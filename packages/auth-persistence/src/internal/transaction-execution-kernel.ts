@@ -68,7 +68,7 @@ export const makeTransactionExecutionKernel = (
     database: {
       readonly $client: Pick<SqlClient.SqlClient, "transactionService">;
     },
-  ) => requireStandalone(unavailable, database.$client);
+  ) => requireStandalone(unavailable, database.$client.transactionService);
 
   const makeTransactionExecution = <Failure, OwnerId>(
     ownerTag: Context.Key<OwnerId, TransactionOwner<Failure>>,

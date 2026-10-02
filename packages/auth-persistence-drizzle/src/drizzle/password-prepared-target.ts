@@ -146,12 +146,12 @@ export const coordinateTargetPasswordPreparedPersistence = <Transaction, A, E, R
     return result.value;
   });
 
-export const passwordPreparedPersistenceLayer = <Id>(
+export const passwordPreparedPersistenceLayer = <Id, E, R>(
   tag: Context.Key<Id, PasswordPreparedPersistence>,
   services: Effect.Effect<
     { readonly passwordPreparedPersistence: PasswordPreparedPersistence },
-    never,
-    LifecycleHooks
+    E,
+    R
   >,
 ) =>
   Layer.effect(

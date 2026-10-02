@@ -6,6 +6,7 @@ import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { Database as DatabaseService } from "./mysql-database";
 import { mysqlPasswordConfiguration as configuration } from "./mysql-passwords";
 import type {
   PasswordPreparedPersistenceMapping,
@@ -39,15 +40,16 @@ export const makeMySqlPasswordPreparedPersistenceServices = <
   PCr extends AnyMySqlTable = AnyMySqlTable,
   PNativeId = unknown,
 >(
-  database: Database,
   mapping: PasswordPreparedPersistenceMapping<S, I, C, AC, A, RS, CE, M, T, B, NativeId>,
   proofMapping?: PasswordPreparedProofMapping<PS, PC, PM, PSub, PI, PCr, PNativeId>,
 ) =>
-  makeTargetPasswordPreparedPersistenceServices(
-    database,
-    mapping,
-    configuration(database),
-    proofMapping,
+  Effect.flatMap(DatabaseService, (database) =>
+    makeTargetPasswordPreparedPersistenceServices(
+      database,
+      mapping,
+      configuration(database),
+      proofMapping,
+    ),
   );
 
 export function coordinateMySqlPasswordPreparedPersistence<

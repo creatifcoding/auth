@@ -7,3 +7,5 @@ export {
   type ActionArguments,
   type ActionDecodeServices,
 } from "./http-operation/auth-client";
+
+export type { PrivateOutput, NativeCredentials } from "./http-operation/client";

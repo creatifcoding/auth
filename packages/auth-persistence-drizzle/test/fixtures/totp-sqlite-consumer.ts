@@ -22,12 +22,12 @@ import {
   type TotpRecord,
   type TotpSnapshot,
   TotpSecretKeys,
-  type TotpPersistence,
+  TotpPersistence,
 } from "@yielded/auth/Totp";
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { DateTime, Effect, Redacted } from "effect";
-import type { SqlClient } from "effect/sql/SqlClient";
+import { SqlClient } from "effect/sql/SqlClient";
 
 import { requiredTotpConstraints, type TotpMapping } from "../../src/drizzle/totp-model";
 
@@ -115,7 +115,9 @@ export const mapping = {
   engineNowMillis: sql`cast(round((julianday('now') - 2440587.5) * 86400000) as integer)`,
 } satisfies TotpMapping<typeof subjects, typeof factors, typeof credentials, string>;
 
-export const migrate = Effect.fn("TotpExample.migrate")(function* (client: SqlClient) {
+export const migrate = Effect.gen(function* () {
+  const client = yield* SqlClient;
+
   yield* client`create table totp_example_subjects (id text primary key, revision text not null, active integer not null, totpEnabled integer not null)`;
   yield* client`create table totp_example_factors (scope text primary key, state text not null, version text not null)`;
   yield* client`create table totp_example_credentials (id text primary key, subjectId text not null, revision text not null, active integer not null)`;
@@ -126,9 +128,9 @@ export const migrate = Effect.fn("TotpExample.migrate")(function* (client: SqlCl
 /** This example's passkey stands for the consumer's already independently verified
  * fresh action evidence. Production wires TotpActionEvidence to its verified
  * action service; clients never submit AuthenticationEvidence as operation input. */
-export const useAuthenticator = Effect.fn("TotpExample.useAuthenticator")(function* (
-  persistence: TotpPersistence["Service"],
-) {
+export const useAuthenticator = Effect.gen(function* () {
+  const persistence = yield* TotpPersistence;
+
   const subjectId = SubjectId.make("account-1"),
     moduleId = mapping.moduleId;
 
