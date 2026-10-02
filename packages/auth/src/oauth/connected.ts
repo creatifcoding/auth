@@ -575,6 +575,8 @@ export const makeOAuthConnected = <const Id extends string>(
             )
               return yield* OAuthUnavailable.make({});
 
+            let remoteTokens = false;
+
             const exchange = Effect.gen(function* () {
               const secrets = yield* openFlow({ context, sealed: flow.sealed }).pipe(
                 Effect.flatMap((value) => snapshotOAuth(OAuthTransactionSecrets, value)),
@@ -609,6 +611,8 @@ export const makeOAuthConnected = <const Id extends string>(
                 rawGrant,
                 start,
               );
+
+              remoteTokens = true;
 
               return yield* Effect.gen(function* () {
                 if (
@@ -713,9 +717,11 @@ export const makeOAuthConnected = <const Id extends string>(
                 ? { _tag: "Cancelled" }
                 : Exit.isSuccess(exchanged)
                   ? exchanged.value
-                  : rejected
-                    ? { _tag: "Rejected" }
-                    : { _tag: "Ambiguous" };
+                  : rejected && !remoteTokens
+                    ? { _tag: "Unissued" }
+                    : rejected
+                      ? { _tag: "Rejected" }
+                      : { _tag: "Ambiguous" };
 
             const committed = yield* connectedBounded(
               settle(

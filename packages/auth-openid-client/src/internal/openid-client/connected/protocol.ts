@@ -212,6 +212,29 @@ const privateConfiguration = <R>(
   };
 };
 
+const jwksCaches = new Map<string, NonNullable<ReturnType<typeof client.getJwksCache>>>();
+
+/** One JWKS cache per installed issuer generation. Request configurations stay private. */
+const bindJwks = (
+  provider: {
+    readonly issuer: string;
+    readonly configurationGeneration: string | number;
+    readonly clientId: string;
+  },
+  configuration: client.Configuration,
+) => {
+  const key = `${provider.issuer}\u0000${String(provider.configurationGeneration)}\u0000${provider.clientId}`;
+  const existing = jwksCaches.get(key);
+
+  if (existing !== undefined) client.setJwksCache(configuration, existing);
+
+  return () => {
+    const next = client.getJwksCache(configuration);
+
+    if (next !== undefined) jwksCaches.set(key, next);
+  };
+};
+
 const appendResources = (parameters: URLSearchParams, resources: ReadonlyArray<string>) => {
   for (const resource of resources) parameters.append("resource", resource);
 };
@@ -459,56 +482,62 @@ export const makeConnectedProtocolWithCompatibility = Effect.fn(
           "grant",
         );
 
-        const state = client.randomState(),
-          verifier = client.randomPKCECodeVerifier(),
-          nonce = entry.provider.protocol === "oidc" ? client.randomNonce() : undefined;
+        const publishJwks = bindJwks(entry.provider, configuration);
 
-        const challenge = await client.calculatePKCECodeChallenge(verifier);
+        try {
+          const state = client.randomState(),
+            verifier = client.randomPKCECodeVerifier(),
+            nonce = entry.provider.protocol === "oidc" ? client.randomNonce() : undefined;
 
-        signal.throwIfAborted();
-        const parameters = new URLSearchParams(entry.provider.authorizationParameters);
+          const challenge = await client.calculatePKCECodeChallenge(verifier);
 
-        for (const [key, value] of Object.entries({
-          response_type: "code",
-          response_mode: "query",
-          redirect_uri: callback.redirectUri,
-          scope: (
-            compatibility?.authorizationScopes(
-              request.profile.scopes,
-              request.profile.retention === "access-and-refresh",
-            ) ?? request.profile.scopes
-          ).join(" "),
-          state,
-          code_challenge: challenge,
-          code_challenge_method: "S256",
-        }))
-          parameters.set(key, value);
-        if (nonce !== undefined) parameters.set("nonce", nonce);
-        if (entry.provider.protocol === "oidc" && entry.provider.maxAgeSeconds !== undefined)
-          parameters.set("max_age", String(entry.provider.maxAgeSeconds));
-        appendResources(parameters, request.profile.resources);
+          signal.throwIfAborted();
+          const parameters = new URLSearchParams(entry.provider.authorizationParameters);
 
-        return {
-          configuration: {
-            provider: entry.provider.provider,
-            protocol: entry.provider.protocol,
-            configurationGeneration: entry.provider.configurationGeneration,
-            issuer: entry.provider.issuer,
-            responseIssuerMode: entry.provider.responseIssuerMode,
-            callbackId: callback.callbackId,
-            redirectUri: callback.redirectUri,
-            profile: request.profile,
-          },
-          authorizationUrl: Redacted.make(
-            client.buildAuthorizationUrl(configuration, parameters).href,
-          ),
-          secrets: {
-            namespace: "effect-auth/oauth-transaction-secrets/v1" as const,
-            state: Redacted.make(state),
-            pkceVerifier: Redacted.make(verifier),
-            ...(nonce === undefined ? {} : { oidcNonce: Redacted.make(nonce) }),
-          },
-        };
+          for (const [key, value] of Object.entries({
+            response_type: "code",
+            response_mode: "query",
+            redirect_uri: callback.redirectUri,
+            scope: (
+              compatibility?.authorizationScopes(
+                request.profile.scopes,
+                request.profile.retention === "access-and-refresh",
+              ) ?? request.profile.scopes
+            ).join(" "),
+            state,
+            code_challenge: challenge,
+            code_challenge_method: "S256",
+          }))
+            parameters.set(key, value);
+          if (nonce !== undefined) parameters.set("nonce", nonce);
+          if (entry.provider.protocol === "oidc" && entry.provider.maxAgeSeconds !== undefined)
+            parameters.set("max_age", String(entry.provider.maxAgeSeconds));
+          appendResources(parameters, request.profile.resources);
+
+          return {
+            configuration: {
+              provider: entry.provider.provider,
+              protocol: entry.provider.protocol,
+              configurationGeneration: entry.provider.configurationGeneration,
+              issuer: entry.provider.issuer,
+              responseIssuerMode: entry.provider.responseIssuerMode,
+              callbackId: callback.callbackId,
+              redirectUri: callback.redirectUri,
+              profile: request.profile,
+            },
+            authorizationUrl: Redacted.make(
+              client.buildAuthorizationUrl(configuration, parameters).href,
+            ),
+            secrets: {
+              namespace: "effect-auth/oauth-transaction-secrets/v1" as const,
+              state: Redacted.make(state),
+              pkceVerifier: Redacted.make(verifier),
+              ...(nonce === undefined ? {} : { oidcNonce: Redacted.make(nonce) }),
+            },
+          };
+        } finally {
+          publishJwks();
+        }
       },
       catch: unavailable,
     });
@@ -551,66 +580,72 @@ export const makeConnectedProtocolWithCompatibility = Effect.fn(
           },
         );
 
-        const url = new URL(saved.redirectUri);
+        const publishJwks = bindJwks(provider, invocation.configuration);
 
-        url.searchParams.set("code", Redacted.value(request.response.code));
-        url.searchParams.set("state", Redacted.value(request.response.state));
-        if (request.response.issuer !== undefined)
-          url.searchParams.set("iss", request.response.issuer);
-        const parameters = new URLSearchParams(provider.tokenParameters);
+        try {
+          const url = new URL(saved.redirectUri);
 
-        appendResources(parameters, saved.profile.resources);
+          url.searchParams.set("code", Redacted.value(request.response.code));
+          url.searchParams.set("state", Redacted.value(request.response.state));
+          if (request.response.issuer !== undefined)
+            url.searchParams.set("iss", request.response.issuer);
+          const parameters = new URLSearchParams(provider.tokenParameters);
 
-        const tokens = await client.authorizationCodeGrant(
-          invocation.configuration,
-          url,
-          {
-            expectedState: Redacted.value(request.secrets.state),
-            pkceCodeVerifier: Redacted.value(request.secrets.pkceVerifier),
-            ...(provider.protocol === "oidc"
-              ? {
-                  idTokenExpected: true,
-                  expectedNonce: Redacted.value(request.secrets.oidcNonce!),
-                  ...(provider.maxAgeSeconds === undefined
-                    ? {}
-                    : { maxAge: provider.maxAgeSeconds }),
-                }
-              : {}),
-          },
-          parameters,
-        );
+          appendResources(parameters, saved.profile.resources);
 
-        signal.throwIfAborted();
-        if (tokens.token_type !== "bearer") throw unavailable();
-        const metadata = invocation.metadata();
-        let body: unknown;
-
-        if (provider.protocol === "oauth") {
-          const response = await client.fetchProtectedResource(
+          const tokens = await client.authorizationCodeGrant(
             invocation.configuration,
-            tokens.access_token,
-            new URL(provider.identitySource.url),
-            "GET",
-            undefined,
-            new Headers(provider.identitySource.headers),
+            url,
+            {
+              expectedState: Redacted.value(request.secrets.state),
+              pkceCodeVerifier: Redacted.value(request.secrets.pkceVerifier),
+              ...(provider.protocol === "oidc"
+                ? {
+                    idTokenExpected: true,
+                    expectedNonce: Redacted.value(request.secrets.oidcNonce!),
+                    ...(provider.maxAgeSeconds === undefined
+                      ? {}
+                      : { maxAge: provider.maxAgeSeconds }),
+                  }
+                : {}),
+            },
+            parameters,
           );
 
           signal.throwIfAborted();
-          if (
-            response.status !== 200 ||
-            response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
-              "application/json"
-          )
-            throw unavailable();
-          body = await response.json();
-          signal.throwIfAborted();
-        }
+          if (tokens.token_type !== "bearer") throw unavailable();
+          const metadata = invocation.metadata();
+          let body: unknown;
 
-        return {
-          tokens,
-          metadata,
-          body,
-        };
+          if (provider.protocol === "oauth") {
+            const response = await client.fetchProtectedResource(
+              invocation.configuration,
+              tokens.access_token,
+              new URL(provider.identitySource.url),
+              "GET",
+              undefined,
+              new Headers(provider.identitySource.headers),
+            );
+
+            signal.throwIfAborted();
+            if (
+              response.status !== 200 ||
+              response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
+                "application/json"
+            )
+              throw unavailable();
+            body = await response.json();
+            signal.throwIfAborted();
+          }
+
+          return {
+            tokens,
+            metadata,
+            body,
+          };
+        } finally {
+          publishJwks();
+        }
       },
       catch: grantError,
     });
@@ -693,55 +728,61 @@ export const makeConnectedProtocolWithCompatibility = Effect.fn(
           },
         );
 
-        const parameters = new URLSearchParams(provider.refreshParameters);
+        const publishJwks = bindJwks(provider, invocation.configuration);
 
-        if (compatibility?.includeRefreshScope !== false)
-          parameters.set("scope", saved.profile.scopes.join(" "));
-        appendResources(parameters, saved.profile.resources);
+        try {
+          const parameters = new URLSearchParams(provider.refreshParameters);
 
-        const tokens = await client.refreshTokenGrant(
-          invocation.configuration,
-          Redacted.value(request.material.refreshToken!),
-          parameters,
-        );
+          if (compatibility?.includeRefreshScope !== false)
+            parameters.set("scope", saved.profile.scopes.join(" "));
+          appendResources(parameters, saved.profile.resources);
 
-        signal.throwIfAborted();
-        if (
-          tokens.token_type !== "bearer" ||
-          (saved.profile.refresh === "rotating" &&
-            (!tokens.refresh_token ||
-              tokens.refresh_token === Redacted.value(request.material.refreshToken!)))
-        )
-          throw unavailable();
-        const metadata = invocation.metadata();
-        let body: unknown;
-
-        if (provider.protocol === "oauth") {
-          const response = await client.fetchProtectedResource(
+          const tokens = await client.refreshTokenGrant(
             invocation.configuration,
-            tokens.access_token,
-            new URL(provider.identitySource.url),
-            "GET",
-            undefined,
-            new Headers(provider.identitySource.headers),
+            Redacted.value(request.material.refreshToken!),
+            parameters,
           );
 
           signal.throwIfAborted();
           if (
-            response.status !== 200 ||
-            response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
-              "application/json"
+            tokens.token_type !== "bearer" ||
+            (saved.profile.refresh === "rotating" &&
+              (!tokens.refresh_token ||
+                tokens.refresh_token === Redacted.value(request.material.refreshToken!)))
           )
             throw unavailable();
-          body = await response.json();
-          signal.throwIfAborted();
-        }
+          const metadata = invocation.metadata();
+          let body: unknown;
 
-        return {
-          tokens,
-          metadata,
-          body,
-        };
+          if (provider.protocol === "oauth") {
+            const response = await client.fetchProtectedResource(
+              invocation.configuration,
+              tokens.access_token,
+              new URL(provider.identitySource.url),
+              "GET",
+              undefined,
+              new Headers(provider.identitySource.headers),
+            );
+
+            signal.throwIfAborted();
+            if (
+              response.status !== 200 ||
+              response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
+                "application/json"
+            )
+              throw unavailable();
+            body = await response.json();
+            signal.throwIfAborted();
+          }
+
+          return {
+            tokens,
+            metadata,
+            body,
+          };
+        } finally {
+          publishJwks();
+        }
       },
       catch: grantError,
     });
@@ -828,18 +869,28 @@ export const makeConnectedProtocolWithCompatibility = Effect.fn(
           "revoke",
         );
 
-        if (request.material.refreshToken !== undefined) {
+        const publishJwks = bindJwks(entry.provider, configuration);
+
+        try {
+          if (request.material.refreshToken !== undefined) {
+            await client.tokenRevocation(
+              configuration,
+              Redacted.value(request.material.refreshToken),
+              { token_type_hint: "refresh_token" },
+            );
+            signal.throwIfAborted();
+          }
           await client.tokenRevocation(
             configuration,
-            Redacted.value(request.material.refreshToken),
-            { token_type_hint: "refresh_token" },
+            Redacted.value(request.material.accessToken),
+            {
+              token_type_hint: "access_token",
+            },
           );
           signal.throwIfAborted();
+        } finally {
+          publishJwks();
         }
-        await client.tokenRevocation(configuration, Redacted.value(request.material.accessToken), {
-          token_type_hint: "access_token",
-        });
-        signal.throwIfAborted();
       },
       catch: unavailable,
     });

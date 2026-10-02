@@ -119,7 +119,7 @@ export const makePasswordKernel = <
 ) => {
   type Mapping = AnyPasswordPersistenceMapping<Fragment>;
 
-  const { and, eq, gte, inArray, lte, notExists, sql, column, updateValues } = operations;
+  const { and, eq, gt, gte, inArray, lte, notExists, sql, column, updateValues } = operations;
   const { completeProofPlanIn } = proofs;
   const unavailable = () => PasswordUnavailable.make({});
 
@@ -568,23 +568,22 @@ export const makePasswordKernel = <
     if (charges.length >= entry.limit) return false;
     const a = attemptColumns(mapping);
 
-    const pendingWhere =
+    // Retention is the pending horizon. Expired rows stay until cleanup, but they
+    // no longer consume the admission budget after that horizon.
+    const pendingWhere = and(
       entry.kind === "action"
-        ? and(eq(a.moduleId, moduleId), eq(a.action, action), eq(a.state, "pending"))
+        ? and(eq(a.moduleId, moduleId), eq(a.action, action))
         : entry.kind === "identifier"
           ? and(
               eq(a.moduleId, moduleId),
               eq(a.action, action),
               eq(a.identifierNamespace, identifier.namespace),
               eq(a.identifierValue, identifier.value),
-              eq(a.state, "pending"),
             )
-          : and(
-              eq(a.moduleId, moduleId),
-              eq(a.action, action),
-              eq(a.subjectId, nativeSubjectId),
-              eq(a.state, "pending"),
-            );
+          : and(eq(a.moduleId, moduleId), eq(a.action, action), eq(a.subjectId, nativeSubjectId)),
+      eq(a.state, "pending"),
+      gt(a.retentionUntil, mapping.encodeInstant(now)),
+    );
 
     const pending = yield* selectRows(
       database

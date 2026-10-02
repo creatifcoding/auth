@@ -399,6 +399,7 @@ export const OAuthConnectedOutcome = Schema.Union([
   }),
   Schema.TaggedStruct("Cancelled", {}),
   Schema.TaggedStruct("Rejected", {}),
+  Schema.TaggedStruct("Unissued", {}),
   Schema.TaggedStruct("Conflict", {}),
   Schema.TaggedStruct("Ambiguous", {}),
 ]);

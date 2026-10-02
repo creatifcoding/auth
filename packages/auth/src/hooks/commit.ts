@@ -248,7 +248,9 @@ export const coordinateCommit = <A, E, R>(
 
       for (const { event, deferred: isDeferred } of events) {
         if (isDeferred) deferred.push(event.id);
-        else delivery.push(...(yield* hooks.after(event)));
+        // The commit above is already durable. Post-commit work stays interruptible
+        // so a caller deadline can finish without repeating that commit.
+        else delivery.push(...(yield* restore(hooks.after(event))));
       }
 
       return { _tag: "Committed", value, delivery, deferred } as const;

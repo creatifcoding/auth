@@ -128,15 +128,15 @@ const noAmbient = Effect.fn("OAuthAccounts.noAmbient")(function* () {
   if (yield* hasCommitScope) return yield* OAuthMethodUnsupported.make({});
 });
 
-// A detached bounded wait still starts terminal settlement after parent interruption.
-// An owner that outlives the wait may commit; its receipt is discarded, never retried.
+// Cancellation stays on this fiber and runs finalizers before returning.
+// An owner that reached commit may still have committed; its receipt is discarded, never retried.
 const bounded = <A, E, R>(effect: Effect.Effect<A, E, R>, millis: number) =>
   Effect.gen(function* () {
-    const fiber = yield* effect.pipe(Effect.interruptible, Effect.forkDetach);
+    const fiber = yield* effect.pipe(Effect.interruptible, Effect.forkChild);
 
     return yield* Fiber.join(fiber).pipe(
       Effect.timeout(millis),
-      Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid)),
+      Effect.ensuring(Fiber.interrupt(fiber)),
     );
   });
 

@@ -800,16 +800,33 @@ export const makePhoneKernel = <
       now = yield* owner.now(mapping),
       state = mapping.state;
 
-    const observed = yield* owner.read(
+    // The page predicate matches every later row. Observing it would require the
+    // page to be the whole table, so cleanup could not advance. Discover without
+    // an observation, then guard each candidate by its scope.
+    const page = yield* owner.read(
       state.table,
       input.after === undefined ? sql`1=1` : sql`${col(state.table, state.scope)} > ${input.after}`,
-      { limit: input.limit, takeOnly: true, orderBy: col(state.table, state.scope) },
+      {
+        limit: input.limit,
+        takeOnly: true,
+        observe: false,
+        orderBy: col(state.table, state.scope),
+      },
     );
 
     let deleted = 0;
-    const rows = [...observed.rows];
+    const rows = [...page.rows];
 
-    for (const row of rows) {
+    for (const candidate of rows) {
+      const current = yield* owner.read(
+        state.table,
+        equal(state.table, { [state.scope]: candidate[state.scope] }),
+        { limit: 1 },
+      );
+
+      const row = current.rows[0];
+
+      if (row === undefined) continue;
       const stored = Schema.decodeSync(storageCodec)(row[state.state]);
 
       if (stored.moduleId !== mapping.moduleId) continue;

@@ -87,11 +87,11 @@ const now = DateTime.now.pipe(Effect.map(DateTime.toEpochMillis));
 
 const bounded = <A, E, R>(operation: Effect.Effect<A, E, R>, millis: number) =>
   Effect.gen(function* () {
-    const fiber = yield* operation.pipe(Effect.interruptible, Effect.forkDetach);
+    const fiber = yield* operation.pipe(Effect.interruptible, Effect.forkChild);
 
     return yield* Fiber.join(fiber).pipe(
       Effect.timeout(Math.max(1, millis)),
-      Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid)),
+      Effect.ensuring(Fiber.interrupt(fiber)),
     );
   });
 
