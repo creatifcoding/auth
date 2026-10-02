@@ -23,6 +23,8 @@ concurrency:
 
 jobs:
   review:
+    # The Action parses the first command line; keep this filter broad enough
+    # for leading whitespace, varied spacing, and explanation below it.
     if: >-
       vars.PR_REVIEW_ENABLED == 'true' && (
       (github.event_name == 'pull_request_target' && !github.event.pull_request.draft) ||
@@ -30,7 +32,7 @@ jobs:
         (github.event.comment.author_association == 'OWNER' ||
          github.event.comment.author_association == 'MEMBER' ||
          github.event.comment.author_association == 'COLLABORATOR') &&
-        startsWith(github.event.comment.body, '@effect-agent review')))
+        contains(github.event.comment.body, '@effect-agent')))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -63,7 +65,7 @@ jobs:
           automatic-review-limit: 5
           expected-head: ${{ github.event.pull_request.head.sha || '' }}
           guidance-file: .github/review-guidance.md
-          model: gpt-6-astra
+          model: gpt-6.1-sol
           priority: fast
           base-cost-usd: "20.00"
           max-cost-usd: "25.00"
