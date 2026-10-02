@@ -41,7 +41,7 @@ export const EmailRenderer = Context.Reference<{
 });
 
 /** Supply the same EmailProofDelivery port used by Email and Password strategies.
- * Await provider acceptance within the request. An uncertain send stays ambiguous;
+ * Await provider acceptance within the request. EmailOperationError maps to Ambiguous;
  * the binding has no delivery-ID deduplication contract, so it is never retried here.
  * Unsupported formats and local validation fail definitely before provider I/O.
  * This Layer knows the binding, not the strategy proof policy; format compatibility

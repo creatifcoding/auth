@@ -17,8 +17,8 @@ mismatch at construction; it validates the Worker binding's availability and sha
 
 Delivery awaits provider acceptance, which does not prove inbox delivery. Local
 email validation failures are definite policy failures; correct configuration
-before a fresh, rate-limited recovery request. Provider operation failures are
-conservatively `Ambiguous`. No delivery-ID deduplication is promised, so the
+before a fresh, rate-limited recovery request. Typed provider
+`EmailOperationError` failures are conservatively `Ambiguous`. No delivery-ID deduplication is promised, so the
 adapter never retries an uncertain send. Keep message bodies and secrets out of
 logs and public results.
 

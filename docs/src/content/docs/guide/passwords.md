@@ -220,8 +220,8 @@ the password; sign in separately to obtain a session.
 Cloudflare delivery awaits provider acceptance in the request; acceptance does
 not prove inbox delivery. Unsupported formats and local email validation failures
 are definite policy failures: correct the configuration before starting a fresh,
-rate-limited recovery request. Provider operation failures are treated
-conservatively as uncertain acceptance, even when they contain an error code.
+rate-limited recovery request. Typed provider `EmailOperationError` failures are
+treated conservatively as uncertain acceptance, even when they contain an error code.
 Do not automatically resend: the binding has no delivery-ID deduplication contract.
 
 An exact `requestReset` retry can recover a generic receipt, not guarantee another
