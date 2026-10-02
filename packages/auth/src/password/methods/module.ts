@@ -596,7 +596,7 @@ const makePasswordWithManagement = <
           const revision = snapshotPasswordRevision(
             yield* authority
               .capture(caller.subjectId, [])
-              .pipe(Effect.mapError(() => PasswordRejected.make({}))),
+              .pipe(Effect.mapError(passwordCompletionFailure)),
           );
 
           const plan = yield* planMutation("add-password", invocation, request, revision);
@@ -674,10 +674,7 @@ const makePasswordWithManagement = <
               binding: bound.binding,
               credential: request.secret,
             })
-            .pipe(
-              Effect.flatMap(readProofCommit),
-              Effect.mapError(() => PasswordRejected.make({})),
-            );
+            .pipe(Effect.flatMap(readProofCommit), Effect.mapError(passwordCompletionFailure));
 
           if (result.value._tag === "Rejected") return yield* PasswordRejected.make({});
 
@@ -698,7 +695,7 @@ const makePasswordWithManagement = <
               binding: bound.binding,
               credential: request.credential,
             })
-            .pipe(Effect.mapError(() => PasswordRejected.make({})));
+            .pipe(Effect.mapError(passwordCompletionFailure));
 
           if (!(yield* store.checkReset(proof.input))) return yield* PasswordRejected.make({});
 

@@ -322,13 +322,17 @@ export const settleSignIn = Effect.fn("oauthConnected.settleSignIn")(function* (
     const held = yield* exact(mapping, r);
 
     if (held === undefined) return { _tag: "Rejected" } as const;
+    // Unissued means the provider definitely returned no token. Resolve that
+    // reservation. A Rejected outcome can follow a real exchange, so it stays open.
+    const state = out._tag === "Unissued" ? "Rejected" : out._tag;
+
     yield* owner.update(f.table, held.key, {
-      [f.state]: out._tag,
-      [f.work]: out._tag === "Cancelled" ? "Resolved" : "Unresolved",
+      [f.state]: state,
+      [f.work]: out._tag === "Cancelled" || out._tag === "Unissued" ? "Resolved" : "Unresolved",
       [f.version]: owner.marker,
     });
 
-    return { _tag: out._tag };
+    return { _tag: state };
   }
   const token = out.grant.context;
 

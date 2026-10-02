@@ -5,6 +5,12 @@ import { hasCommitScope, type PreparedCommit } from "../../hooks/commit";
 import { HookDenied } from "../../hooks/models";
 import { LoginIdentifier } from "../../identity/models";
 import { reportAuthFailure } from "../../internal/diagnostics";
+import {
+  ProofInvalid,
+  ProofRequestConflict,
+  ProofIngressDenied,
+  ProofCapabilityUnsupported,
+} from "../../proofs/errors";
 import type { Email, SubjectId } from "../../Schema";
 import { TokenDigest } from "../../Schema";
 import { AuthenticationAuthority } from "../../sessions/AuthenticationAuthority";
@@ -13,6 +19,7 @@ import {
   SessionInvalid,
   SessionConflict,
   PendingAuthenticationInvalid,
+  SessionUnavailable,
   StaleAuthentication,
 } from "../../sessions/errors";
 import { type AuthenticationFlowId, type AuthenticationEvidence } from "../../sessions/models";
@@ -37,11 +44,14 @@ export const passwordCompletionFailure = (
   error: unknown,
 ): PasswordRejected | PasswordUnavailable | PasswordMethodUnsupported | HookDenied => {
   if (Schema.is(HookDenied)(error)) return error;
-  if (Schema.is(SessionCapabilityUnsupported)(error)) return PasswordMethodUnsupported.make({});
+  if (Schema.is(Schema.Union([SessionCapabilityUnsupported, ProofCapabilityUnsupported]))(error))
+    return PasswordMethodUnsupported.make({});
   if (
     Schema.is(
       Schema.Union([
-        SessionCapabilityUnsupported,
+        ProofInvalid,
+        ProofRequestConflict,
+        ProofIngressDenied,
         SessionInvalid,
         SessionConflict,
         PendingAuthenticationInvalid,
@@ -64,6 +74,15 @@ const unexpected = passwordUnexpected;
 
 const hashingInfrastructureFailure = Schema.is(
   Schema.Union([PasswordHashingUnavailable, PasswordKdfBusy]),
+);
+
+const verificationInfrastructureFailure = Schema.is(
+  Schema.Union([
+    PasswordHashingUnavailable,
+    PasswordKdfBusy,
+    PasswordUnavailable,
+    SessionUnavailable,
+  ]),
 );
 
 /** Report infrastructure recovery without recording passwords or verifier data. */
@@ -192,7 +211,14 @@ export const makePasswordVerification = ({
 
         return yield* PasswordRejected.make({});
       }
-      const password = yield* checkedPassword(request.password, candidate);
+      const normalized = yield* checkedPassword(request.password, candidate).pipe(Effect.result);
+
+      if (normalized._tag === "Failure") {
+        yield* hasher.dummy(request.password).pipe(passwordHashingDiagnostics, Effect.ignore);
+
+        return yield* PasswordRejected.make({});
+      }
+      const password = normalized.success;
 
       const verified = yield* hasher.verify(password, candidate.verifier).pipe(
         passwordHashingDiagnostics,
@@ -242,6 +268,16 @@ export const makePasswordVerification = ({
       return { credential: candidate, evidence, rehash };
     }).pipe(Effect.result);
 
+    // Only definite credential/policy failures may settle as rejected. An outage
+    // leaves the admission charged until expiry, just like interrupted work.
+    if (
+      checked._tag === "Failure" &&
+      checked.failure._tag !== "PasswordRejected" &&
+      checked.failure._tag !== "PasswordInputInvalid" &&
+      checked.failure._tag !== "StaleAuthentication"
+    )
+      return yield* PasswordUnavailable.make({});
+
     const decision = yield* read(
       yield* store.settleAttempt(
         {
@@ -257,6 +293,8 @@ export const makePasswordVerification = ({
       ),
     );
 
+    if (checked._tag === "Failure" && verificationInfrastructureFailure(checked.failure))
+      return yield* PasswordUnavailable.make({});
     if (decision !== "verified" || checked._tag !== "Success")
       return yield* PasswordRejected.make({});
 

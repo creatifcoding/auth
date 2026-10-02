@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Redacted, Schema } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 
 import type { ProofDeliveryOutcome } from "../proofs/models";
@@ -41,11 +41,7 @@ export const layer = Layer.effect(
         ),
         Effect.scoped,
         Effect.timeout("10 seconds"),
-        Effect.catchCause((cause) =>
-          Cause.hasInterrupts(cause)
-            ? Effect.interrupt
-            : Effect.succeed<ProofDeliveryOutcome>({ _tag: "Ambiguous" }),
-        ),
+        Effect.catch(() => Effect.succeed<ProofDeliveryOutcome>({ _tag: "Ambiguous" })),
         Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
       );
     });

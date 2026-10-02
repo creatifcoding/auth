@@ -32,7 +32,9 @@ export type ProofVendorPolicy = typeof ProofVendorPolicy.Type;
 
 export interface ProofDelivery {
   readonly vendor: ProofVendorPolicy;
-  /** Acceptance by vendor is not delivery to the recipient. No diagnostic/body escapes this boundary. */
+  /** Acceptance by vendor is not delivery to the recipient. Typed failures become
+   * ambiguous; defects/interruption propagate after dispatch attempts ambiguous settlement.
+   * No diagnostic/body escapes the public operation boundary. */
   readonly send: (message: ProofDeliveryMessage) => Effect.Effect<ProofDeliveryOutcome>;
 }
 
@@ -61,11 +63,8 @@ export const proofDeliveryLayer = <Id, E, R>(
           Effect.suspend(() => callback(message)).pipe(
             Effect.provide(services),
             Effect.flatMap(Schema.decodeEffect(ProofDeliveryOutcome)),
-            Effect.catchCause((cause) =>
-              reportAuthFailure("proof-delivery", cause).pipe(
-                Effect.as({ _tag: "Ambiguous" as const }),
-              ),
-            ),
+            Effect.tapCause((cause) => reportAuthFailure("proof-delivery", cause)),
+            Effect.catch(() => Effect.succeed({ _tag: "Ambiguous" as const })),
           ),
       };
     }),
