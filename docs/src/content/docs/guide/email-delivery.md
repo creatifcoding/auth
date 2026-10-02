@@ -8,15 +8,102 @@ calls `EmailDelivery`. Your application supplies that service with a Layer. The
 transport receives only `to`, `subject`, and private `text`/optional `html` bodies;
 it does not need to understand authentication proofs.
 
+Use any email provider through its SDK or HTTP API. The recipes below show
+SendGrid over HTTP, Alchemy, and effect-cf; Auth itself requires only Effect.
+
 The transport's `send` returns `Effect<void, EmailNotAccepted | EmailAcceptanceUnknown>`.
 Success means the provider accepted the message, not that it reached the inbox.
 Use `EmailNotAccepted` only when rejection is certain; use `EmailAcceptanceUnknown`
 when sending might have happened. Map typed provider errors without copying their
 messages or causes into Auth errors. Defects and interruption must propagate.
 
+## Bridge SendGrid
+
+This server-side Layer uses [SendGrid's Mail Send API](https://www.twilio.com/docs/sendgrid/api-reference/mail-send/mail-send)
+with Effect's fetch client. Supply `SENDGRID_API_KEY` through your ConfigProvider
+and replace the sender with a verified address. No Cloudflare services are required.
+
+```ts title="apps/server/email.ts"
+import {
+  EmailDelivery,
+  EmailMessage,
+  EmailNotAccepted,
+  EmailAcceptanceUnknown,
+} from "@yielded/auth/EmailDelivery";
+import { Config, Effect, Layer, Redacted } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
+
+export const EmailLive = Layer.effect(
+  EmailDelivery,
+  Effect.gen(function* () {
+    const apiKey = yield* Config.Redacted("SENDGRID_API_KEY");
+    const http = HttpClient.withScope(yield* HttpClient.HttpClient);
+
+    return EmailDelivery.of({
+      send: Effect.fnUntraced(
+        function* (message: EmailMessage) {
+          const request = yield* HttpClientRequest.post(
+            "https://api.sendgrid.com/v3/mail/send",
+          ).pipe(
+            HttpClientRequest.bearerToken(apiKey),
+            HttpClientRequest.bodyJson({
+              personalizations: [{ to: [{ email: message.to }] }],
+              from: { email: "hello@example.com" },
+              subject: message.subject,
+              content: [
+                { type: "text/plain", value: Redacted.value(message.text) },
+                ...(message.html === undefined
+                  ? []
+                  : [{ type: "text/html", value: Redacted.value(message.html) }]),
+              ],
+              tracking_settings: {
+                click_tracking: { enable: false, enable_text: false },
+                open_tracking: { enable: false },
+              },
+            }),
+            Effect.mapError(() => EmailNotAccepted.make({})),
+          );
+
+          const response = yield* http.execute(request).pipe(
+            Effect.timeout("10 seconds"),
+            Effect.mapError(() => EmailAcceptanceUnknown.make({})),
+          );
+
+          if (response.status === 202) return;
+          if ([400, 401, 403, 404, 405, 413].includes(response.status)) {
+            return yield* EmailNotAccepted.make({});
+          }
+          return yield* EmailAcceptanceUnknown.make({});
+        },
+        Effect.scoped,
+        Effect.provideService(FetchHttpClient.RequestInit, {
+          redirect: "error",
+          credentials: "omit",
+        }),
+      ),
+    });
+  }),
+).pipe(Layer.provide(FetchHttpClient.layer));
+```
+
+`202` means accepted. The listed request/authentication rejections are definite;
+timeouts, transport failures, server errors, and unrecognized responses remain
+uncertain. The recipe sends once, follows no redirects, closes the response with
+the send's scope, and never reads provider diagnostics. Click tracking is disabled
+so authentication links keep their private fragment. For EU regional subusers,
+use SendGrid's documented `api.eu.sendgrid.com` endpoint.
+
+Resend, Postmark, SES, or an existing application mail service can implement the
+same contract. Use each provider's acceptance semantics and disable SDK retries;
+do not reuse SendGrid's status mapping for another provider.
+
 ## Bridge Alchemy
 
-Alchemy's email binding provides an Effect-native client. In your stack, declare
+Alchemy has both [AWS SES bindings](https://alchemy.run/aws/email/sending/) and
+Cloudflare email bindings; its [Resend recipe](https://alchemy.run/better-auth/sign-in-providers/email-password/#send-mail-through-resend)
+uses HTTP. The SendGrid Layer above also works in an Alchemy application.
+
+For Alchemy's Cloudflare email binding, declare
 `const sender = yield* Cloudflare.Email.SendEmail("AUTH_EMAIL")`. Inside the Worker's
 construction effect, bind it and create the transport Layer:
 
@@ -113,13 +200,13 @@ are classified conservatively as uncertain acceptance.
 
 ## Compose Auth
 
-Use either `EmailLive` alongside your existing application services:
+Use your chosen `EmailLive` alongside your existing application services:
 
 ```ts
 const AuthLive = AppAuth.layer.pipe(Layer.provide(EmailLive), Layer.provide(AuthDependencies));
 ```
 
-For Alchemy, supply `AuthLive` to the request handler with `Effect.provide`.
+For the Alchemy Worker example, supply `AuthLive` to the request handler with `Effect.provide`.
 For effect-cf, its remaining requirement is the Worker's environment. Auth keeps
 provider SDKs out of its core dependencies; these small bridges belong to your app.
 
