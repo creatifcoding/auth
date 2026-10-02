@@ -23,7 +23,12 @@ import {
 import type { makeProofModule } from "../proofs/module";
 import { Email, TokenDigest } from "../Schema";
 import type { PrepareEmailCommit } from "./EmailAddressPersistence";
-import { EmailMethodUnsupported, EmailRejected, EmailUnavailable } from "./errors";
+import {
+  emailCompletionFailure,
+  EmailMethodUnsupported,
+  EmailRejected,
+  EmailUnavailable,
+} from "./errors";
 import { EmailCommandId, type EmailRegistrationDecision } from "./models";
 
 const Failure = Schema.Union([EmailRejected, EmailUnavailable, EmailMethodUnsupported, HookDenied]);
@@ -184,7 +189,13 @@ export const makeEmailRegistration = <
       ) {
         const verified = yield* bindings
           .verify(input.flowId, input.requestBinding)
-          .pipe(Effect.mapError(() => EmailRejected.make({})));
+          .pipe(
+            Effect.mapError((error) =>
+              error._tag === "RequestBindingInvalid"
+                ? EmailRejected.make({})
+                : EmailUnavailable.make({}),
+            ),
+          );
 
         const identifier = Object.freeze(
           LoginIdentifier.make({ namespace: "email", value: input.email }),
@@ -256,10 +267,7 @@ export const makeEmailRegistration = <
               credential: input.secret,
               binding: current.binding,
             })
-            .pipe(
-              Effect.flatMap(readProofCommit),
-              Effect.mapError(() => EmailRejected.make({})),
-            );
+            .pipe(Effect.flatMap(readProofCommit), Effect.mapError(emailCompletionFailure));
 
           if (result.value._tag === "Rejected") return yield* EmailRejected.make({});
 
@@ -278,7 +286,7 @@ export const makeEmailRegistration = <
               credential: input.credential,
               binding: current.binding,
             })
-            .pipe(Effect.mapError(() => EmailRejected.make({})));
+            .pipe(Effect.mapError(emailCompletionFailure));
 
           const snapshot = lifecycleSnapshot({
             action: "registration",

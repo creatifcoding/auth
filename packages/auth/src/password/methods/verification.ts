@@ -5,6 +5,12 @@ import { hasCommitScope, type PreparedCommit } from "../../hooks/commit";
 import { HookDenied } from "../../hooks/models";
 import { LoginIdentifier } from "../../identity/models";
 import { reportAuthFailure } from "../../internal/diagnostics";
+import {
+  ProofInvalid,
+  ProofRequestConflict,
+  ProofIngressDenied,
+  ProofCapabilityUnsupported,
+} from "../../proofs/errors";
 import type { Email, SubjectId } from "../../Schema";
 import { TokenDigest } from "../../Schema";
 import { AuthenticationAuthority } from "../../sessions/AuthenticationAuthority";
@@ -37,11 +43,14 @@ export const passwordCompletionFailure = (
   error: unknown,
 ): PasswordRejected | PasswordUnavailable | PasswordMethodUnsupported | HookDenied => {
   if (Schema.is(HookDenied)(error)) return error;
-  if (Schema.is(SessionCapabilityUnsupported)(error)) return PasswordMethodUnsupported.make({});
+  if (Schema.is(Schema.Union([SessionCapabilityUnsupported, ProofCapabilityUnsupported]))(error))
+    return PasswordMethodUnsupported.make({});
   if (
     Schema.is(
       Schema.Union([
-        SessionCapabilityUnsupported,
+        ProofInvalid,
+        ProofRequestConflict,
+        ProofIngressDenied,
         SessionInvalid,
         SessionConflict,
         PendingAuthenticationInvalid,
@@ -241,6 +250,16 @@ export const makePasswordVerification = ({
 
       return { credential: candidate, evidence, rehash };
     }).pipe(Effect.result);
+
+    // Only definite credential/policy failures may settle as rejected. An outage
+    // leaves the admission charged until expiry, just like interrupted work.
+    if (
+      checked._tag === "Failure" &&
+      checked.failure._tag !== "PasswordRejected" &&
+      checked.failure._tag !== "PasswordInputInvalid" &&
+      checked.failure._tag !== "StaleAuthentication"
+    )
+      return yield* PasswordUnavailable.make({});
 
     const decision = yield* read(
       yield* store.settleAttempt(

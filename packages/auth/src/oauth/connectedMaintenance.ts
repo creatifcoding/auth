@@ -185,8 +185,13 @@ export const makeOAuthConnectedMaintenance = <const Id extends string>(
               Effect.mapError(() => OAuthUnavailable.make({})),
             );
 
-            if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause))
-              return yield* Effect.interrupt;
+            if (Exit.isFailure(result)) {
+              if (Cause.hasInterrupts(result.cause)) return yield* Effect.interrupt;
+              if (Cause.hasDies(result.cause))
+                return yield* Effect.failCause(
+                  Cause.fromReasons<never>(result.cause.reasons.filter(Cause.isDieReason)),
+                );
+            }
 
             return { outcome: final.settled ? outcome : ("Unknown" as const) };
           }),

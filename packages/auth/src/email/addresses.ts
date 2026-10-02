@@ -29,6 +29,7 @@ import type { makeSessionModule } from "../sessions/module";
 import { EmailActionEvidence, type EmailActionAuthorization } from "./EmailActionEvidence";
 import { EmailAddressPersistence, type EmailAddressTarget } from "./EmailAddressPersistence";
 import {
+  emailCompletionFailure,
   EmailActionRequired,
   EmailConfigurationError,
   EmailMethodUnsupported,
@@ -194,7 +195,13 @@ export const makeEmailAddresses = <
 
         const privateBinding = yield* binder
           .verify(request.flowId, request.requestBinding)
-          .pipe(Effect.mapError(() => EmailRejected.make({})));
+          .pipe(
+            Effect.mapError((error) =>
+              error._tag === "RequestBindingInvalid"
+                ? EmailRejected.make({})
+                : EmailUnavailable.make({}),
+            ),
+          );
 
         const identifier = Object.freeze(
           LoginIdentifier.make({ namespace: "email", value: request.email }),
@@ -388,10 +395,7 @@ export const makeEmailAddresses = <
               credential: input.secret,
               binding: current.binding,
             })
-            .pipe(
-              Effect.flatMap(readProofCommit),
-              Effect.mapError(() => EmailRejected.make({})),
-            );
+            .pipe(Effect.flatMap(readProofCommit), Effect.mapError(emailCompletionFailure));
 
           if (result.value._tag === "Rejected") return yield* EmailRejected.make({});
 
@@ -412,7 +416,7 @@ export const makeEmailAddresses = <
                 credential: input.credential,
                 binding: current.binding,
               })
-              .pipe(Effect.mapError(() => EmailRejected.make({})));
+              .pipe(Effect.mapError(emailCompletionFailure));
 
             if (!(yield* persistence.checkCompletion(completion.input)))
               return yield* EmailRejected.make({});

@@ -84,7 +84,15 @@ export const makeProofDispatch = <DeliveryId>(
             },
             (_, journal) => journal.prepare(undefined),
           )
-          .pipe(Effect.flatMap(readProofCommit), Effect.result);
+          .pipe(
+            Effect.flatMap(readProofCommit),
+            // Settlement must not turn a failed send fiber into ordinary success.
+            // onExit also preserves its cause if settlement itself fails.
+            Effect.onExit(() =>
+              sent._tag === "Failure" ? Effect.failCause(sent.cause) : Effect.void,
+            ),
+            Effect.result,
+          );
 
         if (settled._tag === "Failure") return "ambiguous" as const;
 
