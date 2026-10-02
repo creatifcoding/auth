@@ -1,7 +1,7 @@
 import { type CommitJournal, type PreparedCommit } from "@yielded/auth/Hooks";
 import { reportAuthFailure } from "@yielded/auth/Persistence";
 /* oxlint-disable no-explicit-any -- existing storage kernels erase foreign table shapes; domain errors remain typed. */
-import { Cause, Effect } from "effect";
+import { Cause, Context, Effect } from "effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 import type { Statement } from "effect/sql/Statement";
@@ -30,6 +30,12 @@ export interface TransactionNativeDatabase {
     body: (transaction: any) => Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | SqlError, R>;
 }
+
+/** Root native database required only while constructing standalone services.
+ * Active transactions remain owned by their coordinator and journal. */
+export class NativeDatabase extends Context.Service<NativeDatabase, TransactionNativeDatabase>()(
+  "effect-auth/persistence/NativeDatabase",
+) {}
 
 export interface Observation {
   readonly table: Table;

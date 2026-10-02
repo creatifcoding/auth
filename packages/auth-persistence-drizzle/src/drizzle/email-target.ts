@@ -15,6 +15,7 @@ import {
   type EmailRegistrationConfiguration,
 } from "./email-registration";
 import {
+  CurrentEmailSql,
   makeSqlEmailAddressPersistence,
   makeSqlEmailSignInTargets,
   type EmailSqlConfiguration,
@@ -22,7 +23,7 @@ import {
   type EmailSqlQuery,
 } from "./email-sql";
 import type { ProofTargetConfiguration } from "./proof-target";
-import { sqlClientStandaloneGuard } from "./standalone-guard";
+import { sqlClientStandaloneGuard, type TransactionService } from "./standalone-guard";
 
 export interface EmailTargetConfiguration {
   readonly mode: "interactive" | "synchronous";
@@ -46,9 +47,9 @@ export type EmailCoordinatorError<E> =
   | SqlError.SqlError;
 
 export const sqlClientEmailStandaloneGuard = (
-  database: unknown,
+  service: TransactionService | undefined,
 ): Effect.Effect<void, EmailUnavailable> =>
-  sqlClientStandaloneGuard(database, () => EmailUnavailable.make({}));
+  sqlClientStandaloneGuard(service, () => EmailUnavailable.make({}));
 
 const proofConfiguration = (configuration: EmailTargetConfiguration, coordinated = false) => ({
   mode: configuration.proof.mode,
@@ -93,13 +94,12 @@ const registrationOptions = (
 });
 
 export const makeTargetEmailSignInServices = (
-  database: any,
   mapping: any,
   configuration: EmailTargetConfiguration,
 ) =>
   Effect.gen(function* () {
     return {
-      emailSignInTargets: yield* makeSqlEmailSignInTargets(database, mapping, {
+      emailSignInTargets: yield* makeSqlEmailSignInTargets(mapping, {
         mode: configuration.mode,
         locking: false,
         standaloneGuard: configuration.standaloneGuard,
@@ -108,7 +108,6 @@ export const makeTargetEmailSignInServices = (
   });
 
 export const makeTargetEmailAddressServices = (
-  database: any,
   mapping: any,
   proofMapping: any,
   configuration: EmailTargetConfiguration,
@@ -116,7 +115,6 @@ export const makeTargetEmailAddressServices = (
   Effect.gen(function* () {
     return {
       emailAddressPersistence: yield* makeSqlEmailAddressPersistence(
-        database,
         mapping,
         addressOptions(configuration, proofMapping),
       ),
@@ -124,7 +122,6 @@ export const makeTargetEmailAddressServices = (
   });
 
 export const makeTargetEmailRegistrationServices = <Registration>(
-  database: any,
   mapping: any,
   proofMapping: any,
   configuration: EmailTargetConfiguration,
@@ -132,7 +129,6 @@ export const makeTargetEmailRegistrationServices = <Registration>(
   Effect.gen(function* () {
     return {
       registrationAuthority: yield* makeSqlEmailRegistrationAuthority<Registration>(
-        database,
         mapping,
         registrationOptions(configuration, proofMapping),
       ),
@@ -161,9 +157,10 @@ export const coordinateTargetEmailAddress = <Transaction, A, E, R>(
           Effect.gen(function* () {
             return yield* owner(transaction, {
               emailAddressPersistence: yield* makeSqlEmailAddressPersistence(
-                transaction as unknown as EmailSqlDatabase,
                 mapping,
                 addressOptions(configuration, proofMapping, true),
+              ).pipe(
+                Effect.provideService(CurrentEmailSql, transaction as unknown as EmailSqlDatabase),
               ),
             });
           }),
@@ -196,9 +193,10 @@ export const coordinateTargetEmailRegistration = <Registration, Transaction, A, 
           Effect.gen(function* () {
             return yield* owner(transaction, {
               registrationAuthority: yield* makeSqlEmailRegistrationAuthority<Registration>(
-                transaction as unknown as EmailSqlDatabase,
                 mapping,
                 registrationOptions(configuration, proofMapping, true),
+              ).pipe(
+                Effect.provideService(CurrentEmailSql, transaction as unknown as EmailSqlDatabase),
               ),
             });
           }),

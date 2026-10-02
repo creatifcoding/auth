@@ -1,6 +1,5 @@
-/* oxlint-disable no-explicit-any -- existing mapped-row bridge; public adapters preserve table, ID, and Effect types. */
-
 import { type PreparedCommit, LifecycleHooks } from "@yielded/auth/Hooks";
+/* oxlint-disable no-explicit-any -- existing mapped-row bridge; public adapters preserve table, ID, and Effect types. */
 import {
   PasskeyConfigurationError,
   type PasskeyUnavailable,
@@ -44,6 +43,7 @@ import type {
   TransactionTargetConfiguration,
   makeTransactionExecutionKernel,
 } from "../transaction-execution-kernel";
+import type { NativeDatabase } from "../transaction-kernel";
 import type { makePasskeyCredentialsKernel } from "./credentials";
 import type { makePasskeyFlowKernel } from "./flow";
 import type { makePasskeyRegistrationCeremonyKernel } from "./registration-ceremony";
@@ -114,8 +114,8 @@ export const makePasskeyTargetKernel = (
   } = execution;
 
   const sqlClientPasskeyStandaloneGuard = (
-    database: Parameters<typeof sqlClientTransactionStandaloneGuard>[1],
-  ) => sqlClientTransactionStandaloneGuard(unavailable, database);
+    transactionService: Parameters<typeof sqlClientTransactionStandaloneGuard>[1],
+  ) => sqlClientTransactionStandaloneGuard(unavailable, transactionService);
 
   const emptyHooks: LifecycleHooks["Service"] = {
     before: () => Effect.void,
@@ -123,14 +123,12 @@ export const makePasskeyTargetKernel = (
   };
 
   const makePasskeyExecution = Effect.fnUntraced(function* (
-    database: Parameters<typeof makeTransactionExecution>[1],
     configuration: PasskeyTargetConfiguration,
-  ): Effect.fn.Return<PasskeyExecution, never, LifecycleHooks> {
+  ): Effect.fn.Return<PasskeyExecution, never, LifecycleHooks | NativeDatabase> {
     const hooks = yield* LifecycleHooks;
 
-    const execution = makeTransactionExecution(
+    const execution = yield* makeTransactionExecution(
       CurrentPasskeyTransaction,
-      database,
       configuration,
       unavailable,
       nonce,
@@ -423,18 +421,17 @@ export const makePasskeyTargetKernel = (
     );
 
   const makeTargetPasskeyCredentials = <M, RSetup>(
-    database: any,
     source: PasskeyMappingSource<M, RSetup>,
     configuration: PasskeyTargetConfiguration,
   ): Effect.Effect<
     PasskeyCredentialServices,
     PasskeyConfigurationError | PersistenceMappingError,
-    RSetup
+    RSetup | NativeDatabase
   > =>
     Effect.gen(function* () {
       const mapping = yield* capturedMapping(source, "read", configuration);
 
-      const execution = yield* makePasskeyExecution(database, configuration).pipe(
+      const execution = yield* makePasskeyExecution(configuration).pipe(
         Effect.provideService(LifecycleHooks, emptyHooks),
       );
 
@@ -442,18 +439,17 @@ export const makePasskeyTargetKernel = (
     });
 
   const makeTargetPasskeyEnrollmentContext = <M, RSetup>(
-    database: any,
     source: PasskeyMappingSource<M, RSetup>,
     configuration: PasskeyTargetConfiguration,
   ): Effect.Effect<
     PasskeyEnrollmentContextServices,
     PasskeyConfigurationError | PersistenceMappingError,
-    RSetup
+    RSetup | NativeDatabase
   > =>
     Effect.gen(function* () {
       const mapping = yield* capturedMapping(source, "context", configuration);
 
-      const execution = yield* makePasskeyExecution(database, configuration).pipe(
+      const execution = yield* makePasskeyExecution(configuration).pipe(
         Effect.provideService(LifecycleHooks, emptyHooks),
       );
 
@@ -461,17 +457,16 @@ export const makePasskeyTargetKernel = (
     });
 
   const makeTargetPasskeyPersistence = <M, RSetup>(
-    database: any,
     source: PasskeyMappingSource<M, RSetup>,
     configuration: PasskeyTargetConfiguration,
   ): Effect.Effect<
     PasskeyPersistenceServices,
     PasskeyConfigurationError | PersistenceMappingError,
-    RSetup | LifecycleHooks
+    RSetup | LifecycleHooks | NativeDatabase
   > =>
     Effect.gen(function* () {
       const mapping = yield* capturedMapping(source, "assertion", configuration);
-      const execution = yield* makePasskeyExecution(database, configuration);
+      const execution = yield* makePasskeyExecution(configuration);
 
       return {
         passkeyPersistence: makePasskeyPersistence(mapping, execution, configuration),
@@ -479,17 +474,16 @@ export const makePasskeyTargetKernel = (
     });
 
   const makeTargetPasskeyRegistration = <M, RSetup>(
-    database: any,
     source: PasskeyMappingSource<M, RSetup>,
     configuration: PasskeyTargetConfiguration,
   ): Effect.Effect<
     PasskeyRegistrationCeremonyServices,
     PasskeyConfigurationError | PersistenceMappingError,
-    RSetup | LifecycleHooks
+    RSetup | LifecycleHooks | NativeDatabase
   > =>
     Effect.gen(function* () {
       const mapping = yield* capturedMapping(source, "registration", configuration);
-      const execution = yield* makePasskeyExecution(database, configuration);
+      const execution = yield* makePasskeyExecution(configuration);
 
       return registrationServices(mapping, execution, configuration);
     });

@@ -184,25 +184,23 @@ export const makeRevocations = (
   );
 
 export const makeTargetOAuthConnectedServices = (
-  database: any,
   mapping: S.Mapping,
   configuration: OAuthTargetConfiguration,
 ) => {
   const retained = captured(mapping);
 
-  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+  return Effect.map(makeOAuthExecution(configuration), (execution) => ({
     oauthConnectedPersistence: makeConnected(retained, execution),
   }));
 };
 
 export const makeTargetOAuthConnectedRevocationServices = (
-  database: any,
   mapping: S.Revocations,
   configuration: OAuthTargetConfiguration,
 ) => {
   const retained = captured(mapping);
 
-  return Effect.map(makeOAuthExecution(database, configuration), (execution) => ({
+  return Effect.map(makeOAuthExecution(configuration), (execution) => ({
     oauthConnectedRevocations: makeRevocations(retained, execution),
   }));
 };

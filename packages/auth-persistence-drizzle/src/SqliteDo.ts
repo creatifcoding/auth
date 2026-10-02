@@ -1,9 +1,11 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { PersistenceConfigurationError } from "@yielded/auth-persistence/Adapter";
+import { NativeDatabase, PersistenceConfigurationError } from "@yielded/auth-persistence/Adapter";
 import type { AnyRelations } from "drizzle-orm";
 import { type EffectSQLiteDoDatabase, makeWithDefaults } from "drizzle-orm/effect-sqlite-do";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
+
+import { nativeDatabase } from "./drizzle/native-database";
 
 /** The application-owned Drizzle database used to construct persistence services. */
 export class Database extends Context.Service<Database, EffectSQLiteDoDatabase<AnyRelations>>()(
@@ -126,7 +128,9 @@ export const makeIdentityServices = <
 >(
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
 ) =>
-  Effect.map(Database, (database) => makeSqliteIdentityServices(database, mapping, "synchronous"));
+  makeSqliteIdentityServices(mapping, "synchronous").pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
+  );
 
 export const makeSubjectProvisioningServices = <
   Subject extends AnySQLiteTable,
@@ -136,8 +140,8 @@ export const makeSubjectProvisioningServices = <
 >(
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
 ) =>
-  Effect.map(Database, (database) =>
-    makeSqliteSubjectProvisioningServices(database, mapping, "synchronous"),
+  makeSqliteSubjectProvisioningServices(mapping, "synchronous").pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
   );
 
 export const makeExternalIdentityServices = <
@@ -146,7 +150,10 @@ export const makeExternalIdentityServices = <
   NativeId,
 >(
   mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => Effect.map(Database, (database) => makeSqliteExternalIdentityServices(database, mapping));
+) =>
+  makeSqliteExternalIdentityServices(mapping).pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
+  );
 
 import { makeSqlitePasswordPreparedTarget } from "./drizzle/sqlite-password-prepared";
 

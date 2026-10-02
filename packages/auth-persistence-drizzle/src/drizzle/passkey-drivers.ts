@@ -1,8 +1,10 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { LifecycleHooks } from "@yielded/auth/Hooks";
 import { PasskeyPersistence } from "@yielded/auth/Passkey";
 import type { Table } from "drizzle-orm";
 import { Effect, Context } from "effect";
 
+import { nativeDatabase } from "./native-database";
 import type {
   PasskeyCredentialMapping,
   PasskeyEnrollmentContextMapping,
@@ -318,8 +320,8 @@ export const makePasskeyTarget = <
     >(
       mapping: PasskeyMappingSource<PasskeyCredentialMapping<S, C, F, O, H, N> & Extra, RSetup>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetPasskeyCredentials(database, mapping, configuration),
+      makeTargetPasskeyCredentials(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     makePasskeyEnrollmentContextServices: <
       S extends T,
@@ -336,8 +338,8 @@ export const makePasskeyTarget = <
         RSetup
       >,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetPasskeyEnrollmentContext(database, mapping, configuration),
+      makeTargetPasskeyEnrollmentContext(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     makePasskeyPersistenceServices: <
       S extends T,
@@ -365,8 +367,8 @@ export const makePasskeyTarget = <
         RSetup
       >,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetPasskeyPersistence(database, mapping, configuration),
+      makeTargetPasskeyPersistence(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     makePasskeyRegistrationCeremonyServices: <
       M extends T,
@@ -382,8 +384,8 @@ export const makePasskeyTarget = <
         RSetup
       >,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetPasskeyRegistration(database, mapping, configuration),
+      makeTargetPasskeyRegistration(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     coordinatePasskeyPersistence,
     coordinatePasskeyRegistrationCeremony,

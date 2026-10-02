@@ -68,7 +68,7 @@ export const makeSubjectProvisioningServices = <
   NativeId,
 >(
   mapping: D1SubjectProvisioningMapping<Subject, Identifier, Request, NativeId>,
-) => Effect.map(Database, (database) => makeD1SubjectProvisioningServices(database, mapping));
+) => makeD1SubjectProvisioningServices(mapping);
 
 export const makeExternalIdentityServices = <
   Subject extends AnySQLiteTable,
@@ -76,7 +76,7 @@ export const makeExternalIdentityServices = <
   NativeId,
 >(
   mapping: D1ExternalIdentityMapping<Subject, External, NativeId>,
-) => Effect.map(Database, (database) => makeD1ExternalIdentityServices(database, mapping));
+) => makeD1ExternalIdentityServices(mapping);
 
 export const commitMode = "batch" as const;
 
@@ -88,7 +88,7 @@ export const makeIdentityServices = <
   NativeId,
 >(
   mapping: D1GeneratedIdentityMapping<Subject, Identifier, External, Request, NativeId>,
-) => Effect.map(Database, (database) => makeD1IdentityServices(database, mapping));
+) => makeD1IdentityServices(mapping);
 
 export {
   makeD1SessionStepUpServices as makeSessionStepUpServices,

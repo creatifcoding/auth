@@ -27,7 +27,7 @@ import {
   type SessionSqlDatabase,
   type SessionSqlOptions,
 } from "./session-sql";
-import { sqlClientStandaloneGuard } from "./standalone-guard";
+import { sqlClientStandaloneGuard, type TransactionService } from "./standalone-guard";
 
 export interface SessionTargetConfiguration {
   readonly mode: "interactive" | "synchronous";
@@ -45,9 +45,9 @@ interface TransactionOwner<Transaction> {
 type CoordinatorError<E> = E | SessionUnavailable | HookConfigurationError | SqlError.SqlError;
 
 export const sqlClientSessionStandaloneGuard = (
-  database: unknown,
+  service: TransactionService | undefined,
 ): Effect.Effect<void, SessionUnavailable> =>
-  sqlClientStandaloneGuard(database, () => SessionUnavailable.make({}));
+  sqlClientStandaloneGuard(service, () => SessionUnavailable.make({}));
 
 const options = (
   configuration: SessionTargetConfiguration,
@@ -59,42 +59,35 @@ const options = (
 });
 
 export const makeTargetAuthenticationAuthorityServices = <Claims>(
-  database: any,
   mapping: any,
   configuration: SessionTargetConfiguration,
 ) =>
   Effect.map(
-    makeSqlAuthenticationAuthority<Claims>(database, mapping, options(configuration)),
+    makeSqlAuthenticationAuthority<Claims>(mapping, options(configuration)),
     (authenticationAuthority) => ({ authenticationAuthority }),
   );
 
 export const makeTargetPendingAuthenticationServices = <Claims>(
-  database: any,
   mapping: any,
   configuration: SessionTargetConfiguration,
 ) =>
   Effect.map(
-    makeSqlPendingAuthentication<Claims>(database, mapping, options(configuration)),
+    makeSqlPendingAuthentication<Claims>(mapping, options(configuration)),
     (pendingAuthentication) => ({ pendingAuthentication }),
   );
 
 export const makeTargetStatefulSessionServices = <Claims>(
-  database: any,
   mapping: any,
   configuration: SessionTargetConfiguration,
-) => makeSqlStatefulSessions<Claims>(database, mapping, options(configuration));
+) => makeSqlStatefulSessions<Claims>(mapping, options(configuration));
 
 export const makeTargetSignedSessionValidityServices = (
-  database: any,
   mapping: any,
   configuration: SessionTargetConfiguration,
 ) =>
-  Effect.map(
-    makeSqlSignedValidity(database, mapping, options(configuration)),
-    (signedSessionValidity) => ({
-      signedSessionValidity,
-    }),
-  );
+  Effect.map(makeSqlSignedValidity(mapping, options(configuration)), (signedSessionValidity) => ({
+    signedSessionValidity,
+  }));
 
 /**
  * The native transaction is the root commit owner. Interruption or owner
@@ -146,10 +139,8 @@ export const coordinateTargetAuthenticationAuthority = <Claims, Transaction, A, 
     configuration,
     (transaction) =>
       Effect.map(
-        makeSqlAuthenticationAuthority<Claims>(
-          transaction as unknown as SessionSqlDatabase,
-          mapping,
-          options(configuration, true),
+        makeSqlAuthenticationAuthority<Claims>(mapping, options(configuration, true)).pipe(
+          Effect.provideService(CurrentSessionSql, transaction as unknown as SessionSqlDatabase),
         ),
         (authenticationAuthority) => ({ authenticationAuthority }),
       ),
@@ -170,10 +161,8 @@ export const coordinateTargetPendingAuthentication = <Claims, Transaction, A, E,
     configuration,
     (transaction) =>
       Effect.map(
-        makeSqlPendingAuthentication<Claims>(
-          transaction as unknown as SessionSqlDatabase,
-          mapping,
-          options(configuration, true),
+        makeSqlPendingAuthentication<Claims>(mapping, options(configuration, true)).pipe(
+          Effect.provideService(CurrentSessionSql, transaction as unknown as SessionSqlDatabase),
         ),
         (pendingAuthentication) => ({ pendingAuthentication }),
       ),
@@ -196,10 +185,8 @@ export const coordinateTargetStatefulSessions = <Claims, Transaction, A, E, R>(
     database,
     configuration,
     (transaction) =>
-      makeSqlStatefulSessions<Claims>(
-        transaction as unknown as SessionSqlDatabase,
-        mapping,
-        options(configuration, true),
+      makeSqlStatefulSessions<Claims>(mapping, options(configuration, true)).pipe(
+        Effect.provideService(CurrentSessionSql, transaction as unknown as SessionSqlDatabase),
       ),
     owner,
   );
@@ -218,10 +205,8 @@ export const coordinateTargetSignedSessionValidity = <Transaction, A, E, R>(
     configuration,
     (transaction) =>
       Effect.map(
-        makeSqlSignedValidity(
-          transaction as unknown as SessionSqlDatabase,
-          mapping,
-          options(configuration, true),
+        makeSqlSignedValidity(mapping, options(configuration, true)).pipe(
+          Effect.provideService(CurrentSessionSql, transaction as unknown as SessionSqlDatabase),
         ),
         (signedSessionValidity) => ({ signedSessionValidity }),
       ),
@@ -298,13 +283,12 @@ export const signedSessionValidityLayer = <E, R>(
   );
 
 export const makeTargetSessionStepUpServices = <Claims, Id>(
-  database: any,
   mapping: any,
   target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
   configuration: SessionTargetConfiguration,
 ) =>
   Effect.map(
-    makeSqlSessionStepUp<Claims>(database, mapping, options(configuration)),
+    makeSqlSessionStepUp<Claims>(mapping, options(configuration)),
     (sessionStepUpPersistence) => ({
       sessionStepUpPersistence: target.of(sessionStepUpPersistence),
     }),
@@ -325,10 +309,8 @@ export const coordinateTargetSessionStepUp = <Claims, Id, Transaction, A, E, R>(
     configuration,
     (transaction) =>
       Effect.map(
-        makeSqlSessionStepUp<Claims>(
-          transaction as unknown as SessionSqlDatabase,
-          mapping,
-          options(configuration, true),
+        makeSqlSessionStepUp<Claims>(mapping, options(configuration, true)).pipe(
+          Effect.provideService(CurrentSessionSql, transaction as unknown as SessionSqlDatabase),
         ),
         (sessionStepUpPersistence) => ({
           sessionStepUpPersistence: target.of(sessionStepUpPersistence),

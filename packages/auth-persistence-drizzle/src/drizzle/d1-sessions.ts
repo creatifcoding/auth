@@ -1623,8 +1623,9 @@ export const makeD1SignedValidity = (
 };
 
 export const makeD1SessionServiceEffects = {
-  authority: <Claims>(database: Database, mapping: any) =>
+  authority: <Claims>(mapping: any) =>
     Effect.gen(function* () {
+      const database = yield* CurrentD1PlanningDatabase;
       const hooks = yield* LifecycleHooks;
       const raw = makeD1AuthenticationAuthority<Claims>(mapping);
 
@@ -1650,8 +1651,9 @@ export const makeD1SessionServiceEffects = {
 
       return { authenticationAuthority };
     }),
-  pending: <Claims>(database: Database, mapping: any) =>
+  pending: <Claims>(mapping: any) =>
     Effect.gen(function* () {
+      const database = yield* CurrentD1PlanningDatabase;
       const hooks = yield* LifecycleHooks;
       const raw = makeD1PendingAuthentication<Claims>(mapping);
 
@@ -1678,8 +1680,9 @@ export const makeD1SessionServiceEffects = {
 
       return { pendingAuthentication };
     }),
-  stateful: <Claims>(database: Database, mapping: any) =>
+  stateful: <Claims>(mapping: any) =>
     Effect.gen(function* () {
+      const database = yield* CurrentD1PlanningDatabase;
       const hooks = yield* LifecycleHooks;
       const raw = makeD1StatefulSessions<Claims>(mapping);
 
@@ -1712,8 +1715,9 @@ export const makeD1SessionServiceEffects = {
 
       return { statefulSessionPersistence, sessionRepository };
     }),
-  validity: (database: Database, mapping: any) =>
+  validity: (mapping: any) =>
     Effect.gen(function* () {
+      const database = yield* CurrentD1PlanningDatabase;
       const hooks = yield* LifecycleHooks;
       const raw = makeD1SignedValidity(mapping);
 
@@ -1842,9 +1846,9 @@ export const makeD1AuthenticationAuthorityServices = <
     NativeSubjectId
   >,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeD1SessionServiceEffects.authority<Claims>(database, mapping as any),
-  );
+  makeD1SessionServiceEffects
+    .authority<Claims>(mapping as any)
+    .pipe(Effect.provideServiceEffect(CurrentD1PlanningDatabase, DatabaseService));
 
 export const makeD1PendingAuthenticationServices = <
   Claims,
@@ -1863,9 +1867,9 @@ export const makeD1PendingAuthenticationServices = <
     NativeSubjectId
   >,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeD1SessionServiceEffects.pending<Claims>(database, mapping as any),
-  );
+  makeD1SessionServiceEffects
+    .pending<Claims>(mapping as any)
+    .pipe(Effect.provideServiceEffect(CurrentD1PlanningDatabase, DatabaseService));
 
 export const makeD1StatefulSessionServices = <
   Claims,
@@ -1888,9 +1892,9 @@ export const makeD1StatefulSessionServices = <
     NativeSessionId
   >,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeD1SessionServiceEffects.stateful<Claims>(database, mapping as any),
-  );
+  makeD1SessionServiceEffects
+    .stateful<Claims>(mapping as any)
+    .pipe(Effect.provideServiceEffect(CurrentD1PlanningDatabase, DatabaseService));
 
 export const makeD1SignedSessionValidityServices = <
   Subject extends AnySQLiteTable,
@@ -1900,9 +1904,9 @@ export const makeD1SignedSessionValidityServices = <
 >(
   mapping: D1SignedSessionValidityMapping<Subject, Tombstone, NativeSubjectId, NativeSessionId>,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeD1SessionServiceEffects.validity(database, mapping as any),
-  );
+  makeD1SessionServiceEffects
+    .validity(mapping as any)
+    .pipe(Effect.provideServiceEffect(CurrentD1PlanningDatabase, DatabaseService));
 
 export function coordinateD1AuthenticationAuthority<
   Claims,

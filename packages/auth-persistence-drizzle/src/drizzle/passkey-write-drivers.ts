@@ -1,8 +1,10 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { LifecycleHooks } from "@yielded/auth/Hooks";
 import { PasskeyManagementPersistence, PasskeyPersistence } from "@yielded/auth/Passkey";
 import type { Table } from "drizzle-orm";
 import { Context, Effect } from "effect";
 
+import { nativeDatabase } from "./native-database";
 import type { PasskeyMappingSource } from "./passkey-model";
 import type { PasskeyCoordinatorError, PasskeyTargetConfiguration } from "./passkey-target";
 import type {
@@ -200,8 +202,8 @@ export const makePasskeyWriteTarget = <
       RSetup
     >,
   ) =>
-    Effect.flatMap(databaseService, (database) =>
-      makeTargetPasskeyManagement(database, mapping, configuration),
+    makeTargetPasskeyManagement(mapping, configuration).pipe(
+      Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
     );
 
   function coordinatePasskeyRegistration<
@@ -380,13 +382,13 @@ export const makePasskeyWriteTarget = <
       RSetup
     >,
   ) =>
-    Effect.flatMap(databaseService, (database) =>
-      makeTargetPasskeyRegistrationWriter<
-        PasskeyRegistrationMapping<S, C, F, O, H, M, Flow, Admission, Charge, Intent, N, Value> &
-          Extra,
-        Value,
-        RSetup
-      >(database, mapping, configuration),
+    makeTargetPasskeyRegistrationWriter<
+      PasskeyRegistrationMapping<S, C, F, O, H, M, Flow, Admission, Charge, Intent, N, Value> &
+        Extra,
+      Value,
+      RSetup
+    >(mapping, configuration).pipe(
+      Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
     );
 
   return {

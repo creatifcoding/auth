@@ -1,3 +1,4 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { LifecycleHooks } from "@yielded/auth/Hooks";
 import {
   OAuthConnectedPersistence,
@@ -9,6 +10,7 @@ import { Effect, Context } from "effect";
 
 import { makeD1Owner } from "./d1-planning";
 import { D1BatchStatements } from "./D1BatchStatements";
+import { nativeDatabase } from "./native-database";
 import type {
   OAuthConnectedMapping,
   OAuthConnectedRevocationMapping,
@@ -304,8 +306,8 @@ export const makeOAuthConnectedTarget = <
     >(
       mapping: OAuthConnectedMapping<S, AC, T, O, F, G, C, H, UA, DC, N, J> & Extra,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetOAuthConnectedServices(database, mapping, configuration),
+      makeTargetOAuthConnectedServices(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     makeOAuthConnectedRevocationServices: <
       T extends Family,
@@ -319,8 +321,8 @@ export const makeOAuthConnectedTarget = <
     >(
       mapping: OAuthConnectedRevocationMapping<T, O, F, G, C, H, J, N> & Extra,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetOAuthConnectedRevocationServices(database, mapping, configuration),
+      makeTargetOAuthConnectedRevocationServices(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     coordinateOAuthConnected,
     coordinateOAuthConnectedRevocations,

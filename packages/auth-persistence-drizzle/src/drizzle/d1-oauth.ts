@@ -1,4 +1,5 @@
 import type { D1Client } from "@effect/sql-d1/D1Client";
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { LifecycleHooks } from "@yielded/auth/Hooks";
 import {
   OAuthAccountsPersistence,
@@ -14,6 +15,7 @@ import { Effect, Context } from "effect";
 import { Database as DatabaseService } from "./d1-database";
 import { makeD1Owner } from "./d1-planning";
 import { D1BatchStatements } from "./D1BatchStatements";
+import { nativeDatabase } from "./native-database";
 import type {
   OAuthAccountsMapping,
   OAuthD1Mapping,
@@ -57,8 +59,8 @@ export const makeD1OAuthAccountsServices = <
 >(
   mapping: OAuthAccountsMapping<S, O, C, AC, F, T, U, N> & OAuthD1Mapping,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetOAuthAccountsServices(database, mapping, configuration),
+  makeTargetOAuthAccountsServices(mapping, configuration).pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(DatabaseService)),
   );
 
 export const makeD1OAuthSignInServices = <
@@ -71,8 +73,8 @@ export const makeD1OAuthSignInServices = <
 >(
   mapping: OAuthSignInMapping<S, O, C, AC, F, N> & OAuthD1Mapping,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetOAuthSignInServices(database, mapping, configuration),
+  makeTargetOAuthSignInServices(mapping, configuration).pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(DatabaseService)),
   );
 
 export const makeD1OAuthRegistrationIntentServices = <
@@ -87,8 +89,8 @@ export const makeD1OAuthRegistrationIntentServices = <
 >(
   mapping: OAuthRegistrationIntentMapping<S, O, C, AC, F, T, I, N> & OAuthD1Mapping,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetOAuthRegistrationIntentServices(database, mapping, configuration),
+  makeTargetOAuthRegistrationIntentServices(mapping, configuration).pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(DatabaseService)),
   );
 
 export const makeD1OAuthRegistrationServices = <
@@ -104,8 +106,8 @@ export const makeD1OAuthRegistrationServices = <
 >(
   mapping: OAuthRegistrationMapping<Registration, S, O, C, AC, T, I, R, N> & OAuthD1Mapping,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetOAuthRegistrationServices<Registration>(database, mapping, configuration),
+  makeTargetOAuthRegistrationServices<Registration>(mapping, configuration).pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(DatabaseService)),
   );
 
 export function coordinateD1OAuthSignIn<

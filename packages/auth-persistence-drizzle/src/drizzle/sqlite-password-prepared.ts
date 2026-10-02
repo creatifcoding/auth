@@ -4,6 +4,7 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
 import type {
   PasswordPreparedPersistenceMapping,
   PasswordPreparedProofMapping,
@@ -12,8 +13,14 @@ import {
   makeTargetPasswordPreparedPersistenceServices,
   coordinateTargetPasswordPreparedPersistence,
 } from "./password-prepared-target";
+import { CurrentPasswordSql } from "./password-sql";
 import type { PasswordTargetConfiguration } from "./password-target";
 import type { SqlitePasswordDatabase } from "./sqlite-passwords";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 type TransactionOf<D extends SqlitePasswordDatabase> = Parameters<
   Parameters<D["transaction"]>[0]
@@ -25,10 +32,19 @@ export const makeSqlitePasswordPreparedTarget = <
   Synchronous extends boolean = false,
 >(
   databaseService: Context.Service<DatabaseId, D>,
-  configuration: PasswordTargetConfiguration | ((database: D) => PasswordTargetConfiguration),
+  configuration:
+    | PasswordTargetConfiguration
+    | ((service: TransactionService | undefined) => PasswordTargetConfiguration),
 ) => {
   const configurationFor = (database: D) =>
-    typeof configuration === "function" ? configuration(database) : configuration;
+    typeof configuration === "function"
+      ? configuration(transactionService(database))
+      : configuration;
+
+  const standaloneConfiguration =
+    typeof configuration === "function"
+      ? Effect.map(acquireTransactionService(databaseService), configuration)
+      : Effect.succeed(configuration);
 
   function coordinatePasswordPreparedPersistence<
     Database extends D,
@@ -250,14 +266,9 @@ export const makeSqlitePasswordPreparedTarget = <
       mapping: PasswordPreparedPersistenceMapping<S, I, C, AC, A, RS, CE, M, T, B, NativeId>,
       proofMapping?: PasswordPreparedProofMapping<PS, PC, PM, PSub, PI, PCr, PNativeId>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetPasswordPreparedPersistenceServices(
-          database,
-          mapping,
-          configurationFor(database),
-          proofMapping,
-        ),
-      ),
+      Effect.flatMap(standaloneConfiguration, (configuration) =>
+        makeTargetPasswordPreparedPersistenceServices(mapping, configuration, proofMapping),
+      ).pipe(Effect.provideServiceEffect(CurrentPasswordSql, nativeDatabase(databaseService))),
     coordinatePasswordPreparedPersistence,
   };
 };

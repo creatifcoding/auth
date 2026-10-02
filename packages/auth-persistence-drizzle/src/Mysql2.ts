@@ -1,7 +1,7 @@
 import type { AnyRelations } from "drizzle-orm";
 import { type EffectMysql2Database, makeWithDefaults } from "drizzle-orm/effect-mysql2";
 import type { AnyMySqlTable } from "drizzle-orm/mysql-core";
-import { Effect, Layer } from "effect";
+import { Layer } from "effect";
 
 import type {
   IdentityTables,
@@ -55,7 +55,7 @@ export const makeSubjectProvisioningServices = <
   NativeId,
 >(
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
-) => Effect.map(Database, (database) => makeMysqlSubjectProvisioningServices(database, mapping));
+) => makeMysqlSubjectProvisioningServices(mapping);
 
 export const makeExternalIdentityServices = <
   Subject extends AnyMySqlTable,
@@ -63,7 +63,7 @@ export const makeExternalIdentityServices = <
   NativeId,
 >(
   mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => Effect.map(Database, (database) => makeMysqlExternalIdentityServices(database, mapping));
+) => makeMysqlExternalIdentityServices(mapping);
 
 export const commitMode = "interactive" as const;
 
@@ -75,7 +75,7 @@ export const makeIdentityServices = <
   NativeId,
 >(
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => Effect.map(Database, (database) => makeMysqlIdentityServices(database, mapping));
+) => makeMysqlIdentityServices(mapping);
 
 export {
   makeMysqlSessionStepUpServices as makeSessionStepUpServices,

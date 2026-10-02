@@ -16,6 +16,7 @@ import { type Context, Cause, Effect, Layer } from "effect";
 import type * as SqlError from "effect/sql/SqlError";
 
 import { makeSqlPasswordPreparedPersistence } from "./password-prepared-sql";
+import { CurrentPasswordSql } from "./password-sql";
 import type { PasswordSqlDatabase } from "./password-sql";
 import {
   passwordOptions,
@@ -24,7 +25,6 @@ import {
 } from "./password-target";
 
 export const makeTargetPasswordPreparedPersistenceServices = (
-  database: any,
   mapping: any,
   configuration: PasswordTargetConfiguration,
   proofMapping?: any,
@@ -32,7 +32,6 @@ export const makeTargetPasswordPreparedPersistenceServices = (
   Effect.gen(function* () {
     return {
       passwordPreparedPersistence: yield* makeSqlPasswordPreparedPersistence(
-        database,
         mapping,
         passwordOptions(configuration, proofMapping),
       ),
@@ -69,9 +68,13 @@ export const coordinateTargetPasswordPreparedPersistence = <Transaction, A, E, R
             let acceptingPostconditions = true;
 
             const services = yield* makeSqlPasswordPreparedPersistence(
-              transaction as unknown as PasswordSqlDatabase,
               mapping,
               passwordOptions(configuration, proofMapping, true),
+            ).pipe(
+              Effect.provideService(
+                CurrentPasswordSql,
+                transaction as unknown as PasswordSqlDatabase,
+              ),
             );
 
             const protect = <Out, Err, Env>(effect: Effect.Effect<Out, Err, Env>) =>

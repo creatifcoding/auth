@@ -1,7 +1,10 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { AnyRelations } from "drizzle-orm";
 import { type EffectSQLiteWasmDatabase, makeWithDefaults } from "drizzle-orm/effect-sqlite-wasm";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
+
+import { nativeDatabase } from "./drizzle/native-database";
 
 /** The application-owned Drizzle database used to construct persistence services. */
 export class Database extends Context.Service<Database, EffectSQLiteWasmDatabase<AnyRelations>>()(
@@ -32,32 +35,31 @@ import { makeSqliteSessionTarget, sqliteSessionConfiguration } from "./drizzle/s
 
 const sessionTarget = makeSqliteSessionTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
   Database,
-  (database) =>
-    sqliteSessionConfiguration("interactive", sqlClientSessionStandaloneGuard(database)),
+  (service) => sqliteSessionConfiguration("interactive", sqlClientSessionStandaloneGuard(service)),
 );
 
 const proofTarget = makeSqliteProofTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
   Database,
-  (database) => sqliteProofConfiguration("interactive", sqlClientProofStandaloneGuard(database)),
+  (service) => sqliteProofConfiguration("interactive", sqlClientProofStandaloneGuard(service)),
 );
 
 const passwordTarget = makeSqlitePasswordTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
   Database,
-  (database) =>
+  (service) =>
     sqlitePasswordConfiguration(
       "interactive",
-      sqlClientPasswordStandaloneGuard(database),
-      sqlClientProofStandaloneGuard(database),
+      sqlClientPasswordStandaloneGuard(service),
+      sqlClientProofStandaloneGuard(service),
     ),
 );
 
 const emailTarget = makeSqliteEmailTarget<Database, EffectSQLiteWasmDatabase<AnyRelations>>(
   Database,
-  (database) =>
+  (service) =>
     sqliteEmailConfiguration(
       "interactive",
-      sqlClientEmailStandaloneGuard(database),
-      sqlClientProofStandaloneGuard(database),
+      sqlClientEmailStandaloneGuard(service),
+      sqlClientProofStandaloneGuard(service),
     ),
 );
 
@@ -102,7 +104,9 @@ export const makeIdentityServices = <
 >(
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
 ) =>
-  Effect.map(Database, (database) => makeSqliteIdentityServices(database, mapping, "interactive"));
+  makeSqliteIdentityServices(mapping, "interactive").pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
+  );
 
 export const makeSubjectProvisioningServices = <
   Subject extends AnySQLiteTable,
@@ -112,8 +116,8 @@ export const makeSubjectProvisioningServices = <
 >(
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
 ) =>
-  Effect.map(Database, (database) =>
-    makeSqliteSubjectProvisioningServices(database, mapping, "interactive"),
+  makeSqliteSubjectProvisioningServices(mapping, "interactive").pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
   );
 
 export const makeExternalIdentityServices = <
@@ -122,18 +126,21 @@ export const makeExternalIdentityServices = <
   NativeId,
 >(
   mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => Effect.map(Database, (database) => makeSqliteExternalIdentityServices(database, mapping));
+) =>
+  makeSqliteExternalIdentityServices(mapping).pipe(
+    Effect.provideServiceEffect(NativeDatabase, nativeDatabase(Database)),
+  );
 
 import { makeSqlitePasswordPreparedTarget } from "./drizzle/sqlite-password-prepared";
 
 const passwordPreparedTarget = makeSqlitePasswordPreparedTarget<
   Database,
   EffectSQLiteWasmDatabase<AnyRelations>
->(Database, (database) =>
+>(Database, (service) =>
   sqlitePasswordConfiguration(
     "interactive",
-    sqlClientPasswordStandaloneGuard(database),
-    sqlClientProofStandaloneGuard(database),
+    sqlClientPasswordStandaloneGuard(service),
+    sqlClientProofStandaloneGuard(service),
   ),
 );
 

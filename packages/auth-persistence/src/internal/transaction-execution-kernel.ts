@@ -14,6 +14,7 @@ import type { Statement } from "effect/sql/Statement";
 
 import { requireStandalone } from "./standalone";
 import {
+  NativeDatabase,
   type TransactionNativeDatabase,
   type TransactionOwner,
   type makeTransactionKernel,
@@ -23,7 +24,10 @@ export interface TransactionTargetConfiguration<Failure> {
   readonly mode: "interactive" | "synchronous" | "batch";
   readonly dialect: "pg" | "mysql" | "sqlite";
   readonly locking: boolean;
-  readonly standaloneGuard: (database: any) => Effect.Effect<void, Failure>;
+  /** The captured database's transaction marker; batch drivers may omit it. */
+  readonly standaloneGuard: (
+    transactionService: SqlClient.SqlClient["transactionService"] | undefined,
+  ) => Effect.Effect<void, Failure>;
   readonly transaction?: <A, E, R>(
     database: any,
     body: (transaction: any) => Effect.Effect<A, E, R>,
@@ -65,19 +69,18 @@ export const makeTransactionExecutionKernel = (
 
   const sqlClientTransactionStandaloneGuard = <Failure>(
     unavailable: () => Failure,
-    database: {
-      readonly $client: Pick<SqlClient.SqlClient, "transactionService">;
-    },
-  ) => requireStandalone(unavailable, database.$client.transactionService);
+    transactionService: SqlClient.SqlClient["transactionService"] | undefined,
+  ) => requireStandalone(unavailable, transactionService);
 
-  const makeTransactionExecution = <Failure, OwnerId>(
+  const makeTransactionExecution = Effect.fnUntraced(function* <Failure, OwnerId>(
     ownerTag: Context.Key<OwnerId, TransactionOwner<Failure>>,
-    database: TransactionNativeDatabase,
     configuration: TransactionTargetConfiguration<Failure>,
     unavailable: () => Failure,
     nonce: () => string,
     bound?: TransactionBound<Failure>,
-  ): TransactionExecution<Failure, OwnerId> => {
+  ): Effect.fn.Return<TransactionExecution<Failure, OwnerId>, never, NativeDatabase> {
+    const database = yield* NativeDatabase;
+
     const invariant: (value: unknown) => asserts value = (value) => {
       if (!value) throw unavailable();
     };
@@ -90,7 +93,7 @@ export const makeTransactionExecutionKernel = (
           ? Effect.suspend(() => (bound.active ? Effect.void : Effect.fail(unavailable())))
           : Effect.gen(function* () {
               if (yield* hasCommitScope) return yield* Effect.fail(unavailable());
-              yield* configuration.standaloneGuard(database);
+              yield* configuration.standaloneGuard(database.$client.transactionService);
             }),
       poison: () => {
         if (bound !== undefined) bound.poisoned = true;
@@ -144,7 +147,7 @@ export const makeTransactionExecutionKernel = (
                 )
               : Effect.gen(function* () {
                   if (yield* hasCommitScope) return yield* Effect.fail(unavailable());
-                  yield* configuration.standaloneGuard(database);
+                  yield* configuration.standaloneGuard(database.$client.transactionService);
                   const marker = nonce();
 
                   const result = yield* coordinateCommit(
@@ -193,7 +196,7 @@ export const makeTransactionExecutionKernel = (
         });
       },
     };
-  };
+  });
 
   const coordinateTransactionOwner = <
     Failure,
@@ -225,7 +228,7 @@ export const makeTransactionExecutionKernel = (
   > => {
     return Effect.gen(function* () {
       if (yield* hasCommitScope) return yield* Effect.fail(unavailable());
-      yield* configuration.standaloneGuard(database);
+      yield* configuration.standaloneGuard(database.$client.transactionService);
 
       // Allocation is independent of registration data and always precedes the physical owner.
       const resources = yield* allocate.pipe(
@@ -260,14 +263,13 @@ export const makeTransactionExecutionKernel = (
                 const value = yield* owner(
                   tx as Transaction,
                   services(
-                    makeTransactionExecution(
+                    yield* makeTransactionExecution(
                       ownerTag,
-                      tx,
                       configuration,
                       unavailable,
                       nonce,
                       bound,
-                    ),
+                    ).pipe(Effect.provideService(NativeDatabase, tx)),
                     resources,
                   ),
                   (statement) => {

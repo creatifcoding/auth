@@ -8,6 +8,7 @@ import type { SqlError } from "effect/sql/SqlError";
 
 import { Database as DatabaseService } from "./mysql-database";
 import { mysqlPasswordConfiguration as configuration } from "./mysql-passwords";
+import { nativeDatabase } from "./native-database";
 import type {
   PasswordPreparedPersistenceMapping,
   PasswordPreparedProofMapping,
@@ -16,6 +17,8 @@ import {
   makeTargetPasswordPreparedPersistenceServices,
   coordinateTargetPasswordPreparedPersistence,
 } from "./password-prepared-target";
+import { CurrentPasswordSql } from "./password-sql";
+import { acquireTransactionService, transactionService } from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 type Database = EffectMysql2Database<AnyRelations>;
 type TransactionOf<D extends Database> = Parameters<Parameters<D["transaction"]>[0]>[0];
@@ -43,14 +46,11 @@ export const makeMySqlPasswordPreparedPersistenceServices = <
   mapping: PasswordPreparedPersistenceMapping<S, I, C, AC, A, RS, CE, M, T, B, NativeId>,
   proofMapping?: PasswordPreparedProofMapping<PS, PC, PM, PSub, PI, PCr, PNativeId>,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetPasswordPreparedPersistenceServices(
-      database,
-      mapping,
-      configuration(database),
-      proofMapping,
-    ),
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) =>
+      makeTargetPasswordPreparedPersistenceServices(mapping, configuration, proofMapping),
+  ).pipe(Effect.provideServiceEffect(CurrentPasswordSql, nativeDatabase(DatabaseService)));
 
 export function coordinateMySqlPasswordPreparedPersistence<
   TargetId,
@@ -188,7 +188,7 @@ export function coordinateMySqlPasswordPreparedPersistence<
     coordinateTargetPasswordPreparedPersistence<TransactionOf<D>, Out, E, Exclude<R, TargetId>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       options.proofMapping,
       (
         transaction: TransactionOf<D>,

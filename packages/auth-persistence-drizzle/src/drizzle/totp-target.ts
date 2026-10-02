@@ -1,4 +1,5 @@
 import { randomId } from "@yielded/auth-crypto";
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import { LifecycleHooks } from "@yielded/auth/Hooks";
 import {
   TotpConfigurationError,
@@ -13,6 +14,7 @@ import { Context, Effect, Schema } from "effect";
 import type { Statement } from "effect/sql/Statement";
 
 import type { PersistenceMappingError } from "./model";
+import { nativeDatabase } from "./native-database";
 import type { SuppliedService } from "./SuppliedService";
 import {
   type TotpMapping,
@@ -44,8 +46,8 @@ export type TotpCoordinatorError<E> =
   | PersistenceMappingError;
 
 export const sqlClientTotpStandaloneGuard = (
-  database: Parameters<typeof sqlClientTransactionStandaloneGuard>[1],
-) => sqlClientTransactionStandaloneGuard(unavailable, database);
+  service: Parameters<typeof sqlClientTransactionStandaloneGuard>[1],
+) => sqlClientTransactionStandaloneGuard(unavailable, service);
 
 const validateMapping = <M>(original: M, configuration: TotpTargetConfiguration): M => {
   const mapping = original as any;
@@ -127,7 +129,6 @@ export const makeTargetTotpPersistence = <
   N,
   RSetup = never,
 >(
-  database: TransactionNativeDatabase,
   source: TotpMappingSource<TotpMapping<S, F, C, N>, RSetup>,
   configuration: TotpTargetConfiguration,
 ) =>
@@ -139,9 +140,8 @@ export const makeTargetTotpPersistence = <
       catch: () => TotpConfigurationError.make({}),
     });
 
-    const execution = makeTransactionExecution(
+    const execution = yield* makeTransactionExecution(
       CurrentTotpTransaction,
-      database,
       configuration,
       unavailable,
       randomId,
@@ -301,8 +301,8 @@ export const makeTotpTarget = <
     makeTotpPersistenceServices: <S extends T, F extends T, C extends T, N, RSetup = never>(
       mapping: TotpMappingSource<TotpMapping<S, F, C, N> & Extra, RSetup>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetTotpPersistence(database as any, mapping, configuration),
+      makeTargetTotpPersistence(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     coordinateTotpPersistence,
   };

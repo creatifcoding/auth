@@ -1,4 +1,5 @@
 import { randomId } from "@yielded/auth-crypto";
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import { LifecycleHooks } from "@yielded/auth/Hooks";
 import {
   PhoneConfigurationError,
@@ -21,6 +22,7 @@ import type { Statement } from "effect/sql/Statement";
 import { CurrentD1PlanningDatabase } from "./d1-planning";
 import { compileD1ProofCompletionPlan } from "./d1-proofs";
 import type { PersistenceMappingError } from "./model";
+import { nativeDatabase } from "./native-database";
 import {
   phoneProofs,
   type PhoneMapping,
@@ -59,8 +61,8 @@ export type PhoneCoordinatorError<E> =
   | PersistenceMappingError;
 
 export const sqlClientPhoneStandaloneGuard = (
-  database: Parameters<typeof sqlClientTransactionStandaloneGuard>[1],
-) => sqlClientTransactionStandaloneGuard(unavailable, database);
+  service: Parameters<typeof sqlClientTransactionStandaloneGuard>[1],
+) => sqlClientTransactionStandaloneGuard(unavailable, service);
 
 const validateMapping = <M>(original: M, configuration: PhoneTargetConfiguration): M => {
   const mapping = original as any;
@@ -264,7 +266,6 @@ export const makeTargetPhonePersistence = <
   N,
   RSetup = never,
 >(
-  database: TransactionNativeDatabase,
   source: PhoneMappingSource<PhoneMapping<S, I, C, F, N>, RSetup>,
   configuration: PhoneTargetConfiguration,
 ) =>
@@ -276,9 +277,8 @@ export const makeTargetPhonePersistence = <
       catch: () => PhoneConfigurationError.make({}),
     });
 
-    const execution = makeTransactionExecution(
+    const execution = yield* makeTransactionExecution(
       CurrentPhoneTransaction,
-      database,
       configuration,
       unavailable,
       randomId,
@@ -469,8 +469,8 @@ export const makePhoneTarget = <
     >(
       mapping: PhoneMappingSource<PhoneMapping<S, I, C, F, N> & Extra, RSetup>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetPhonePersistence(database as any, mapping, configuration),
+      makeTargetPhonePersistence(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     coordinatePhonePersistence,
   };

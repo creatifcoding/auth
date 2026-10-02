@@ -8,7 +8,7 @@ import { SecurityRevision } from "@yielded/auth/Sessions";
 import { type Context, Effect, Schema } from "effect";
 
 import { PersistenceConfigurationError } from "./configuration";
-import type { PasswordSqlDatabase } from "./password-kernel";
+import { CurrentPasswordSql } from "./password-kernel";
 import type { QueryOperations } from "./query-operations";
 import type { PasswordRegistrationAuthority } from "./registration-contract";
 import type { makeMappings } from "./storage-mapping";
@@ -25,7 +25,6 @@ type CreateSubject = (input: {
  * always suppress; a public request ID never recovers a private password intent.
  */
 export const makeRegistrationAuthority = Effect.fn("makeRegistrationAuthority")(function* <R>(
-  database: PasswordSqlDatabase,
   mappings: ReturnType<typeof makeMappings>,
   operations: QueryOperations,
   standalone: Effect.Effect<void, PasswordUnavailable>,
@@ -34,8 +33,9 @@ export const makeRegistrationAuthority = Effect.fn("makeRegistrationAuthority")(
 ): Effect.fn.Return<
   PasswordRegistrationAuthority<unknown>,
   PersistenceConfigurationError,
-  LifecycleHooks | R
+  LifecycleHooks | CurrentPasswordSql | R
 > {
+  const database = yield* CurrentPasswordSql;
   const hooks = yield* LifecycleHooks;
   // Core has already decoded registration with the selected strategy's Schema;
   // the dynamic strategy table erases only that heterogeneous callback signature.

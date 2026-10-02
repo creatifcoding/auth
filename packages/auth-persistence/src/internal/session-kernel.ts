@@ -625,62 +625,44 @@ export const makeSessionKernel = (operations: QueryOperations) => {
         });
   };
 
-  const makeSqlAuthenticationAuthority = <Claims>(
-    database: Database,
+  const makeSqlAuthenticationAuthority = Effect.fnUntraced(function* <Claims>(
     mapping: AuthenticationAuthorityMapping<Claims, any, any, any, any, any>,
     options: SessionSqlOptions,
-  ): Effect.Effect<AuthenticationAuthority["Service"], never, LifecycleHooks> =>
-    Effect.map(LifecycleHooks, (hooks) => {
-      const service = {
-        capture: (subjectId: SubjectId, credentialIds: ReadonlyArray<string>) =>
-          safeTransaction(
-            inTransaction(database, captureIn(mapping, subjectId, credentialIds, true)),
-          ),
-        requirements: (evidence: AuthenticationEvidence) =>
-          safeTransaction(
-            inTransaction(
-              database,
-              validateEvidenceIn(mapping, evidence, true).pipe(
-                Effect.map((result) => result.requirement),
-              ),
+  ): Effect.fn.Return<
+    AuthenticationAuthority["Service"],
+    never,
+    LifecycleHooks | CurrentSessionSql
+  > {
+    const database = yield* CurrentSessionSql;
+    const hooks = yield* LifecycleHooks;
+
+    const service = {
+      capture: (subjectId: SubjectId, credentialIds: ReadonlyArray<string>) =>
+        safeTransaction(
+          inTransaction(database, captureIn(mapping, subjectId, credentialIds, true)),
+        ),
+      requirements: (evidence: AuthenticationEvidence) =>
+        safeTransaction(
+          inTransaction(
+            database,
+            validateEvidenceIn(mapping, evidence, true).pipe(
+              Effect.map((result) => result.requirement),
             ),
           ),
-        approve: <A>(
-          input: Parameters<AuthenticationAuthority["Service"]["approve"]>[0],
-          prepare: PrepareSessionCommit<void, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const journal = yield* CurrentCommitJournal;
-              const { requirement } = yield* validateEvidenceIn(mapping, input.evidence, true);
+        ),
+      approve: <A>(
+        input: Parameters<AuthenticationAuthority["Service"]["approve"]>[0],
+        prepare: PrepareSessionCommit<void, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const journal = yield* CurrentCommitJournal;
+            const { requirement } = yield* validateEvidenceIn(mapping, input.evidence, true);
 
-              if (input.pending === undefined) {
-                const assessed = yield* assessAuthentication(input.evidence, requirement).pipe(
-                  Effect.mapError(unavailable),
-                );
-
-                const now = yield* freshNow;
-
-                if (
-                  !assessed.satisfied ||
-                  DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(input.expiresAt) ||
-                  DateTime.toEpochMillis(input.expiresAt) >
-                    DateTime.toEpochMillis(input.absoluteExpiresAt)
-                )
-                  return yield* stale();
-
-                return prepare(undefined, journal);
-              }
-              if (mapping.pending === undefined) return yield* invalidPending();
-              const pendingMapping = { ...mapping, ...mapping.pending };
-              const pending = yield* validatePending(pendingMapping, input.pending);
-
-              if (!preservesRevision(input.evidence, pending.evidence))
-                return yield* invalidPending();
-
+            if (input.pending === undefined) {
               const assessed = yield* assessAuthentication(input.evidence, requirement).pipe(
                 Effect.mapError(unavailable),
               );
@@ -689,32 +671,55 @@ export const makeSessionKernel = (operations: QueryOperations) => {
 
               if (
                 !assessed.satisfied ||
-                DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(pending.expiresAt) ||
                 DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(input.expiresAt) ||
                 DateTime.toEpochMillis(input.expiresAt) >
                   DateTime.toEpochMillis(input.absoluteExpiresAt)
               )
                 return yield* stale();
-              const receipt = prepare(undefined, journal);
 
-              yield* consumePending(pendingMapping, input.pending, input.absoluteExpiresAt);
+              return prepare(undefined, journal);
+            }
+            if (mapping.pending === undefined) return yield* invalidPending();
+            const pendingMapping = { ...mapping, ...mapping.pending };
+            const pending = yield* validatePending(pendingMapping, input.pending);
 
-              return receipt;
-            }),
-          ),
-      };
+            if (!preservesRevision(input.evidence, pending.evidence))
+              return yield* invalidPending();
 
-      return {
-        capture: (subjectId, credentialIds) =>
-          service
-            .capture(subjectId, credentialIds)
-            .pipe(Effect.provideService(LifecycleHooks, hooks)),
-        requirements: (evidence) =>
-          service.requirements(evidence).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        approve: (input, prepare) =>
-          service.approve(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-      } satisfies AuthenticationAuthority["Service"];
-    });
+            const assessed = yield* assessAuthentication(input.evidence, requirement).pipe(
+              Effect.mapError(unavailable),
+            );
+
+            const now = yield* freshNow;
+
+            if (
+              !assessed.satisfied ||
+              DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(pending.expiresAt) ||
+              DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(input.expiresAt) ||
+              DateTime.toEpochMillis(input.expiresAt) >
+                DateTime.toEpochMillis(input.absoluteExpiresAt)
+            )
+              return yield* stale();
+            const receipt = prepare(undefined, journal);
+
+            yield* consumePending(pendingMapping, input.pending, input.absoluteExpiresAt);
+
+            return receipt;
+          }),
+        ),
+    };
+
+    return {
+      capture: (subjectId, credentialIds) =>
+        service
+          .capture(subjectId, credentialIds)
+          .pipe(Effect.provideService(LifecycleHooks, hooks)),
+      requirements: (evidence) =>
+        service.requirements(evidence).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      approve: (input, prepare) =>
+        service.approve(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+    } satisfies AuthenticationAuthority["Service"];
+  });
 
   /** The same locked security checks serve full consumption reads and the
    * claims-free additional-factor context. No lock spans proof verification. */
@@ -782,167 +787,163 @@ export const makeSessionKernel = (operations: QueryOperations) => {
     return record;
   });
 
-  const makeSqlPendingAuthentication = <Claims>(
-    database: Database,
+  const makeSqlPendingAuthentication = Effect.fnUntraced(function* <Claims>(
     mapping: PendingAuthenticationMapping<Claims, any, any, any, any, any>,
     options: SessionSqlOptions,
-  ): Effect.Effect<PendingAuthentication<Claims>, never, LifecycleHooks> =>
-    Effect.map(LifecycleHooks, (hooks) => {
-      const service = {
-        create: <A>(
-          input: Omit<PendingAuthenticationRecord<Claims>, "version">,
-          _inputNow: DateTime.Utc,
-          prepare: PrepareSessionCommit<PendingAuthenticationRecord<Claims>, A>,
-        ) =>
-          owned(
+  ): Effect.fn.Return<PendingAuthentication<Claims>, never, LifecycleHooks | CurrentSessionSql> {
+    const database = yield* CurrentSessionSql;
+    const hooks = yield* LifecycleHooks;
+
+    const service = {
+      create: <A>(
+        input: Omit<PendingAuthenticationRecord<Claims>, "version">,
+        _inputNow: DateTime.Utc,
+        prepare: PrepareSessionCommit<PendingAuthenticationRecord<Claims>, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+
+            const { nativeSubjectId, requirement } = yield* validateEvidenceIn(
+              mapping,
+              input.evidence,
+              true,
+            );
+
+            const existing = (yield* readFlow(mapping, input.evidence.flowId, true))[0];
+
+            if (existing !== undefined) {
+              const dedupUntil = yield* mapping.flow.decodeInstant(
+                existing[mapping.flow.dedupUntil],
+              );
+
+              if (DateTime.toEpochMillis(yield* freshNow) < DateTime.toEpochMillis(dedupUntil))
+                return yield* SessionConflict.make({});
+              yield* transaction
+                .delete(mapping.pending.table)
+                .where(eq(pendingColumns(mapping).flowId, input.evidence.flowId));
+              yield* transaction
+                .delete(mapping.flow.table)
+                .where(eq(flowColumns(mapping).flowId, input.evidence.flowId));
+            }
+
+            const version = yield* allocate(
+              options.mode,
+              mapping.pending.allocateVersion,
+              mapping.pending.allocateVersionSync,
+            );
+
+            yield* assessAuthentication(input.evidence, requirement);
+            const now = yield* freshNow;
+
+            if (DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(input.expiresAt))
+              return yield* stale();
+            const record = { ...input, version };
+            const receipt = prepare(record, journal);
+
+            yield* transaction.insert(mapping.flow.table).values(
+              mapping.flow.encodePendingInsert({
+                evidence: input.evidence,
+                subjectId: nativeSubjectId,
+                pendingDigest: input.digest,
+                dedupUntil: input.expiresAt,
+              }),
+            );
+            yield* transaction.insert(mapping.pending.table).values(
+              mapping.pending.encodeInsert(record, {
+                subjectId: nativeSubjectId,
+                failedAttempts: 0,
+                consumed: false,
+              }),
+            );
+
+            return receipt;
+          }).pipe(normalizeMutation(mapping)),
+        ),
+      context: (input: { readonly digest: TokenDigest; readonly now: DateTime.Utc }) =>
+        safeTransaction(
+          inTransaction(
             database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-
-              const { nativeSubjectId, requirement } = yield* validateEvidenceIn(
-                mapping,
-                input.evidence,
-                true,
-              );
-
-              const existing = (yield* readFlow(mapping, input.evidence.flowId, true))[0];
-
-              if (existing !== undefined) {
-                const dedupUntil = yield* mapping.flow.decodeInstant(
-                  existing[mapping.flow.dedupUntil],
-                );
-
-                if (DateTime.toEpochMillis(yield* freshNow) < DateTime.toEpochMillis(dedupUntil))
-                  return yield* SessionConflict.make({});
-                yield* transaction
-                  .delete(mapping.pending.table)
-                  .where(eq(pendingColumns(mapping).flowId, input.evidence.flowId));
-                yield* transaction
-                  .delete(mapping.flow.table)
-                  .where(eq(flowColumns(mapping).flowId, input.evidence.flowId));
-              }
-
-              const version = yield* allocate(
-                options.mode,
-                mapping.pending.allocateVersion,
-                mapping.pending.allocateVersionSync,
-              );
-
-              yield* assessAuthentication(input.evidence, requirement);
-              const now = yield* freshNow;
-
-              if (DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(input.expiresAt))
-                return yield* stale();
-              const record = { ...input, version };
-              const receipt = prepare(record, journal);
-
-              yield* transaction.insert(mapping.flow.table).values(
-                mapping.flow.encodePendingInsert({
-                  evidence: input.evidence,
-                  subjectId: nativeSubjectId,
-                  pendingDigest: input.digest,
-                  dedupUntil: input.expiresAt,
-                }),
-              );
-              yield* transaction.insert(mapping.pending.table).values(
-                mapping.pending.encodeInsert(record, {
-                  subjectId: nativeSubjectId,
-                  failedAttempts: 0,
-                  consumed: false,
-                }),
-              );
-
-              return receipt;
-            }).pipe(normalizeMutation(mapping)),
+            readAuthenticatedPending<PendingAuthenticationState>(mapping, input, "context"),
           ),
-        context: (input: { readonly digest: TokenDigest; readonly now: DateTime.Utc }) =>
-          safeTransaction(
-            inTransaction(
-              database,
-              readAuthenticatedPending<PendingAuthenticationState>(mapping, input, "context"),
-            ),
-          ).pipe(Effect.flatMap(pendingAuthenticationContext)),
-        read: (input: {
-          readonly digest: TokenDigest;
-          readonly bindingDigest: TokenDigest;
-          readonly now: DateTime.Utc;
-        }) =>
-          safeTransaction(
-            inTransaction(
-              database,
-              readAuthenticatedPending<PendingAuthenticationRecord<Claims>>(
-                mapping,
-                input,
-                "record",
-              ),
-            ),
-          ).pipe(Effect.map((record) => record as PendingAuthenticationRecord<Claims>)),
-        reject: <A>(
-          input: Parameters<PendingAuthentication<Claims>["reject"]>[0],
-          prepare: PrepareSessionCommit<{ readonly _tag: "Rejected" }, A>,
-        ) =>
-          owned(
+        ).pipe(Effect.flatMap(pendingAuthenticationContext)),
+      read: (input: {
+        readonly digest: TokenDigest;
+        readonly bindingDigest: TokenDigest;
+        readonly now: DateTime.Utc;
+      }) =>
+        safeTransaction(
+          inTransaction(
             database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-              const initial = (yield* readPending(mapping, input.digest, false))[0];
-
-              if (initial === undefined) return prepare({ _tag: "Rejected" }, journal);
-              const record = yield* mapping.pending.decodeContext(initial);
-
-              const nativeSubjectId = yield* mapping.subjectId.toNative(
-                record.evidence.revision.subjectId,
-              );
-
-              const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
-              const current = (yield* readPending(mapping, input.digest, true))[0];
-              const now = yield* freshNow;
-              const receipt = prepare({ _tag: "Rejected" }, journal);
-
-              if (
-                subject !== undefined &&
-                mapping.subject.isActiveStatus(subject[mapping.subject.status]) &&
-                subject[mapping.subject.securityRevision] ===
-                  record.evidence.revision.securityRevision &&
-                current !== undefined &&
-                current[mapping.pending.consumed] === false &&
-                record.evidence.bindingDigest === input.bindingDigest &&
-                DateTime.toEpochMillis(now) < DateTime.toEpochMillis(record.expiresAt)
-              ) {
-                yield* transaction
-                  .update(mapping.pending.table)
-                  .set(
-                    updateValues([
-                      [
-                        mapping.pending.failedAttempts,
-                        sql`case when ${pendingColumns(mapping).failedAttempts} < ${pendingColumns(mapping).attemptLimit} then ${pendingColumns(mapping).failedAttempts} + 1 else ${pendingColumns(mapping).failedAttempts} end`,
-                      ],
-                    ]),
-                  )
-                  .where(eq(pendingColumns(mapping).digest, input.digest));
-              }
-
-              return receipt;
-            }),
+            readAuthenticatedPending<PendingAuthenticationRecord<Claims>>(mapping, input, "record"),
           ),
-      };
+        ).pipe(Effect.map((record) => record as PendingAuthenticationRecord<Claims>)),
+      reject: <A>(
+        input: Parameters<PendingAuthentication<Claims>["reject"]>[0],
+        prepare: PrepareSessionCommit<{ readonly _tag: "Rejected" }, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+            const initial = (yield* readPending(mapping, input.digest, false))[0];
 
-      return {
-        create: (input, now, prepare) =>
-          service.create(input, now, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        context: (input) =>
-          service.context(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        read: (input) => service.read(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        reject: (input, prepare) =>
-          service.reject(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-      } satisfies PendingAuthentication<Claims>;
-    });
+            if (initial === undefined) return prepare({ _tag: "Rejected" }, journal);
+            const record = yield* mapping.pending.decodeContext(initial);
+
+            const nativeSubjectId = yield* mapping.subjectId.toNative(
+              record.evidence.revision.subjectId,
+            );
+
+            const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
+            const current = (yield* readPending(mapping, input.digest, true))[0];
+            const now = yield* freshNow;
+            const receipt = prepare({ _tag: "Rejected" }, journal);
+
+            if (
+              subject !== undefined &&
+              mapping.subject.isActiveStatus(subject[mapping.subject.status]) &&
+              subject[mapping.subject.securityRevision] ===
+                record.evidence.revision.securityRevision &&
+              current !== undefined &&
+              current[mapping.pending.consumed] === false &&
+              record.evidence.bindingDigest === input.bindingDigest &&
+              DateTime.toEpochMillis(now) < DateTime.toEpochMillis(record.expiresAt)
+            ) {
+              yield* transaction
+                .update(mapping.pending.table)
+                .set(
+                  updateValues([
+                    [
+                      mapping.pending.failedAttempts,
+                      sql`case when ${pendingColumns(mapping).failedAttempts} < ${pendingColumns(mapping).attemptLimit} then ${pendingColumns(mapping).failedAttempts} + 1 else ${pendingColumns(mapping).failedAttempts} end`,
+                    ],
+                  ]),
+                )
+                .where(eq(pendingColumns(mapping).digest, input.digest));
+            }
+
+            return receipt;
+          }),
+        ),
+    };
+
+    return {
+      create: (input, now, prepare) =>
+        service.create(input, now, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      context: (input) => service.context(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      read: (input) => service.read(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      reject: (input, prepare) =>
+        service.reject(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+    } satisfies PendingAuthentication<Claims>;
+  });
 
   const sessionColumns = (mapping: any) => ({
     sessionId: column(mapping.session.table, mapping.session.sessionId),
@@ -955,637 +956,626 @@ export const makeSessionKernel = (operations: QueryOperations) => {
     absoluteExpiresAt: column(mapping.session.table, mapping.session.absoluteExpiresAt),
   });
 
-  const makeSqlStatefulSessions = <Claims>(
-    database: Database,
+  const makeSqlStatefulSessions = Effect.fnUntraced(function* <Claims>(
     mapping: StatefulSessionMapping<Claims, any, any, any, any, any, any, any>,
     options: SessionSqlOptions,
-  ): Effect.Effect<
+  ): Effect.fn.Return<
     {
       readonly statefulSessionPersistence: StatefulSessionPersistence<Claims>;
       readonly sessionRepository: SessionRepository;
     },
     never,
-    LifecycleHooks
-  > =>
-    Effect.map(LifecycleHooks, (hooks) => {
-      const c = sessionColumns(mapping);
+    LifecycleHooks | CurrentSessionSql
+  > {
+    const database = yield* CurrentSessionSql;
+    const hooks = yield* LifecycleHooks;
 
-      const persistence = {
-        establish: <A>(
-          input: Parameters<StatefulSessionPersistence<Claims>["establish"]>[0],
-          prepare: PrepareSessionCommit<StatefulSessionRecord<Claims>, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
+    const c = sessionColumns(mapping);
 
-              const { nativeSubjectId, requirement } = yield* validateEvidenceIn(
+    const persistence = {
+      establish: <A>(
+        input: Parameters<StatefulSessionPersistence<Claims>["establish"]>[0],
+        prepare: PrepareSessionCommit<StatefulSessionRecord<Claims>, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+
+            const { nativeSubjectId, requirement } = yield* validateEvidenceIn(
+              mapping,
+              input.evidence,
+              true,
+            );
+
+            let flowInsert: unknown | undefined;
+            let pendingExpiresAt: DateTime.Utc | undefined;
+
+            if (input.pending === undefined)
+              flowInsert = yield* ensureDirectFlowAvailable(
                 mapping,
                 input.evidence,
-                true,
+                nativeSubjectId,
+                input.session.absoluteExpiresAt,
               );
+            else {
+              if (mapping.pending === undefined) return yield* invalidPending();
+              const pending = yield* validatePending(mapping, input.pending);
 
-              let flowInsert: unknown | undefined;
-              let pendingExpiresAt: DateTime.Utc | undefined;
+              if (!preservesRevision(input.evidence, pending.evidence))
+                return yield* invalidPending();
+              pendingExpiresAt = pending.expiresAt;
+            }
 
-              if (input.pending === undefined)
-                flowInsert = yield* ensureDirectFlowAvailable(
-                  mapping,
-                  input.evidence,
-                  nativeSubjectId,
-                  input.session.absoluteExpiresAt,
-                );
-              else {
-                if (mapping.pending === undefined) return yield* invalidPending();
-                const pending = yield* validatePending(mapping, input.pending);
+            const nativeSessionId = yield* allocate(
+              options.mode,
+              mapping.session.allocateId,
+              mapping.session.allocateIdSync,
+            );
 
-                if (!preservesRevision(input.evidence, pending.evidence))
-                  return yield* invalidPending();
-                pendingExpiresAt = pending.expiresAt;
-              }
+            const sessionId = yield* mapping.sessionId.toSession(nativeSessionId);
 
-              const nativeSessionId = yield* allocate(
-                options.mode,
-                mapping.session.allocateId,
-                mapping.session.allocateIdSync,
+            const version = yield* allocate(
+              options.mode,
+              mapping.session.allocateVersion,
+              mapping.session.allocateVersionSync,
+            );
+
+            const assessed = yield* assessAuthentication(input.evidence, requirement);
+            const now = yield* freshNow;
+
+            if (
+              !assessed.satisfied ||
+              (pendingExpiresAt !== undefined &&
+                DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(pendingExpiresAt)) ||
+              DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(input.session.expiresAt) ||
+              DateTime.toEpochMillis(input.session.expiresAt) >
+                DateTime.toEpochMillis(input.session.absoluteExpiresAt)
+            )
+              return yield* stale();
+
+            const record = {
+              ...input.session,
+              sessionId,
+              version,
+              subjectId: input.evidence.revision.subjectId,
+              securityRevision: input.evidence.revision.securityRevision,
+              assurance: assessed.assurance,
+              provenance: yield* snapshotSessionAuthenticationProvenance({
+                evidence: input.evidence,
+              }),
+              issuedAt: now,
+            };
+
+            const receipt = prepare(record, journal);
+
+            if (flowInsert !== undefined)
+              yield* transaction.insert(mapping.flow.table).values(flowInsert);
+            else
+              yield* consumePending(
+                { ...mapping, pending: mapping.pending! },
+                input.pending!,
+                input.session.absoluteExpiresAt,
               );
+            yield* transaction.insert(mapping.session.table).values(
+              mapping.session.encodeInsert(record, {
+                subjectId: nativeSubjectId,
+                sessionId: nativeSessionId,
+              }),
+            );
 
-              const sessionId = yield* mapping.sessionId.toSession(nativeSessionId);
+            return receipt;
+          }).pipe(normalizeMutation(mapping)),
+        ),
+      verify: (input: any) =>
+        safeTransaction(
+          inTransaction(
+            database,
+            Effect.gen(function* () {
+              const read = yield* CurrentSessionSql;
 
-              const version = yield* allocate(
-                options.mode,
-                mapping.session.allocateVersion,
-                mapping.session.allocateVersionSync,
-              );
+              const rows = yield* read
+                .select()
+                .from(mapping.session.table)
+                .where(eq(c.digest, input.digest))
+                .limit(1);
 
-              const assessed = yield* assessAuthentication(input.evidence, requirement);
+              const row = rows[0];
+
+              if (row === undefined) return yield* invalidSession();
+              const record = yield* mapping.session.decode(row);
+              const nativeSubjectId = yield* mapping.subjectId.toNative(record.subjectId);
+              const subjects = yield* readSubject(mapping, nativeSubjectId, false);
+              const subject = subjects[0];
               const now = yield* freshNow;
 
               if (
-                !assessed.satisfied ||
-                (pendingExpiresAt !== undefined &&
-                  DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(pendingExpiresAt)) ||
-                DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(input.session.expiresAt) ||
-                DateTime.toEpochMillis(input.session.expiresAt) >
-                  DateTime.toEpochMillis(input.session.absoluteExpiresAt)
+                subject === undefined ||
+                !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
+                subject[mapping.subject.securityRevision] !== record.securityRevision ||
+                DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.expiresAt) ||
+                DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.absoluteExpiresAt)
               )
-                return yield* stale();
+                return yield* invalidSession();
 
-              const record = {
-                ...input.session,
-                sessionId,
-                version,
-                subjectId: input.evidence.revision.subjectId,
-                securityRevision: input.evidence.revision.securityRevision,
-                assurance: assessed.assurance,
-                provenance: yield* snapshotSessionAuthenticationProvenance({
-                  evidence: input.evidence,
-                }),
-                issuedAt: now,
-              };
-
-              const receipt = prepare(record, journal);
-
-              if (flowInsert !== undefined)
-                yield* transaction.insert(mapping.flow.table).values(flowInsert);
-              else
-                yield* consumePending(
-                  { ...mapping, pending: mapping.pending! },
-                  input.pending!,
-                  input.session.absoluteExpiresAt,
-                );
-              yield* transaction.insert(mapping.session.table).values(
-                mapping.session.encodeInsert(record, {
-                  subjectId: nativeSubjectId,
-                  sessionId: nativeSessionId,
-                }),
-              );
-
-              return receipt;
-            }).pipe(normalizeMutation(mapping)),
+              return record;
+            }),
           ),
-        verify: (input: any) =>
-          safeTransaction(
-            inTransaction(
-              database,
-              Effect.gen(function* () {
-                const read = yield* CurrentSessionSql;
+        ),
+      rotate: <A>(
+        input: Parameters<StatefulSessionPersistence<Claims>["rotate"]>[0],
+        prepare: PrepareSessionCommit<StatefulSessionRecord<Claims>, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+            const nativeSessionId = yield* mapping.sessionId.toNative(input.sessionId);
 
-                const rows = yield* read
-                  .select()
-                  .from(mapping.session.table)
-                  .where(eq(c.digest, input.digest))
-                  .limit(1);
+            const initial = (yield* transaction
+              .select()
+              .from(mapping.session.table)
+              .where(eq(c.sessionId, nativeSessionId))
+              .limit(1))[0];
 
-                const row = rows[0];
+            if (initial === undefined) return yield* SessionConflict.make({});
+            const initialRecord = yield* mapping.session.decode(initial);
+            const nativeSubjectId = yield* mapping.subjectId.toNative(initialRecord.subjectId);
+            const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
 
-                if (row === undefined) return yield* invalidSession();
-                const record = yield* mapping.session.decode(row);
-                const nativeSubjectId = yield* mapping.subjectId.toNative(record.subjectId);
-                const subjects = yield* readSubject(mapping, nativeSubjectId, false);
-                const subject = subjects[0];
-                const now = yield* freshNow;
-
-                if (
-                  subject === undefined ||
-                  !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
-                  subject[mapping.subject.securityRevision] !== record.securityRevision ||
-                  DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.expiresAt) ||
-                  DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.absoluteExpiresAt)
-                )
-                  return yield* invalidSession();
-
-                return record;
-              }),
-            ),
-          ),
-        rotate: <A>(
-          input: Parameters<StatefulSessionPersistence<Claims>["rotate"]>[0],
-          prepare: PrepareSessionCommit<StatefulSessionRecord<Claims>, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-              const nativeSessionId = yield* mapping.sessionId.toNative(input.sessionId);
-
-              const initial = (yield* transaction
+            const row = (yield* selectRows(
+              transaction
                 .select()
                 .from(mapping.session.table)
                 .where(eq(c.sessionId, nativeSessionId))
-                .limit(1))[0];
+                .limit(1),
+              options.locking,
+            ))[0];
 
-              if (initial === undefined) return yield* SessionConflict.make({});
-              const initialRecord = yield* mapping.session.decode(initial);
-              const nativeSubjectId = yield* mapping.subjectId.toNative(initialRecord.subjectId);
-              const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
+            if (row === undefined) return yield* SessionConflict.make({});
+            const record = yield* mapping.session.decode(row);
 
-              const row = (yield* selectRows(
-                transaction
-                  .select()
-                  .from(mapping.session.table)
-                  .where(eq(c.sessionId, nativeSessionId))
-                  .limit(1),
-                options.locking,
-              ))[0];
+            const version = yield* allocate(
+              options.mode,
+              mapping.session.allocateVersion,
+              mapping.session.allocateVersionSync,
+            );
 
-              if (row === undefined) return yield* SessionConflict.make({});
-              const record = yield* mapping.session.decode(row);
+            const now = yield* freshNow;
 
-              const version = yield* allocate(
-                options.mode,
-                mapping.session.allocateVersion,
-                mapping.session.allocateVersionSync,
+            if (
+              subject === undefined ||
+              !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
+              subject[mapping.subject.securityRevision] !== input.expectedSecurityRevision ||
+              record.securityRevision !== input.expectedSecurityRevision ||
+              record.digest !== input.expectedDigest ||
+              record.version !== input.expectedVersion ||
+              DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.expiresAt) ||
+              DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.absoluteExpiresAt) ||
+              DateTime.toEpochMillis(input.nextExpiresAt) >
+                DateTime.toEpochMillis(record.absoluteExpiresAt) ||
+              DateTime.toEpochMillis(input.nextExpiresAt) <= DateTime.toEpochMillis(now)
+            )
+              return yield* SessionConflict.make({});
+
+            const next = {
+              ...record,
+              digest: input.nextDigest,
+              credentialVersion: input.nextCredentialVersion,
+              version,
+              issuedAt: now,
+              expiresAt: input.nextExpiresAt,
+            };
+
+            const receipt = prepare(next, journal);
+
+            yield* transaction
+              .update(mapping.session.table)
+              .set(mapping.session.encodeRotation(next))
+              .where(
+                and(
+                  eq(c.sessionId, nativeSessionId),
+                  eq(c.digest, input.expectedDigest),
+                  eq(c.version, input.expectedVersion),
+                ),
               );
+
+            return receipt;
+          }),
+        ),
+      revokeDigest: <A>(digest: TokenDigest, prepare: PrepareSessionCommit<boolean, A>) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+
+            const initial = (yield* transaction
+              .select()
+              .from(mapping.session.table)
+              .where(eq(c.digest, digest))
+              .limit(1))[0];
+
+            if (initial === undefined) return prepare(false, journal);
+            const record = yield* mapping.session.decode(initial);
+            const nativeSubjectId = yield* mapping.subjectId.toNative(record.subjectId);
+
+            yield* readSubject(mapping, nativeSubjectId, true);
+
+            const row = (yield* selectRows(
+              transaction.select().from(mapping.session.table).where(eq(c.digest, digest)).limit(1),
+              options.locking,
+            ))[0];
+
+            const receipt = prepare(row !== undefined, journal);
+
+            if (row !== undefined)
+              yield* transaction.delete(mapping.session.table).where(eq(c.digest, digest));
+
+            return receipt;
+          }),
+        ),
+      revoke: <A>(
+        input: Parameters<StatefulSessionPersistence<Claims>["revoke"]>[0],
+        prepare: PrepareSessionCommit<void, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+            const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
+            const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
+
+            if (
+              subject === undefined ||
+              !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
+              subject[mapping.subject.securityRevision] !== input.expectedSecurityRevision
+            )
+              return yield* stale();
+            const nativeSessionId = yield* mapping.sessionId.toNative(input.sessionId);
+            const receipt = prepare(undefined, journal);
+
+            yield* transaction
+              .delete(mapping.session.table)
+              .where(and(eq(c.subjectId, nativeSubjectId), eq(c.sessionId, nativeSessionId)));
+
+            return receipt;
+          }),
+        ),
+      revokeAll: <A>(
+        input: Parameters<StatefulSessionPersistence<Claims>["revokeAll"]>[0],
+        prepare: PrepareSessionCommit<void, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+            const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
+            const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
+
+            if (
+              subject === undefined ||
+              !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
+              subject[mapping.subject.securityRevision] !== input.expectedSecurityRevision
+            )
+              return yield* stale();
+            const nextRevisionSync = mapping.subject.nextSecurityRevisionSync;
+
+            const next = yield* allocate(
+              options.mode,
+              mapping.subject.nextSecurityRevision?.(input.expectedSecurityRevision),
+              nextRevisionSync === undefined
+                ? undefined
+                : () => nextRevisionSync(input.expectedSecurityRevision),
+            );
+
+            const receipt = prepare(undefined, journal);
+
+            yield* transaction
+              .update(mapping.subject.table)
+              .set(updateValues([[mapping.subject.securityRevision, next]]))
+              .where(
+                and(
+                  eq(authorityColumns(mapping).subjectId, nativeSubjectId),
+                  eq(authorityColumns(mapping).subjectRevision, input.expectedSecurityRevision),
+                ),
+              );
+            yield* transaction
+              .delete(mapping.session.table)
+              .where(eq(c.subjectId, nativeSubjectId));
+
+            return receipt;
+          }),
+        ),
+    };
+
+    const repository = {
+      list: (input: any) =>
+        safeTransaction(
+          inTransaction(
+            database,
+            Effect.gen(function* () {
+              const read = yield* CurrentSessionSql;
+              const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
+              const subject = (yield* readSubject(mapping, nativeSubjectId, false))[0];
+
+              if (
+                subject === undefined ||
+                !mapping.subject.isActiveStatus(subject[mapping.subject.status])
+              )
+                return { sessions: [] };
+
+              const cursor =
+                input.cursor === undefined
+                  ? undefined
+                  : yield* mapping.sessionId.toNative(input.cursor as any);
 
               const now = yield* freshNow;
 
-              if (
-                subject === undefined ||
-                !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
-                subject[mapping.subject.securityRevision] !== input.expectedSecurityRevision ||
-                record.securityRevision !== input.expectedSecurityRevision ||
-                record.digest !== input.expectedDigest ||
-                record.version !== input.expectedVersion ||
-                DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.expiresAt) ||
-                DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(record.absoluteExpiresAt) ||
-                DateTime.toEpochMillis(input.nextExpiresAt) >
-                  DateTime.toEpochMillis(record.absoluteExpiresAt) ||
-                DateTime.toEpochMillis(input.nextExpiresAt) <= DateTime.toEpochMillis(now)
-              )
-                return yield* SessionConflict.make({});
-
-              const next = {
-                ...record,
-                digest: input.nextDigest,
-                credentialVersion: input.nextCredentialVersion,
-                version,
-                issuedAt: now,
-                expiresAt: input.nextExpiresAt,
-              };
-
-              const receipt = prepare(next, journal);
-
-              yield* transaction
-                .update(mapping.session.table)
-                .set(mapping.session.encodeRotation(next))
-                .where(
-                  and(
-                    eq(c.sessionId, nativeSessionId),
-                    eq(c.digest, input.expectedDigest),
-                    eq(c.version, input.expectedVersion),
-                  ),
-                );
-
-              return receipt;
-            }),
-          ),
-        revokeDigest: <A>(digest: TokenDigest, prepare: PrepareSessionCommit<boolean, A>) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-
-              const initial = (yield* transaction
+              const rows = yield* read
                 .select()
                 .from(mapping.session.table)
-                .where(eq(c.digest, digest))
-                .limit(1))[0];
-
-              if (initial === undefined) return prepare(false, journal);
-              const record = yield* mapping.session.decode(initial);
-              const nativeSubjectId = yield* mapping.subjectId.toNative(record.subjectId);
-
-              yield* readSubject(mapping, nativeSubjectId, true);
-
-              const row = (yield* selectRows(
-                transaction
-                  .select()
-                  .from(mapping.session.table)
-                  .where(eq(c.digest, digest))
-                  .limit(1),
-                options.locking,
-              ))[0];
-
-              const receipt = prepare(row !== undefined, journal);
-
-              if (row !== undefined)
-                yield* transaction.delete(mapping.session.table).where(eq(c.digest, digest));
-
-              return receipt;
-            }),
-          ),
-        revoke: <A>(
-          input: Parameters<StatefulSessionPersistence<Claims>["revoke"]>[0],
-          prepare: PrepareSessionCommit<void, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-              const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
-              const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
-
-              if (
-                subject === undefined ||
-                !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
-                subject[mapping.subject.securityRevision] !== input.expectedSecurityRevision
-              )
-                return yield* stale();
-              const nativeSessionId = yield* mapping.sessionId.toNative(input.sessionId);
-              const receipt = prepare(undefined, journal);
-
-              yield* transaction
-                .delete(mapping.session.table)
-                .where(and(eq(c.subjectId, nativeSubjectId), eq(c.sessionId, nativeSessionId)));
-
-              return receipt;
-            }),
-          ),
-        revokeAll: <A>(
-          input: Parameters<StatefulSessionPersistence<Claims>["revokeAll"]>[0],
-          prepare: PrepareSessionCommit<void, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-              const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
-              const subject = (yield* readSubject(mapping, nativeSubjectId, true))[0];
-
-              if (
-                subject === undefined ||
-                !mapping.subject.isActiveStatus(subject[mapping.subject.status]) ||
-                subject[mapping.subject.securityRevision] !== input.expectedSecurityRevision
-              )
-                return yield* stale();
-              const nextRevisionSync = mapping.subject.nextSecurityRevisionSync;
-
-              const next = yield* allocate(
-                options.mode,
-                mapping.subject.nextSecurityRevision?.(input.expectedSecurityRevision),
-                nextRevisionSync === undefined
-                  ? undefined
-                  : () => nextRevisionSync(input.expectedSecurityRevision),
-              );
-
-              const receipt = prepare(undefined, journal);
-
-              yield* transaction
-                .update(mapping.subject.table)
-                .set(updateValues([[mapping.subject.securityRevision, next]]))
                 .where(
                   and(
-                    eq(authorityColumns(mapping).subjectId, nativeSubjectId),
-                    eq(authorityColumns(mapping).subjectRevision, input.expectedSecurityRevision),
+                    eq(c.subjectId, nativeSubjectId),
+                    eq(c.securityRevision, subject[mapping.subject.securityRevision]),
+                    gt(c.expiresAt, mapping.session.encodeInstant(now)),
+                    gt(c.absoluteExpiresAt, mapping.session.encodeInstant(now)),
+                    cursor === undefined ? undefined : gt(c.sessionId, cursor),
                   ),
-                );
-              yield* transaction
-                .delete(mapping.session.table)
-                .where(eq(c.subjectId, nativeSubjectId));
+                )
+                .orderBy(c.sessionId)
+                .limit(input.limit + 1);
 
-              return receipt;
+              const decoded = yield* Effect.forEach(rows, (row: any) =>
+                mapping.session.decode(row),
+              );
+
+              const codec = Schema.toCodecJson(Schema.toType(SessionMetadata));
+
+              const sessions = yield* Effect.forEach(decoded.slice(0, input.limit), (record: any) =>
+                Schema.encodeEffect(codec)(record).pipe(Effect.flatMap(Schema.decodeEffect(codec))),
+              );
+
+              const extra = decoded[input.limit];
+
+              return {
+                sessions,
+                ...(extra === undefined ? {} : { nextCursor: sessions.at(-1)?.sessionId }),
+              };
             }),
           ),
-      };
+        ),
+    };
 
-      const repository = {
-        list: (input: any) =>
-          safeTransaction(
-            inTransaction(
-              database,
-              Effect.gen(function* () {
-                const read = yield* CurrentSessionSql;
-                const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
-                const subject = (yield* readSubject(mapping, nativeSubjectId, false))[0];
+    return {
+      statefulSessionPersistence: {
+        establish: (input, prepare) =>
+          persistence.establish(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+        verify: (input) =>
+          persistence.verify(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
+        rotate: (input, prepare) =>
+          persistence.rotate(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+        revokeDigest: (digest, prepare) =>
+          persistence
+            .revokeDigest(digest, prepare)
+            .pipe(Effect.provideService(LifecycleHooks, hooks)),
+        revoke: (input, prepare) =>
+          persistence.revoke(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+        revokeAll: (input, prepare) =>
+          persistence.revokeAll(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      } satisfies StatefulSessionPersistence<Claims>,
+      sessionRepository: {
+        list: (input) => repository.list(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      } satisfies SessionRepository,
+    };
+  });
 
-                if (
-                  subject === undefined ||
-                  !mapping.subject.isActiveStatus(subject[mapping.subject.status])
-                )
-                  return { sessions: [] };
-
-                const cursor =
-                  input.cursor === undefined
-                    ? undefined
-                    : yield* mapping.sessionId.toNative(input.cursor as any);
-
-                const now = yield* freshNow;
-
-                const rows = yield* read
-                  .select()
-                  .from(mapping.session.table)
-                  .where(
-                    and(
-                      eq(c.subjectId, nativeSubjectId),
-                      eq(c.securityRevision, subject[mapping.subject.securityRevision]),
-                      gt(c.expiresAt, mapping.session.encodeInstant(now)),
-                      gt(c.absoluteExpiresAt, mapping.session.encodeInstant(now)),
-                      cursor === undefined ? undefined : gt(c.sessionId, cursor),
-                    ),
-                  )
-                  .orderBy(c.sessionId)
-                  .limit(input.limit + 1);
-
-                const decoded = yield* Effect.forEach(rows, (row: any) =>
-                  mapping.session.decode(row),
-                );
-
-                const codec = Schema.toCodecJson(Schema.toType(SessionMetadata));
-
-                const sessions = yield* Effect.forEach(
-                  decoded.slice(0, input.limit),
-                  (record: any) =>
-                    Schema.encodeEffect(codec)(record).pipe(
-                      Effect.flatMap(Schema.decodeEffect(codec)),
-                    ),
-                );
-
-                const extra = decoded[input.limit];
-
-                return {
-                  sessions,
-                  ...(extra === undefined ? {} : { nextCursor: sessions.at(-1)?.sessionId }),
-                };
-              }),
-            ),
-          ),
-      };
-
-      return {
-        statefulSessionPersistence: {
-          establish: (input, prepare) =>
-            persistence
-              .establish(input, prepare)
-              .pipe(Effect.provideService(LifecycleHooks, hooks)),
-          verify: (input) =>
-            persistence.verify(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
-          rotate: (input, prepare) =>
-            persistence.rotate(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-          revokeDigest: (digest, prepare) =>
-            persistence
-              .revokeDigest(digest, prepare)
-              .pipe(Effect.provideService(LifecycleHooks, hooks)),
-          revoke: (input, prepare) =>
-            persistence.revoke(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-          revokeAll: (input, prepare) =>
-            persistence
-              .revokeAll(input, prepare)
-              .pipe(Effect.provideService(LifecycleHooks, hooks)),
-        } satisfies StatefulSessionPersistence<Claims>,
-        sessionRepository: {
-          list: (input) =>
-            repository.list(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        } satisfies SessionRepository,
-      };
-    });
-
-  const makeSqlSignedValidity = (
-    database: Database,
+  const makeSqlSignedValidity = Effect.fnUntraced(function* (
     mapping: SignedSessionValidityMapping<any, any, any, any>,
     options: SessionSqlOptions,
-  ): Effect.Effect<SignedSessionValidity, never, LifecycleHooks> =>
-    Effect.map(LifecycleHooks, (hooks) => {
-      const subject = subjectColumns(mapping);
+  ): Effect.fn.Return<SignedSessionValidity, never, LifecycleHooks | CurrentSessionSql> {
+    const database = yield* CurrentSessionSql;
+    const hooks = yield* LifecycleHooks;
 
-      const tombstone = {
-        subjectId: column(mapping.tombstone.table, mapping.tombstone.subjectId),
-        sessionId: column(mapping.tombstone.table, mapping.tombstone.sessionId),
-        absoluteExpiresAt: column(mapping.tombstone.table, mapping.tombstone.absoluteExpiresAt),
-      };
+    const subject = subjectColumns(mapping);
 
-      const service = {
-        verify: (session: SessionMetadata, _now: DateTime.Utc) =>
-          safeTransaction(
-            inTransaction(
-              database,
-              Effect.gen(function* () {
-                const read = yield* CurrentSessionSql;
-                const nativeSubjectId = yield* mapping.subjectId.toNative(session.subjectId);
-                const nativeSessionId = yield* mapping.sessionId.toNative(session.sessionId);
-                const subjects = yield* readSubject(mapping, nativeSubjectId, false);
-                const row = subjects[0];
+    const tombstone = {
+      subjectId: column(mapping.tombstone.table, mapping.tombstone.subjectId),
+      sessionId: column(mapping.tombstone.table, mapping.tombstone.sessionId),
+      absoluteExpiresAt: column(mapping.tombstone.table, mapping.tombstone.absoluteExpiresAt),
+    };
 
-                if (
-                  row === undefined ||
-                  !mapping.subject.isActiveStatus(row[mapping.subject.status]) ||
-                  row[mapping.subject.securityRevision] !== session.securityRevision
-                )
-                  return yield* invalidSession();
-                const authoritativeNow = yield* freshNow;
-
-                if (
-                  DateTime.toEpochMillis(authoritativeNow) >=
-                    DateTime.toEpochMillis(session.expiresAt) ||
-                  DateTime.toEpochMillis(authoritativeNow) >=
-                    DateTime.toEpochMillis(session.absoluteExpiresAt)
-                )
-                  return yield* invalidSession();
-
-                const revoked = yield* read
-                  .select({ sessionId: tombstone.sessionId })
-                  .from(mapping.tombstone.table)
-                  .where(
-                    and(
-                      eq(tombstone.subjectId, nativeSubjectId),
-                      eq(tombstone.sessionId, nativeSessionId),
-                      gt(
-                        tombstone.absoluteExpiresAt,
-                        mapping.tombstone.encodeInstant(authoritativeNow),
-                      ),
-                    ),
-                  )
-                  .limit(1);
-
-                if (revoked.length > 0) return yield* invalidSession();
-              }),
-            ),
-          ),
-        revoke: <A>(
-          input: Parameters<SignedSessionValidity["revoke"]>[0],
-          prepare: PrepareSessionCommit<void, A>,
-        ) =>
-          owned(
+    const service = {
+      verify: (session: SessionMetadata, _now: DateTime.Utc) =>
+        safeTransaction(
+          inTransaction(
             database,
-            options,
-            mapping.isConstraintConflict,
             Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-              const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
-              const row = (yield* readSubject(mapping, nativeSubjectId, true))[0];
+              const read = yield* CurrentSessionSql;
+              const nativeSubjectId = yield* mapping.subjectId.toNative(session.subjectId);
+              const nativeSessionId = yield* mapping.sessionId.toNative(session.sessionId);
+              const subjects = yield* readSubject(mapping, nativeSubjectId, false);
+              const row = subjects[0];
 
               if (
                 row === undefined ||
                 !mapping.subject.isActiveStatus(row[mapping.subject.status]) ||
-                row[mapping.subject.securityRevision] !== input.expectedSecurityRevision
+                row[mapping.subject.securityRevision] !== session.securityRevision
               )
-                return yield* stale();
-              const nativeSessionId = yield* mapping.sessionId.toNative(input.sessionId);
+                return yield* invalidSession();
+              const authoritativeNow = yield* freshNow;
 
-              const existing = yield* transaction
-                .select()
+              if (
+                DateTime.toEpochMillis(authoritativeNow) >=
+                  DateTime.toEpochMillis(session.expiresAt) ||
+                DateTime.toEpochMillis(authoritativeNow) >=
+                  DateTime.toEpochMillis(session.absoluteExpiresAt)
+              )
+                return yield* invalidSession();
+
+              const revoked = yield* read
+                .select({ sessionId: tombstone.sessionId })
                 .from(mapping.tombstone.table)
                 .where(
                   and(
                     eq(tombstone.subjectId, nativeSubjectId),
                     eq(tombstone.sessionId, nativeSessionId),
+                    gt(
+                      tombstone.absoluteExpiresAt,
+                      mapping.tombstone.encodeInstant(authoritativeNow),
+                    ),
                   ),
                 )
                 .limit(1);
 
-              const receipt = prepare(undefined, journal);
-
-              if (existing[0] === undefined)
-                yield* transaction.insert(mapping.tombstone.table).values(
-                  mapping.tombstone.encodeInsert({
-                    subjectId: nativeSubjectId,
-                    sessionId: nativeSessionId,
-                    absoluteExpiresAt: input.absoluteExpiresAt,
-                  }),
-                );
-              else {
-                const existingExpiry = yield* mapping.tombstone.decodeInstant(
-                  existing[0][mapping.tombstone.absoluteExpiresAt],
-                );
-
-                if (
-                  DateTime.toEpochMillis(input.absoluteExpiresAt) >
-                  DateTime.toEpochMillis(existingExpiry)
-                )
-                  yield* transaction
-                    .update(mapping.tombstone.table)
-                    .set(
-                      updateValues([
-                        [
-                          mapping.tombstone.absoluteExpiresAt,
-                          mapping.tombstone.encodeInstant(input.absoluteExpiresAt),
-                        ],
-                      ]),
-                    )
-                    .where(
-                      and(
-                        eq(tombstone.subjectId, nativeSubjectId),
-                        eq(tombstone.sessionId, nativeSessionId),
-                      ),
-                    );
-              }
-
-              return receipt;
+              if (revoked.length > 0) return yield* invalidSession();
             }),
           ),
-        revokeAll: <A>(
-          input: Parameters<SignedSessionValidity["revokeAll"]>[0],
-          prepare: PrepareSessionCommit<void, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const transaction = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-              const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
-              const row = (yield* readSubject(mapping, nativeSubjectId, true))[0];
+        ),
+      revoke: <A>(
+        input: Parameters<SignedSessionValidity["revoke"]>[0],
+        prepare: PrepareSessionCommit<void, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+            const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
+            const row = (yield* readSubject(mapping, nativeSubjectId, true))[0];
 
-              if (
-                row === undefined ||
-                !mapping.subject.isActiveStatus(row[mapping.subject.status]) ||
-                row[mapping.subject.securityRevision] !== input.expectedSecurityRevision
+            if (
+              row === undefined ||
+              !mapping.subject.isActiveStatus(row[mapping.subject.status]) ||
+              row[mapping.subject.securityRevision] !== input.expectedSecurityRevision
+            )
+              return yield* stale();
+            const nativeSessionId = yield* mapping.sessionId.toNative(input.sessionId);
+
+            const existing = yield* transaction
+              .select()
+              .from(mapping.tombstone.table)
+              .where(
+                and(
+                  eq(tombstone.subjectId, nativeSubjectId),
+                  eq(tombstone.sessionId, nativeSessionId),
+                ),
               )
-                return yield* stale();
-              const nextRevisionSync = mapping.subject.nextSecurityRevisionSync;
+              .limit(1);
 
-              const next = yield* allocate(
-                options.mode,
-                mapping.subject.nextSecurityRevision?.(input.expectedSecurityRevision),
-                nextRevisionSync === undefined
-                  ? undefined
-                  : () => nextRevisionSync(input.expectedSecurityRevision),
+            const receipt = prepare(undefined, journal);
+
+            if (existing[0] === undefined)
+              yield* transaction.insert(mapping.tombstone.table).values(
+                mapping.tombstone.encodeInsert({
+                  subjectId: nativeSubjectId,
+                  sessionId: nativeSessionId,
+                  absoluteExpiresAt: input.absoluteExpiresAt,
+                }),
+              );
+            else {
+              const existingExpiry = yield* mapping.tombstone.decodeInstant(
+                existing[0][mapping.tombstone.absoluteExpiresAt],
               );
 
-              const receipt = prepare(undefined, journal);
+              if (
+                DateTime.toEpochMillis(input.absoluteExpiresAt) >
+                DateTime.toEpochMillis(existingExpiry)
+              )
+                yield* transaction
+                  .update(mapping.tombstone.table)
+                  .set(
+                    updateValues([
+                      [
+                        mapping.tombstone.absoluteExpiresAt,
+                        mapping.tombstone.encodeInstant(input.absoluteExpiresAt),
+                      ],
+                    ]),
+                  )
+                  .where(
+                    and(
+                      eq(tombstone.subjectId, nativeSubjectId),
+                      eq(tombstone.sessionId, nativeSessionId),
+                    ),
+                  );
+            }
 
-              yield* transaction
-                .update(mapping.subject.table)
-                .set(updateValues([[mapping.subject.securityRevision, next]]))
-                .where(
-                  and(
-                    eq(subject.subjectId, nativeSubjectId),
-                    eq(subject.subjectRevision, input.expectedSecurityRevision),
-                  ),
-                );
+            return receipt;
+          }),
+        ),
+      revokeAll: <A>(
+        input: Parameters<SignedSessionValidity["revokeAll"]>[0],
+        prepare: PrepareSessionCommit<void, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const transaction = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+            const nativeSubjectId = yield* mapping.subjectId.toNative(input.subjectId);
+            const row = (yield* readSubject(mapping, nativeSubjectId, true))[0];
 
-              return receipt;
-            }),
-          ),
-      };
+            if (
+              row === undefined ||
+              !mapping.subject.isActiveStatus(row[mapping.subject.status]) ||
+              row[mapping.subject.securityRevision] !== input.expectedSecurityRevision
+            )
+              return yield* stale();
+            const nextRevisionSync = mapping.subject.nextSecurityRevisionSync;
 
-      return {
-        verify: (session, now) =>
-          service.verify(session, now).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        revoke: (input, prepare) =>
-          service.revoke(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        revokeAll: (input, prepare) =>
-          service.revokeAll(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-      } satisfies SignedSessionValidity;
-    });
+            const next = yield* allocate(
+              options.mode,
+              mapping.subject.nextSecurityRevision?.(input.expectedSecurityRevision),
+              nextRevisionSync === undefined
+                ? undefined
+                : () => nextRevisionSync(input.expectedSecurityRevision),
+            );
+
+            const receipt = prepare(undefined, journal);
+
+            yield* transaction
+              .update(mapping.subject.table)
+              .set(updateValues([[mapping.subject.securityRevision, next]]))
+              .where(
+                and(
+                  eq(subject.subjectId, nativeSubjectId),
+                  eq(subject.subjectRevision, input.expectedSecurityRevision),
+                ),
+              );
+
+            return receipt;
+          }),
+        ),
+    };
+
+    return {
+      verify: (session, now) =>
+        service.verify(session, now).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      revoke: (input, prepare) =>
+        service.revoke(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      revokeAll: (input, prepare) =>
+        service.revokeAll(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+    } satisfies SignedSessionValidity;
+  });
 
   const stepUpColumns = (mapping: any) =>
     Object.fromEntries(
@@ -1787,425 +1777,418 @@ export const makeSessionKernel = (operations: QueryOperations) => {
     );
 
   /** Shared implementation; public driver entrypoints restore concrete tables/IDs. */
-  const makeSqlSessionStepUp = <Claims>(
-    database: Database,
+  const makeSqlSessionStepUp = Effect.fnUntraced(function* <Claims>(
     mapping: SessionStepUpMapping<Claims, any, any, any, any, any, any, any>,
     options: SessionSqlOptions,
-  ): Effect.Effect<SessionStepUpPersistence<Claims>, never, LifecycleHooks> =>
-    Effect.map(LifecycleHooks, (hooks) => {
-      const m = mapping.intent,
-        c = stepUpColumns(mapping);
+  ): Effect.fn.Return<SessionStepUpPersistence<Claims>, never, LifecycleHooks | CurrentSessionSql> {
+    const database = yield* CurrentSessionSql;
+    const hooks = yield* LifecycleHooks;
 
-      const read = (digest: TokenDigest) =>
+    const m = mapping.intent,
+      c = stepUpColumns(mapping);
+
+    const read = (digest: TokenDigest) =>
+      mapFailureCause(
+        safeTransaction(inTransaction(database, readSqlStepUp(mapping, digest, options.locking))),
+        (error) => (error._tag === "StaleAuthentication" ? SessionStepUpInvalid.make({}) : error),
+      );
+
+    const service = {
+      create: <A>(
+        input: Omit<SessionStepUpIntent, "version">,
+        _now: DateTime.Utc,
+        prepare: PrepareSessionCommit<SessionStepUpIntent, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const tx = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+            const authority = yield* stepUpAuthority(mapping, input.revision, options.locking);
+
+            const version = yield* allocate(options.mode, m.allocateVersion, m.allocateVersionSync);
+
+            const record: SessionStepUpIntent = { ...input, version };
+
+            yield* stepUpSource(
+              mapping,
+              record,
+              authority.nativeSubjectId,
+              yield* freshNow,
+              options.locking,
+            );
+
+            const existing = yield* selectRows(
+              tx
+                .select()
+                .from(m.table)
+                .where(or(eq(c.digest, input.digest), eq(c.flowId, input.flowId)))
+                .limit(1),
+              options.locking,
+            );
+
+            if (existing.length > 0) return yield* SessionConflict.make({});
+            const snapshot = yield* encodeStepUpIntent(record);
+
+            const values = {
+              ...m.encodeInsert(record, { subjectId: authority.nativeSubjectId }),
+              ...updateValues([
+                [m.digest, record.digest],
+                [m.version, version],
+                [m.flowId, record.flowId],
+                [m.subjectId, authority.nativeSubjectId],
+                [m.bindingDigest, record.bindingDigest],
+                [m.snapshot, snapshot],
+                [m.expiresAt, m.encodeInstant(record.expiresAt)],
+                [m.attemptLimit, record.attemptLimit],
+                [m.failedAttempts, 0],
+                [m.consumed, false],
+              ]),
+            };
+
+            const receipt = prepare(record, journal);
+
+            yield* tx.insert(m.table).values(values).pipe(normalizeMutation(mapping));
+
+            const inserted = (yield* tx
+              .select()
+              .from(m.table)
+              .where(
+                and(
+                  eq(c.digest, record.digest),
+                  eq(c.version, version),
+                  eq(c.flowId, record.flowId),
+                  eq(c.subjectId, authority.nativeSubjectId),
+                  eq(c.bindingDigest, record.bindingDigest),
+                  eq(c.snapshot, snapshot),
+                  eq(c.expiresAt, m.encodeInstant(record.expiresAt)),
+                  eq(c.attemptLimit, record.attemptLimit),
+                  eq(c.failedAttempts, 0),
+                  eq(c.consumed, false),
+                ),
+              )
+              .limit(1))[0];
+
+            if (inserted === undefined) return yield* unavailable();
+
+            return receipt;
+          }),
+        ).pipe((effect) =>
+          mapFailureCause(effect, (error) =>
+            error._tag === "SessionStepUpInvalid" ? stale() : error,
+          ),
+        ),
+      context: (input: any) =>
         mapFailureCause(
-          safeTransaction(inTransaction(database, readSqlStepUp(mapping, digest, options.locking))),
-          (error) => (error._tag === "StaleAuthentication" ? SessionStepUpInvalid.make({}) : error),
-        );
+          read(input.digest).pipe(
+            Effect.flatMap(({ intent }) =>
+              snapshotPendingAuthenticationContext({
+                flowId: intent.flowId,
+                bindingDigest: intent.bindingDigest,
+                revision: intent.revision,
+                expiresAtMillis: DateTime.toEpochMillis(intent.expiresAt),
+              }),
+            ),
+          ),
+          (error) => (error._tag === "PendingAuthenticationInvalid" ? unavailable() : error),
+        ),
+      read: (input: any) =>
+        read(input.digest).pipe(
+          Effect.flatMap((value) =>
+            value.intent.bindingDigest === input.bindingDigest
+              ? Effect.succeed(value.intent)
+              : Effect.fail(SessionStepUpInvalid.make({})),
+          ),
+        ),
+      reject: <A>(
+        input: Parameters<SessionStepUpPersistence<Claims>["reject"]>[0],
+        prepare: PrepareSessionCommit<{ readonly _tag: "Rejected" }, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const tx = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
 
-      const service = {
-        create: <A>(
-          input: Omit<SessionStepUpIntent, "version">,
-          _now: DateTime.Utc,
-          prepare: PrepareSessionCommit<SessionStepUpIntent, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const tx = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-              const authority = yield* stepUpAuthority(mapping, input.revision, options.locking);
+            const selected = yield* recoverSqlStepUpRejectAbsence(
+              readSqlStepUp(mapping, input.digest, options.locking).pipe(
+                Effect.map((value) => ({ _tag: "Found" as const, value })),
+              ),
+              { _tag: "Rejected" as const },
+            );
+
+            if (selected._tag === "Rejected") return prepare({ _tag: "Rejected" }, journal);
+            const { row, intent } = selected.value;
+            const receipt = prepare({ _tag: "Rejected" }, journal);
+
+            yield* tx
+              .update(m.table)
+              .set(updateValues([[m.failedAttempts, sql`${c.failedAttempts} + 1`]]))
+              .where(
+                and(
+                  eq(c.digest, input.digest),
+                  eq(c.snapshot, row[m.snapshot]),
+                  eq(c.version, intent.version),
+                  eq(c.consumed, false),
+                  sql`${c.failedAttempts} < ${c.attemptLimit}`,
+                ),
+              );
+            const written = yield* stepUpLocator(mapping, input.digest, false);
+
+            if (
+              written === undefined ||
+              written[m.version] !== intent.version ||
+              written[m.snapshot] !== row[m.snapshot] ||
+              written[m.failedAttempts] !== row[m.failedAttempts] + 1
+            )
+              return yield* unavailable();
+
+            return receipt;
+          }),
+        ),
+      complete: <A>(
+        plan: Parameters<SessionStepUpPersistence<Claims>["complete"]>[0],
+        prepare: PrepareSessionCommit<SessionInspection<Claims>, A>,
+      ) =>
+        owned(
+          database,
+          options,
+          mapping.isConstraintConflict,
+          Effect.gen(function* () {
+            const tx = yield* CurrentSessionSql;
+            const journal = yield* CurrentCommitJournal;
+
+            yield* validateStepUpPlan(plan);
+
+            // Lock the entire combined vector before source/intent, including added factors.
+            const current = yield* stepUpAuthority(
+              mapping,
+              plan.evidence.revision,
+              options.locking,
+            );
+
+            const stored = yield* readSqlStepUp(mapping, plan.intent.digest, options.locking);
+
+            if (
+              (yield* encodeStepUpIntent(stored.intent)) !==
+              (yield* encodeStepUpIntent(plan.intent))
+            )
+              return yield* SessionStepUpInvalid.make({});
+
+            const base = yield* assessAuthentication(plan.evidence, current.requirement).pipe(
+              Effect.mapError(() => stale()),
+            );
+
+            const profile = yield* assessAuthentication(
+              plan.evidence,
+              stored.intent.requirement,
+            ).pipe(Effect.mapError(() => stale()));
+
+            if (!base.satisfied || !profile.satisfied) return yield* stale();
+
+            const replacement = plan.replacement,
+              now = yield* freshNow;
+
+            if (
+              DateTime.toEpochMillis(replacement.inspection.session.expiresAt) >
+                DateTime.toEpochMillis(stored.intent.sourceAbsoluteExpiresAt) ||
+              DateTime.toEpochMillis(now) <
+                DateTime.toEpochMillis(replacement.inspection.session.issuedAt) ||
+              DateTime.toEpochMillis(now) >=
+                Math.min(
+                  DateTime.toEpochMillis(replacement.inspection.session.expiresAt),
+                  DateTime.toEpochMillis(stored.intent.expiresAt),
+                )
+            )
+              return yield* SessionStepUpInvalid.make({});
+            let rotation: any;
+
+            if (replacement._tag === "Stateful") {
+              if (mapping.source.kind !== "Stateful") return yield* SessionStepUpInvalid.make({});
+
+              const s = mapping.source.session,
+                row = stored.source.row;
+
+              if (
+                row[s.digest] !== replacement.expectedDigest ||
+                row[s.version] !== replacement.expectedRowVersion
+              )
+                return yield* SessionConflict.make({});
 
               const version = yield* allocate(
                 options.mode,
-                m.allocateVersion,
-                m.allocateVersionSync,
+                s.allocateVersion,
+                s.allocateVersionSync,
               );
 
-              const record: SessionStepUpIntent = { ...input, version };
-
-              yield* stepUpSource(
-                mapping,
-                record,
-                authority.nativeSubjectId,
-                yield* freshNow,
-                options.locking,
-              );
-
-              const existing = yield* selectRows(
-                tx
-                  .select()
-                  .from(m.table)
-                  .where(or(eq(c.digest, input.digest), eq(c.flowId, input.flowId)))
-                  .limit(1),
-                options.locking,
-              );
-
-              if (existing.length > 0) return yield* SessionConflict.make({});
-              const snapshot = yield* encodeStepUpIntent(record);
-
-              const values = {
-                ...m.encodeInsert(record, { subjectId: authority.nativeSubjectId }),
-                ...updateValues([
-                  [m.digest, record.digest],
-                  [m.version, version],
-                  [m.flowId, record.flowId],
-                  [m.subjectId, authority.nativeSubjectId],
-                  [m.bindingDigest, record.bindingDigest],
-                  [m.snapshot, snapshot],
-                  [m.expiresAt, m.encodeInstant(record.expiresAt)],
-                  [m.attemptLimit, record.attemptLimit],
-                  [m.failedAttempts, 0],
-                  [m.consumed, false],
-                ]),
+              const next: StatefulSessionRecord<Claims> = {
+                ...replacement.inspection.session,
+                provenance: replacement.inspection.provenance,
+                credentialVersion: replacement.inspection.credentialVersion,
+                digest: replacement.nextDigest,
+                version,
               };
 
-              const receipt = prepare(record, journal);
+              rotation = {
+                ...s.encodeRotation(next),
+                ...updateValues([
+                  [s.version, version],
+                  [s.digest, next.digest],
+                  [s.credentialVersion, next.credentialVersion],
+                  [s.authenticatedAt, s.encodeInstant(next.assurance.authenticatedAt)],
+                  [s.issuedAt, s.encodeInstant(next.issuedAt)],
+                  [s.expiresAt, s.encodeInstant(next.expiresAt)],
+                  [s.absoluteExpiresAt, s.encodeInstant(next.absoluteExpiresAt)],
+                ]),
+              };
+            }
 
-              yield* tx.insert(m.table).values(values).pipe(normalizeMutation(mapping));
+            const completionVersion = yield* allocate(
+              options.mode,
+              m.allocateVersion,
+              m.allocateVersionSync,
+            );
+
+            if (completionVersion === stored.intent.version) return yield* unavailable();
+
+            const completionSnapshot = yield* encodeStepUpIntent({
+              ...stored.intent,
+              version: completionVersion,
+            });
+
+            const receipt = prepare(replacement.inspection, journal);
+
+            if (replacement._tag === "Stateful" && mapping.source.kind === "Stateful") {
+              const s = mapping.source.session,
+                sc = sessionColumns(mapping.source);
+
+              yield* tx
+                .update(s.table)
+                .set(rotation)
+                .where(
+                  and(
+                    eq(sc.sessionId, stored.source.nativeSessionId),
+                    eq(sc.digest, replacement.expectedDigest),
+                    eq(sc.version, replacement.expectedRowVersion),
+                  ),
+                );
+
+              const written = (yield* tx
+                .select()
+                .from(s.table)
+                .where(eq(sc.sessionId, stored.source.nativeSessionId))
+                .limit(1))[0];
+
+              if (written === undefined || written[s.version] !== rotation[s.version])
+                return yield* unavailable();
+              const decoded = yield* s.decode(written);
+
+              if (decoded.version !== rotation[s.version] || !stepUpRotationMatches(plan, decoded))
+                return yield* unavailable();
+            } else if (
+              replacement._tag === "StateAssistedSigned" &&
+              mapping.source.kind === "StateAssistedSigned"
+            ) {
+              const t = mapping.source.tombstone;
+
+              const owner = column(t.table, t.subjectId),
+                id = column(t.table, t.sessionId),
+                expiry = column(t.table, t.absoluteExpiresAt);
+
+              yield* tx
+                .delete(t.table)
+                .where(
+                  and(
+                    eq(owner, stored.nativeSubjectId),
+                    eq(id, stored.source.nativeSessionId),
+                    lte(expiry, t.encodeInstant(yield* freshNow)),
+                  ),
+                );
+
+              const values = t.encodeInsert({
+                subjectId: stored.nativeSubjectId,
+                sessionId: stored.source.nativeSessionId,
+                absoluteExpiresAt: replacement.tombstoneUntil,
+              });
+
+              yield* tx.insert(t.table).values(values).pipe(normalizeMutation(mapping));
 
               const inserted = (yield* tx
                 .select()
-                .from(m.table)
+                .from(t.table)
                 .where(
                   and(
-                    eq(c.digest, record.digest),
-                    eq(c.version, version),
-                    eq(c.flowId, record.flowId),
-                    eq(c.subjectId, authority.nativeSubjectId),
-                    eq(c.bindingDigest, record.bindingDigest),
-                    eq(c.snapshot, snapshot),
-                    eq(c.expiresAt, m.encodeInstant(record.expiresAt)),
-                    eq(c.attemptLimit, record.attemptLimit),
-                    eq(c.failedAttempts, 0),
-                    eq(c.consumed, false),
+                    eq(owner, stored.nativeSubjectId),
+                    eq(id, stored.source.nativeSessionId),
+                    eq(expiry, t.encodeInstant(replacement.tombstoneUntil)),
                   ),
                 )
                 .limit(1))[0];
 
               if (inserted === undefined) return yield* unavailable();
-
-              return receipt;
-            }),
-          ).pipe((effect) =>
-            mapFailureCause(effect, (error) =>
-              error._tag === "SessionStepUpInvalid" ? stale() : error,
-            ),
-          ),
-        context: (input: any) =>
-          mapFailureCause(
-            read(input.digest).pipe(
-              Effect.flatMap(({ intent }) =>
-                snapshotPendingAuthenticationContext({
-                  flowId: intent.flowId,
-                  bindingDigest: intent.bindingDigest,
-                  revision: intent.revision,
-                  expiresAtMillis: DateTime.toEpochMillis(intent.expiresAt),
-                }),
-              ),
-            ),
-            (error) => (error._tag === "PendingAuthenticationInvalid" ? unavailable() : error),
-          ),
-        read: (input: any) =>
-          read(input.digest).pipe(
-            Effect.flatMap((value) =>
-              value.intent.bindingDigest === input.bindingDigest
-                ? Effect.succeed(value.intent)
-                : Effect.fail(SessionStepUpInvalid.make({})),
-            ),
-          ),
-        reject: <A>(
-          input: Parameters<SessionStepUpPersistence<Claims>["reject"]>[0],
-          prepare: PrepareSessionCommit<{ readonly _tag: "Rejected" }, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const tx = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-
-              const selected = yield* recoverSqlStepUpRejectAbsence(
-                readSqlStepUp(mapping, input.digest, options.locking).pipe(
-                  Effect.map((value) => ({ _tag: "Found" as const, value })),
+            }
+            yield* tx
+              .update(m.table)
+              .set(
+                updateValues([
+                  [m.consumed, true],
+                  [m.version, completionVersion],
+                  [m.snapshot, completionSnapshot],
+                ]),
+              )
+              .where(
+                and(
+                  eq(c.digest, stored.intent.digest),
+                  eq(c.version, stored.intent.version),
+                  eq(c.snapshot, stored.row[m.snapshot]),
+                  eq(c.consumed, false),
+                  eq(c.failedAttempts, stored.row[m.failedAttempts]),
                 ),
-                { _tag: "Rejected" as const },
               );
+            const completed = yield* stepUpLocator(mapping, stored.intent.digest, false);
 
-              if (selected._tag === "Rejected") return prepare({ _tag: "Rejected" }, journal);
-              const { row, intent } = selected.value;
-              const receipt = prepare({ _tag: "Rejected" }, journal);
+            if (
+              completed === undefined ||
+              !completed[m.consumed] ||
+              completed[m.version] !== completionVersion ||
+              completed[m.snapshot] !== completionSnapshot
+            )
+              return yield* unavailable();
+            const commitNow = yield* freshNow;
 
-              yield* tx
-                .update(m.table)
-                .set(updateValues([[m.failedAttempts, sql`${c.failedAttempts} + 1`]]))
-                .where(
-                  and(
-                    eq(c.digest, input.digest),
-                    eq(c.snapshot, row[m.snapshot]),
-                    eq(c.version, intent.version),
-                    eq(c.consumed, false),
-                    sql`${c.failedAttempts} < ${c.attemptLimit}`,
-                  ),
-                );
-              const written = yield* stepUpLocator(mapping, input.digest, false);
-
-              if (
-                written === undefined ||
-                written[m.version] !== intent.version ||
-                written[m.snapshot] !== row[m.snapshot] ||
-                written[m.failedAttempts] !== row[m.failedAttempts] + 1
-              )
-                return yield* unavailable();
-
-              return receipt;
-            }),
-          ),
-        complete: <A>(
-          plan: Parameters<SessionStepUpPersistence<Claims>["complete"]>[0],
-          prepare: PrepareSessionCommit<SessionInspection<Claims>, A>,
-        ) =>
-          owned(
-            database,
-            options,
-            mapping.isConstraintConflict,
-            Effect.gen(function* () {
-              const tx = yield* CurrentSessionSql;
-              const journal = yield* CurrentCommitJournal;
-
-              yield* validateStepUpPlan(plan);
-
-              // Lock the entire combined vector before source/intent, including added factors.
-              const current = yield* stepUpAuthority(
-                mapping,
-                plan.evidence.revision,
-                options.locking,
-              );
-
-              const stored = yield* readSqlStepUp(mapping, plan.intent.digest, options.locking);
-
-              if (
-                (yield* encodeStepUpIntent(stored.intent)) !==
-                (yield* encodeStepUpIntent(plan.intent))
-              )
-                return yield* SessionStepUpInvalid.make({});
-
-              const base = yield* assessAuthentication(plan.evidence, current.requirement).pipe(
+            if (
+              !stepUpIntentLive(stored.intent, mapping.source.kind, commitNow) ||
+              DateTime.toEpochMillis(commitNow) >=
+                DateTime.toEpochMillis(replacement.inspection.session.expiresAt) ||
+              !(yield* assessAuthentication(plan.evidence, current.requirement).pipe(
                 Effect.mapError(() => stale()),
-              );
+              )).satisfied ||
+              !(yield* assessAuthentication(plan.evidence, stored.intent.requirement).pipe(
+                Effect.mapError(() => stale()),
+              )).satisfied
+            )
+              return yield* stale();
 
-              const profile = yield* assessAuthentication(
-                plan.evidence,
-                stored.intent.requirement,
-              ).pipe(Effect.mapError(() => stale()));
+            return receipt;
+          }),
+        ),
+    };
 
-              if (!base.satisfied || !profile.satisfied) return yield* stale();
-
-              const replacement = plan.replacement,
-                now = yield* freshNow;
-
-              if (
-                DateTime.toEpochMillis(replacement.inspection.session.expiresAt) >
-                  DateTime.toEpochMillis(stored.intent.sourceAbsoluteExpiresAt) ||
-                DateTime.toEpochMillis(now) <
-                  DateTime.toEpochMillis(replacement.inspection.session.issuedAt) ||
-                DateTime.toEpochMillis(now) >=
-                  Math.min(
-                    DateTime.toEpochMillis(replacement.inspection.session.expiresAt),
-                    DateTime.toEpochMillis(stored.intent.expiresAt),
-                  )
-              )
-                return yield* SessionStepUpInvalid.make({});
-              let rotation: any;
-
-              if (replacement._tag === "Stateful") {
-                if (mapping.source.kind !== "Stateful") return yield* SessionStepUpInvalid.make({});
-
-                const s = mapping.source.session,
-                  row = stored.source.row;
-
-                if (
-                  row[s.digest] !== replacement.expectedDigest ||
-                  row[s.version] !== replacement.expectedRowVersion
-                )
-                  return yield* SessionConflict.make({});
-
-                const version = yield* allocate(
-                  options.mode,
-                  s.allocateVersion,
-                  s.allocateVersionSync,
-                );
-
-                const next: StatefulSessionRecord<Claims> = {
-                  ...replacement.inspection.session,
-                  provenance: replacement.inspection.provenance,
-                  credentialVersion: replacement.inspection.credentialVersion,
-                  digest: replacement.nextDigest,
-                  version,
-                };
-
-                rotation = {
-                  ...s.encodeRotation(next),
-                  ...updateValues([
-                    [s.version, version],
-                    [s.digest, next.digest],
-                    [s.credentialVersion, next.credentialVersion],
-                    [s.authenticatedAt, s.encodeInstant(next.assurance.authenticatedAt)],
-                    [s.issuedAt, s.encodeInstant(next.issuedAt)],
-                    [s.expiresAt, s.encodeInstant(next.expiresAt)],
-                    [s.absoluteExpiresAt, s.encodeInstant(next.absoluteExpiresAt)],
-                  ]),
-                };
-              }
-
-              const completionVersion = yield* allocate(
-                options.mode,
-                m.allocateVersion,
-                m.allocateVersionSync,
-              );
-
-              if (completionVersion === stored.intent.version) return yield* unavailable();
-
-              const completionSnapshot = yield* encodeStepUpIntent({
-                ...stored.intent,
-                version: completionVersion,
-              });
-
-              const receipt = prepare(replacement.inspection, journal);
-
-              if (replacement._tag === "Stateful" && mapping.source.kind === "Stateful") {
-                const s = mapping.source.session,
-                  sc = sessionColumns(mapping.source);
-
-                yield* tx
-                  .update(s.table)
-                  .set(rotation)
-                  .where(
-                    and(
-                      eq(sc.sessionId, stored.source.nativeSessionId),
-                      eq(sc.digest, replacement.expectedDigest),
-                      eq(sc.version, replacement.expectedRowVersion),
-                    ),
-                  );
-
-                const written = (yield* tx
-                  .select()
-                  .from(s.table)
-                  .where(eq(sc.sessionId, stored.source.nativeSessionId))
-                  .limit(1))[0];
-
-                if (written === undefined || written[s.version] !== rotation[s.version])
-                  return yield* unavailable();
-                const decoded = yield* s.decode(written);
-
-                if (
-                  decoded.version !== rotation[s.version] ||
-                  !stepUpRotationMatches(plan, decoded)
-                )
-                  return yield* unavailable();
-              } else if (
-                replacement._tag === "StateAssistedSigned" &&
-                mapping.source.kind === "StateAssistedSigned"
-              ) {
-                const t = mapping.source.tombstone;
-
-                const owner = column(t.table, t.subjectId),
-                  id = column(t.table, t.sessionId),
-                  expiry = column(t.table, t.absoluteExpiresAt);
-
-                yield* tx
-                  .delete(t.table)
-                  .where(
-                    and(
-                      eq(owner, stored.nativeSubjectId),
-                      eq(id, stored.source.nativeSessionId),
-                      lte(expiry, t.encodeInstant(yield* freshNow)),
-                    ),
-                  );
-
-                const values = t.encodeInsert({
-                  subjectId: stored.nativeSubjectId,
-                  sessionId: stored.source.nativeSessionId,
-                  absoluteExpiresAt: replacement.tombstoneUntil,
-                });
-
-                yield* tx.insert(t.table).values(values).pipe(normalizeMutation(mapping));
-
-                const inserted = (yield* tx
-                  .select()
-                  .from(t.table)
-                  .where(
-                    and(
-                      eq(owner, stored.nativeSubjectId),
-                      eq(id, stored.source.nativeSessionId),
-                      eq(expiry, t.encodeInstant(replacement.tombstoneUntil)),
-                    ),
-                  )
-                  .limit(1))[0];
-
-                if (inserted === undefined) return yield* unavailable();
-              }
-              yield* tx
-                .update(m.table)
-                .set(
-                  updateValues([
-                    [m.consumed, true],
-                    [m.version, completionVersion],
-                    [m.snapshot, completionSnapshot],
-                  ]),
-                )
-                .where(
-                  and(
-                    eq(c.digest, stored.intent.digest),
-                    eq(c.version, stored.intent.version),
-                    eq(c.snapshot, stored.row[m.snapshot]),
-                    eq(c.consumed, false),
-                    eq(c.failedAttempts, stored.row[m.failedAttempts]),
-                  ),
-                );
-              const completed = yield* stepUpLocator(mapping, stored.intent.digest, false);
-
-              if (
-                completed === undefined ||
-                !completed[m.consumed] ||
-                completed[m.version] !== completionVersion ||
-                completed[m.snapshot] !== completionSnapshot
-              )
-                return yield* unavailable();
-              const commitNow = yield* freshNow;
-
-              if (
-                !stepUpIntentLive(stored.intent, mapping.source.kind, commitNow) ||
-                DateTime.toEpochMillis(commitNow) >=
-                  DateTime.toEpochMillis(replacement.inspection.session.expiresAt) ||
-                !(yield* assessAuthentication(plan.evidence, current.requirement).pipe(
-                  Effect.mapError(() => stale()),
-                )).satisfied ||
-                !(yield* assessAuthentication(plan.evidence, stored.intent.requirement).pipe(
-                  Effect.mapError(() => stale()),
-                )).satisfied
-              )
-                return yield* stale();
-
-              return receipt;
-            }),
-          ),
-      };
-
-      return {
-        create: (input, now, prepare) =>
-          service.create(input, now, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        context: (input) =>
-          service.context(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        read: (input) => service.read(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        reject: (input, prepare) =>
-          service.reject(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-        complete: (plan, prepare) =>
-          service.complete(plan, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
-      } satisfies SessionStepUpPersistence<Claims>;
-    });
+    return {
+      create: (input, now, prepare) =>
+        service.create(input, now, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      context: (input) => service.context(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      read: (input) => service.read(input).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      reject: (input, prepare) =>
+        service.reject(input, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+      complete: (plan, prepare) =>
+        service.complete(plan, prepare).pipe(Effect.provideService(LifecycleHooks, hooks)),
+    } satisfies SessionStepUpPersistence<Claims>;
+  });
 
   return {
     makeSqlAuthenticationAuthority,

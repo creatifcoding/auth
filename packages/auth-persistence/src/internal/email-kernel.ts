@@ -379,41 +379,36 @@ export const makeEmailKernel = <
     return snapshot;
   });
 
-  const makeSqlEmailSignInTargets = Effect.fn("makeSqlEmailSignInTargets")(function (
-    database: EmailSqlDatabase,
+  const makeSqlEmailSignInTargets = Effect.fn("makeSqlEmailSignInTargets")(function* (
     mapping: SignInMapping,
     configuration: EmailSqlConfiguration,
-  ): Effect.Effect<EmailSignInTargets["Service"]> {
-    return Effect.succeed(
-      EmailSignInTargets.of({
-        lookup: (input) =>
-          (validEmailSignInConstraints(mapping)
-            ? safeRead(
-                database,
-                configuration,
-                Effect.gen(function* () {
-                  const row = (yield* emailLookupRows(
-                    mapping,
-                    input.moduleId,
-                    input.identifier,
-                  ))[0];
+  ): Effect.fn.Return<EmailSignInTargets["Service"], never, CurrentEmailSql> {
+    const database = yield* CurrentEmailSql;
 
-                  if (row === undefined) return Option.none();
+    return EmailSignInTargets.of({
+      lookup: (input) =>
+        (validEmailSignInConstraints(mapping)
+          ? safeRead(
+              database,
+              configuration,
+              Effect.gen(function* () {
+                const row = (yield* emailLookupRows(mapping, input.moduleId, input.identifier))[0];
 
-                  const snapshot = yield* decodeEmailSnapshot(
-                    mapping,
-                    input.moduleId,
-                    input.identifier,
-                    row,
-                  );
+                if (row === undefined) return Option.none();
 
-                  return snapshot === undefined ? Option.none() : Option.some(snapshot);
-                }),
-              )
-            : Effect.fail(unavailable())
-          ).pipe(Effect.provideService(CurrentEmailSql, database), translateFailure),
-      }),
-    );
+                const snapshot = yield* decodeEmailSnapshot(
+                  mapping,
+                  input.moduleId,
+                  input.identifier,
+                  row,
+                );
+
+                return snapshot === undefined ? Option.none() : Option.some(snapshot);
+              }),
+            )
+          : Effect.fail(unavailable())
+        ).pipe(Effect.provideService(CurrentEmailSql, database), translateFailure),
+    });
   });
 
   const readSubject = Effect.fn("DrizzleEmail.readSubject")(function* (
@@ -1224,10 +1219,10 @@ export const makeEmailKernel = <
   });
 
   const makeSqlEmailAddressPersistence = Effect.fn("makeSqlEmailAddressPersistence")(function* (
-    database: EmailSqlDatabase,
     mapping: AddressMapping,
     configuration: EmailSqlConfiguration,
-  ): Effect.fn.Return<EmailAddressPersistence["Service"], never, LifecycleHooks> {
+  ): Effect.fn.Return<EmailAddressPersistence["Service"], never, LifecycleHooks | CurrentEmailSql> {
+    const database = yield* CurrentEmailSql;
     const hooks = yield* LifecycleHooks;
 
     return EmailAddressPersistence.of({

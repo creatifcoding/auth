@@ -540,10 +540,14 @@ const prepareConflict = Effect.fn("Drizzle.prepareConflict")(function* <Registra
 
 export const makeSqlEmailRegistrationAuthority = Effect.fn("makeSqlEmailRegistrationAuthority")(
   function* <Registration>(
-    database: EmailSqlDatabase,
     mapping: Mapping<Registration>,
     configuration: EmailRegistrationConfiguration,
-  ): Effect.fn.Return<EmailRegistrationAuthority<Registration>, never, LifecycleHooks> {
+  ): Effect.fn.Return<
+    EmailRegistrationAuthority<Registration>,
+    never,
+    LifecycleHooks | CurrentEmailSql
+  > {
+    const database = yield* CurrentEmailSql;
     const hooks = yield* LifecycleHooks;
 
     return {

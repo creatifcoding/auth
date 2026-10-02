@@ -15,6 +15,7 @@ import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Context } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 
+import { nativeDatabase } from "./native-database";
 import { Database as DatabaseService } from "./pg-database";
 import type {
   AuthenticationAuthorityMapping,
@@ -22,6 +23,7 @@ import type {
   SignedSessionValidityMapping,
   StatefulSessionMapping,
 } from "./session-model";
+import { CurrentSessionSql } from "./session-sql";
 import {
   coordinateTargetAuthenticationAuthority,
   coordinateTargetPendingAuthentication,
@@ -35,15 +37,20 @@ import {
   makeTargetSessionStepUpServices,
   coordinateTargetSessionStepUp,
 } from "./session-target";
+import {
+  type TransactionService,
+  acquireTransactionService,
+  transactionService,
+} from "./standalone-guard";
 import type { SuppliedService } from "./SuppliedService";
 
 type Database = PostgresDatabase<AnyRelations> | PgliteDatabase<AnyRelations>;
 type TransactionOf<D extends Database> = Parameters<Parameters<D["transaction"]>[0]>[0];
 
-const configuration = (database: Database) => ({
+const configuration = (service: TransactionService | undefined) => ({
   mode: "interactive" as const,
   locking: true,
-  standaloneGuard: sqlClientSessionStandaloneGuard(database),
+  standaloneGuard: sqlClientSessionStandaloneGuard(service),
 });
 
 export const makePgAuthenticationAuthorityServices = <
@@ -63,9 +70,10 @@ export const makePgAuthenticationAuthorityServices = <
     NativeSubjectId
   >,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetAuthenticationAuthorityServices<Claims>(database, mapping, configuration(database)),
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetAuthenticationAuthorityServices<Claims>(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export const makePgPendingAuthenticationServices = <
   Claims,
@@ -84,9 +92,10 @@ export const makePgPendingAuthenticationServices = <
     NativeSubjectId
   >,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetPendingAuthenticationServices<Claims>(database, mapping, configuration(database)),
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetPendingAuthenticationServices<Claims>(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export const makePgStatefulSessionServices = <
   Claims,
@@ -109,9 +118,10 @@ export const makePgStatefulSessionServices = <
     NativeSessionId
   >,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetStatefulSessionServices<Claims>(database, mapping, configuration(database)),
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetStatefulSessionServices<Claims>(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export const makePgSignedSessionValidityServices = <
   Subject extends AnyPgTable,
@@ -121,9 +131,10 @@ export const makePgSignedSessionValidityServices = <
 >(
   mapping: SignedSessionValidityMapping<Subject, Tombstone, NativeSubjectId, NativeSessionId>,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetSignedSessionValidityServices(database, mapping, configuration(database)),
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetSignedSessionValidityServices(mapping, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export function coordinatePgAuthenticationAuthority<
   Claims,
@@ -216,7 +227,7 @@ export function coordinatePgAuthenticationAuthority<
     >(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly authenticationAuthority: AuthenticationAuthority["Service"] },
@@ -323,7 +334,7 @@ export function coordinatePgPendingAuthentication<
     coordinateTargetPendingAuthentication<Claims, TransactionOf<D>, A, E, Exclude<R, TargetId>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly pendingAuthentication: PendingAuthentication<Claims> },
@@ -475,7 +486,7 @@ export function coordinatePgStatefulSessions<
     >(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: {
@@ -583,7 +594,7 @@ export function coordinatePgSignedSessionValidity<
     coordinateTargetSignedSessionValidity<TransactionOf<D>, A, E, Exclude<R, TargetId>>(
       database,
       options.mapping,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly signedSessionValidity: SignedSessionValidity },
@@ -615,9 +626,10 @@ export const makePgSessionStepUpServices = <
   mapping: SessionStepUpMapping<NoInfer<Claims>, S, C, I, Session, T, NativeId, NativeSessionId>,
   target: Context.Service<Id, SessionStepUpPersistence<Claims>>,
 ) =>
-  Effect.flatMap(DatabaseService, (database) =>
-    makeTargetSessionStepUpServices(database, mapping, target, configuration(database)),
-  );
+  Effect.flatMap(
+    Effect.map(acquireTransactionService(DatabaseService), configuration),
+    (configuration) => makeTargetSessionStepUpServices(mapping, target, configuration),
+  ).pipe(Effect.provideServiceEffect(CurrentSessionSql, nativeDatabase(DatabaseService)));
 
 export function coordinatePgSessionStepUp<
   Claims,
@@ -744,7 +756,7 @@ export function coordinatePgSessionStepUp<
       database,
       options.mapping,
       options.target,
-      configuration(database),
+      configuration(transactionService(database)),
       (
         transaction: TransactionOf<D>,
         services: { readonly sessionStepUpPersistence: SessionStepUpPersistence<Claims> },

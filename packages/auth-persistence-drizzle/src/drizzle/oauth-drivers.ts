@@ -1,3 +1,4 @@
+import { NativeDatabase } from "@yielded/auth-persistence/Adapter";
 import type { LifecycleHooks } from "@yielded/auth/Hooks";
 import {
   OAuthAccountsPersistence,
@@ -7,6 +8,7 @@ import {
 import type { Table } from "drizzle-orm";
 import { Effect, Context } from "effect";
 
+import { nativeDatabase } from "./native-database";
 import { makeOAuthConnectedTarget } from "./oauth-connected-drivers";
 import type {
   OAuthAccountsMapping,
@@ -538,14 +540,14 @@ export const makeOAuthTarget = <
     >(
       mapping: OAuthAccountsMapping<S, O, C, AC, F, TA, U, N>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetOAuthAccountsServices(database, mapping, configuration),
+      makeTargetOAuthAccountsServices(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     makeOAuthSignInServices: <S extends T, O extends T, C extends T, AC extends T, F extends T, N>(
       mapping: OAuthSignInMapping<S, O, C, AC, F, N>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetOAuthSignInServices(database, mapping, configuration),
+      makeTargetOAuthSignInServices(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     makeOAuthRegistrationIntentServices: <
       S extends T,
@@ -559,8 +561,8 @@ export const makeOAuthTarget = <
     >(
       mapping: OAuthRegistrationIntentMapping<S, O, C, AC, F, TA, I, N>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetOAuthRegistrationIntentServices(database, mapping, configuration),
+      makeTargetOAuthRegistrationIntentServices(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     makeOAuthRegistrationServices: <
       Registration,
@@ -575,8 +577,8 @@ export const makeOAuthTarget = <
     >(
       mapping: OAuthRegistrationMapping<Registration, S, O, C, AC, TA, I, R, N>,
     ) =>
-      Effect.flatMap(databaseService, (database) =>
-        makeTargetOAuthRegistrationServices<Registration>(database, mapping, configuration),
+      makeTargetOAuthRegistrationServices<Registration>(mapping, configuration).pipe(
+        Effect.provideServiceEffect(NativeDatabase, nativeDatabase(databaseService)),
       ),
     coordinateOAuthRegistration,
   };

@@ -55,7 +55,7 @@ export const makeSubjectProvisioningServices = <
   NativeId,
 >(
   mapping: SubjectProvisioningTables<Subject, Identifier, Request, NativeId>,
-) => Effect.map(Database, (database) => makePgSubjectProvisioningServices(database, mapping));
+) => makePgSubjectProvisioningServices(mapping);
 
 export const makeExternalIdentityServices = <
   Subject extends AnyPgTable,
@@ -63,7 +63,7 @@ export const makeExternalIdentityServices = <
   NativeId,
 >(
   mapping: ExternalIdentityTables<Subject, External, NativeId>,
-) => Effect.map(Database, (database) => makePgExternalIdentityServices(database, mapping));
+) => makePgExternalIdentityServices(mapping);
 
 export const commitMode = "interactive" as const;
 
@@ -75,7 +75,7 @@ export const makeIdentityServices = <
   NativeId,
 >(
   mapping: IdentityTables<Subject, Identifier, External, Request, NativeId>,
-) => Effect.map(Database, (database) => makePgIdentityServices(database, mapping));
+) => makePgIdentityServices(mapping);
 
 export {
   makePgSessionStepUpServices as makeSessionStepUpServices,

@@ -23,14 +23,9 @@ import {
   type AnyPasswordRegistrationMapping,
   requiredPasswordRegistrationConstraints,
 } from "./password-model";
-import {
-  CurrentPasswordSql,
-  type PasswordSqlDatabase,
-  type PasswordSqlQuery,
-} from "./password-sql";
+import { CurrentPasswordSql, type PasswordSqlQuery } from "./password-sql";
 import { CurrentProofSql, type ProofSqlDatabase } from "./proof-sql";
 
-type Database = PasswordSqlDatabase;
 type Mapping<Registration> = AnyPasswordRegistrationMapping<Registration>;
 const unavailable = () => PasswordUnavailable.make({});
 
@@ -219,10 +214,14 @@ const registerIn = Effect.fn("DrizzlePasswordRegistration.registerIn")(function*
 export const makeSqlPasswordRegistrationAuthority = Effect.fn(
   "makeSqlPasswordRegistrationAuthority",
 )(function* <Registration>(
-  database: Database,
   mapping: Mapping<Registration>,
   configuration: PasswordRegistrationConfiguration,
-): Effect.fn.Return<PasswordRegistrationAuthority<Registration>, never, LifecycleHooks> {
+): Effect.fn.Return<
+  PasswordRegistrationAuthority<Registration>,
+  never,
+  LifecycleHooks | CurrentPasswordSql
+> {
+  const database = yield* CurrentPasswordSql;
   const hooks = yield* LifecycleHooks;
 
   return {
