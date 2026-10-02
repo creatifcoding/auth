@@ -1,6 +1,6 @@
 import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
-import { Client, Http, Password, Proofs } from "@yielded/auth";
+import { Client, Http, Password, EmailDelivery } from "@yielded/auth";
 import { ConfigProvider, Context, Effect, FileSystem, Layer } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -23,9 +23,7 @@ const program = Effect.gen(function* () {
   const directory = yield* fs.makeTempDirectoryScoped();
   const cookies = new Map<string, string>();
 
-  const delivery = Proofs.EmailProofDelivery.layer({ vendorId: "test", idempotencyMillis: 0 }, () =>
-    Effect.succeed({ _tag: "Accepted" } as const),
-  );
+  const delivery = Layer.succeed(EmailDelivery.EmailDelivery, { send: () => Effect.void });
 
   const application = AuthLive.pipe(
     Layer.provide([

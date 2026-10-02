@@ -2,6 +2,7 @@ export * as Atom from "./Atom.ts";
 export * as Auth from "./Auth.ts";
 export * as AuthContract from "./AuthContract.ts";
 export * as Client from "./Client.ts";
+export * as EmailDelivery from "./EmailDelivery.ts";
 export * as Email from "./Email.ts";
 export * as Hooks from "./Hooks.ts";
 export * as Http from "./Http.ts";

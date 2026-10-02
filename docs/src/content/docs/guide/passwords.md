@@ -18,14 +18,15 @@ export const AppAuth = Auth.make("app/Auth", {
   strategies: {
     password: Password.make({
       registration: Schema.Struct({ displayName: Schema.NonEmptyString }),
+      reset: Password.resetLink({ url: "https://app.example.com/reset-password" }),
     }),
   },
   defaultStrategy: "password",
 });
 ```
 
-Password policy and reset-token expiry have defaults. Your application controls
-account creation and recovery delivery. Override `policy` or `reset` when needed. For sign-in only, use
+Password policy and proof expiry have defaults. Choose reset links or codes explicitly.
+Your application controls account creation and supplies an email transport. For sign-in only, use
 `password: Password.make()` as in [getting started](./getting-started).
 
 This definition exposes local methods. The calls below belong inside an existing
@@ -90,7 +91,7 @@ remain application-owned:
 
 ```ts title="apps/server/password-live.ts"
 import { Layer } from "effect";
-import { Password, Proofs, WebCrypto } from "@yielded/auth";
+import { Password, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";
 
 import { AppAuth } from "./auth";
@@ -98,7 +99,7 @@ import { AuthDependencies } from "./auth-dependencies";
 import { authorizePasswordChange, registerAccount, resolvePasswordClaims } from "./auth-accounts";
 import { PasswordPersistenceLive, ProofPersistenceLive } from "./auth-persistence";
 import { checkPassword } from "./password-screening";
-import { emailVendor, sendEmail } from "./email";
+import { EmailLive } from "./email";
 
 export const PasswordLive = Layer.mergeAll(
   PasswordCrypto.layer().pipe(
@@ -111,7 +112,7 @@ export const PasswordLive = Layer.mergeAll(
   Layer.succeed(AppAuth.strategies.password.RegistrationAuthority, { register: registerAccount }),
   Layer.succeed(Password.CompromisedPasswords, { check: checkPassword }),
   Layer.succeed(Password.PasswordActionEvidence, { verify: authorizePasswordChange }),
-  Proofs.EmailProofDelivery.layer(emailVendor, sendEmail),
+  EmailLive,
 );
 
 export const AuthLive = AppAuth.layer.pipe(
@@ -126,19 +127,92 @@ can provide persistence and registration. `AuthDependencies` supplies the shared
 For sign-in-only `Password.make()`, supply hashing, password persistence, and claims
 alongside those shared services. Keep normalization stable for stored credentials.
 
-<details>
-<summary>Reset and retry boundaries</summary>
+## Recover a password
 
-Password recovery uses `requestReset` → `verifyReset` → `completeReset`. Enable
-registration/management to include recovery, and supply email delivery and
-proof persistence. Reset links use token proofs by default; override `reset` to
-change the secret or expiry policy. A reset requires an independently verified address.
+Recovery uses `requestReset` → `verifyReset` → `completeReset` and requires an
+independently verified email address. The definition above selects reset links.
+Auth builds the link and renders the email; your `EmailDelivery` service only
+sends the finished message. See [email delivery](./email-delivery) for REST API
+and Alchemy examples.
 
-Keep continuation credentials in private delivery. A consumed proof or an unknown
-commit outcome is not permission to repeat a password mutation. Prepared-password
-intents bind the original action, credential revision, and replacement verifier.
+The link destination must be a fixed HTTPS URL without credentials, query, or
+fragment. Auth validates it when building the Layer, before issuing any proof.
+For a code-entry UI, select numeric codes instead:
+
+```ts
+Password.make({
+  registration: Schema.Struct({ displayName: Schema.NonEmptyString }),
+  reset: Password.resetCode(),
+});
+```
+
+Codes default to six digits and also require `Proofs.ProofKeys.layer(proofKeys)` in
+[`AuthDependencies`](../reference/adapters#compose-the-application-layer). Keep
+leading zeroes by treating codes as strings. Link proofs do not require that keyring.
+Both choices have working default email content; wording and localization can be
+customized independently of the transport.
+
+Start recovery inside an Effect request handler:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const requested = yield* auth.requestReset({ flowId, requestId, email, locale: "en" });
+```
+
+Retain the original flow ID, email, request ID, and reference. Always show a generic
+response such as “If this address is eligible, check your email.” The receipt does
+not reveal account eligibility or whether a message was sent.
+
+For links, the originating client uses `EmailDelivery.parseLinkFragment` to extract
+the reference and secret, clears the fragment from history, then waits for an
+intentional confirmation before submitting. A landing-page GET must never consume
+the proof. See [link handling](./email-delivery#handle-links) for the private-state
+and response-header boundaries. For codes, use the saved reference and entered code.
+
+In the next request, verify the submitted secret:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const verified = yield* auth.verifyReset({ flowId, email, reference, secret });
+```
+
+Retain `verified.continuation.continuationId`. Its matching credential is issued
+through the private `proof-continuation` channel. Complete with the same flow and email:
+
+<!-- prettier-ignore -->
+```ts
+const auth = yield* AppAuth;
+const result = yield* auth.completeReset({
+  flowId,
+  email,
+  commandId,
+  newPassword,
+  continuationId,
+  credential,
+});
+```
+
+These are server-side inputs. For browser endpoints, map `credential` to the
+`proof-continuation` slot through the contract's `requestFields`, so the HTTP adapter
+reads the private cookie. Never return secrets in ordinary operation results or logs,
+or make the browser copy an HttpOnly cookie into JSON. Generate `commandId` once per
+completion submission. Completion changes the password; sign in separately for a session.
+
+### Delivery and retry boundaries
+
+Email delivery awaits provider acceptance, which does not prove inbox delivery.
+The transport distinguishes definite rejection from uncertain acceptance. Neither
+Auth nor the transport should automatically resend an uncertain message; this email
+service makes no deduplication promise and requires `maximumDeliveryAttempts: 1`.
+
+An exact `requestReset` retry can recover a generic receipt, not guarantee another
+send. Dispatch is a process-local continuation after persistence commits, not a
+durable outbox. A crash can leave an unsent proof. Let the user check their inbox
+and, if needed, explicitly start a new flow under the configured cooldown and attempt
+limits. A consumed proof or an unknown commit outcome does not authorize repeating
+a password mutation.
 
 See the [complete password composition](https://github.com/yielded-dev/auth/blob/main/examples/auth/src/password-methods.ts)
-for recovery and factor authorization.
-
-</details>
+for a reset-link journey using a private local email collector.

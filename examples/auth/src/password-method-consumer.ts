@@ -32,7 +32,7 @@ export const passwordAuth = Auth.make("example/password-auth", {
         },
       },
       reset: {
-        secret: { _tag: "Token" },
+        ...Password.resetLink({ url: "https://example.invalid/reset" }),
         policy: {
           lifetimeMillis: 60_000,
           continuationLifetimeMillis: 30_000,

@@ -14,7 +14,7 @@ export const strategyRequirements = () => {
     strategies: {
       phone: PhoneOtp.make(),
       email: Email.makeCode(),
-      link: Email.makeLink(),
+      link: Email.makeLink({ url: "https://example.invalid/sign-in" }),
       password: Password.make(),
       passkey: Passkey.make(),
       oauth: OAuth.make(),
@@ -35,7 +35,12 @@ export const strategyRequirements = () => {
   const managedPassword = Auth.make("test/password-defaults", {
     claims: Schema.Struct({}),
     sessions: Sessions.stateful(),
-    strategies: { password: Password.make({ registration: Schema.Struct({}) }) },
+    strategies: {
+      password: Password.make({
+        registration: Schema.Struct({}),
+        reset: Password.resetLink({ url: "https://example.invalid/reset" }),
+      }),
+    },
   });
 
   expectTypeOf<

@@ -51,6 +51,7 @@ export const emailAuth = Auth.make("example/email-auth", {
   strategies: {
     code: Email.makeCode(code),
     link: Email.makeLink({
+      url: "https://example.invalid/email",
       namespace: "example/email",
       policy: proofPolicy,
     }),

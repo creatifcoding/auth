@@ -1,6 +1,5 @@
 ---
 "@yielded/auth": patch
-"@yielded/auth-cloudflare": patch
 "@yielded/auth-crypto": patch
 "@yielded/auth-openid-client": patch
 "@yielded/auth-persistence": patch

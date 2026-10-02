@@ -2,8 +2,8 @@ import { Effect, Redacted, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 
 import type { ProofDeliveryMessage } from "../proofs/delivery";
+import { ProofConfigurationError, ProofInvalid } from "../proofs/errors";
 import { ProofReference } from "../proofs/models";
-import { EmailConfigurationError, EmailRejected } from "./errors";
 
 const secret = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/));
 const payload = Schema.Struct({ reference: ProofReference, token: secret });
@@ -18,16 +18,14 @@ const fragmentSchema = Schema.String.check(
  * and disable click tracking/rewriting that leaks them into queries or logs.
  * The result remains Redacted because the URL fragment contains a bearer proof.
  */
-export const makeMagicLinkRenderer = Effect.fn("makeMagicLinkRenderer")(function* (
-  landing: string,
-) {
+export const makeEmailLink = Effect.fn("makeEmailLink")(function* (landing: string) {
   yield* Schema.decodeEffect(Schema.String.check(Schema.isMaxLength(2048)))(landing).pipe(
-    Effect.mapError(() => EmailConfigurationError.make({})),
+    Effect.mapError(() => ProofConfigurationError.make({ reason: "delivery" })),
   );
 
   const url = yield* Effect.try({
     try: () => new URL(landing),
-    catch: () => EmailConfigurationError.make({}),
+    catch: () => ProofConfigurationError.make({ reason: "delivery" }),
   });
 
   if (
@@ -38,14 +36,14 @@ export const makeMagicLinkRenderer = Effect.fn("makeMagicLinkRenderer")(function
     url.hash ||
     url.href !== landing
   )
-    return yield* EmailConfigurationError.make({});
+    return yield* ProofConfigurationError.make({ reason: "delivery" });
   const target = url.href;
 
   return Effect.fn("MagicLink.render")(function* (message: ProofDeliveryMessage) {
     const encoded = yield* Schema.encodeEffect(codec)({
       reference: message.reference,
       token: Redacted.value(message.secret),
-    }).pipe(Effect.mapError(() => EmailRejected.make({})));
+    }).pipe(Effect.mapError(() => ProofInvalid.make({})));
 
     return Redacted.make(`${target}#eal1.${Base64Url.encode(encoded)}`);
   });
@@ -56,19 +54,19 @@ export const makeMagicLinkRenderer = Effect.fn("makeMagicLinkRenderer")(function
  * action before same-origin CSRF-protected POST. Only reference/token are accepted;
  * flow, binder and return target come from the originating client's private state.
  */
-export const parseMagicLinkFragment = Effect.fn("MagicLink.parseFragment")(function* (
+export const parseLinkFragment = Effect.fn("MagicLink.parseFragment")(function* (
   fragment: Redacted.Redacted<string>,
 ) {
   const raw = yield* Schema.decodeEffect(fragmentSchema)(Redacted.value(fragment)).pipe(
-    Effect.mapError(() => EmailRejected.make({})),
+    Effect.mapError(() => ProofInvalid.make({})),
   );
 
   const json = Result.getOrUndefined(Base64Url.decodeString(raw.slice(6)));
 
-  if (json === undefined) return yield* EmailRejected.make({});
+  if (json === undefined) return yield* ProofInvalid.make({});
 
   const decoded = yield* Schema.decodeEffect(codec)(json).pipe(
-    Effect.mapError(() => EmailRejected.make({})),
+    Effect.mapError(() => ProofInvalid.make({})),
   );
 
   return { reference: decoded.reference, secret: Redacted.make(decoded.token) };
@@ -77,7 +75,7 @@ export const parseMagicLinkFragment = Effect.fn("MagicLink.parseFragment")(funct
 /** Landing GET is static consumer UI: it must not call issue/attempt/complete or
  * redirect. Consumers choose their CSP script hashes/nonces if adding client code.
  */
-export const magicLinkLandingHeaders = Object.freeze({
+export const linkLandingHeaders = Object.freeze({
   "Cache-Control": "no-store",
   "Referrer-Policy": "no-referrer",
   "Content-Security-Policy":

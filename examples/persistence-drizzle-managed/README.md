@@ -17,7 +17,7 @@ Open http://localhost:4181 and create an account with a name, an email such as
 then sign back in with the same email and password.
 
 In local mode, verification and recovery messages are private JSON files in
-`.data/mail/`. Open the newest file for your email address and enter its `code`
+`.data/mail/`. Open the newest file for your email address and enter the code in its `text`
 in the app. Local delivery simulates an inbox; it does not prove control of a
 real address. The server never serves these files or prints codes to its logs.
 

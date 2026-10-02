@@ -1,7 +1,6 @@
 ---
 "@yielded/auth": minor
 "@yielded/auth-persistence-drizzle": minor
-"@yielded/auth-cloudflare": minor
 ---
 
 Consolidate password, email, and session authentication on `Auth.make` and the strategy modules, and remove the superseded workflows, HTTP/RPC integration, OAuth linking service, and store adapters. Replace Cloudflare OTP delivery with `layerEmailProofDelivery` for the shared proof engine.

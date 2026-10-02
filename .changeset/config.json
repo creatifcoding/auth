@@ -10,7 +10,6 @@
   "fixed": [
     [
       "@yielded/auth",
-      "@yielded/auth-cloudflare",
       "@yielded/auth-crypto",
       "@yielded/auth-openid-client",
       "@yielded/auth-persistence",

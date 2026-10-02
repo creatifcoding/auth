@@ -45,17 +45,18 @@ required by the selected adapters.
 
 Import application services and authentication methods from the root:
 
-| Modules                       | Purpose                                                                |
-| ----------------------------- | ---------------------------------------------------------------------- |
-| `Auth`                        | Application service, strategies, and request boundaries.               |
-| `Identity`, `Schema`          | Subject identifiers, claims, and shared schemas.                       |
-| `Operations`, `Hooks`         | Operation contracts and lifecycle hooks.                               |
-| `Sessions`                    | Session strategies, persistence ports, and lifecycle operations.       |
-| `Password`                    | Password registration, sign-in, and account changes.                   |
-| `Email`, `PhoneOtp`, `Proofs` | Email and phone methods, bound proofs, and private delivery.           |
-| `Totp`, `Passkey`             | Additional factors and passkey workflows.                              |
-| `PasskeyPassword`             | Password-backed authority for passkey workflows.                       |
-| `OAuth`                       | Provider sign-in, registration, linked accounts, and connected grants. |
+| Modules                       | Purpose                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `Auth`                        | Application service, strategies, and request boundaries.                 |
+| `Identity`, `Schema`          | Subject identifiers, claims, and shared schemas.                         |
+| `Operations`, `Hooks`         | Operation contracts and lifecycle hooks.                                 |
+| `Sessions`                    | Session strategies, persistence ports, and lifecycle operations.         |
+| `Password`                    | Password registration, sign-in, and account changes.                     |
+| `Email`, `PhoneOtp`, `Proofs` | Email and phone methods, bound proofs, and private delivery.             |
+| `EmailDelivery`               | Rendered private email, transport failures, templates, and link parsing. |
+| `Totp`, `Passkey`             | Additional factors and passkey workflows.                                |
+| `PasskeyPassword`             | Password-backed authority for passkey workflows.                         |
+| `OAuth`                       | Provider sign-in, registration, linked accounts, and connected grants.   |
 
 ## Browser and transport boundaries
 
@@ -99,7 +100,6 @@ you use.
 | `@yielded/auth-openid-client`           | OAuth/OIDC verification and provider configuration.                                             |
 | `@yielded/auth-openid-client/Connected` | Connected grant management.                                                                     |
 | `@yielded/auth-openid-client/GitHub`    | GitHub configuration and operations using OpenID Client.                                        |
-| `@yielded/auth-cloudflare`              | Worker email delivery through `EmailProofDelivery`.                                             |
 | `@yielded/auth-crypto`                  | Password hashing, TOTP, and OAuth secret protection through `/Password`, `/Totp`, and `/OAuth`. |
 | `@yielded/auth-persistence`             | Direct Effect SQL persistence; requires an application-provided SQL client.                     |
 | `@yielded/auth-persistence-drizzle`     | Drizzle mappings and explicit driver modules such as `/Postgres` and `/SqliteBun`.              |
@@ -126,7 +126,8 @@ implementations that `Auth.make` binds. Use them when you own operation composit
 Storage implements the strategy ports in `Password`, `Email`, `Proofs`, and
 `Sessions`. Password hashing comes from `@yielded/auth-crypto/Password`.
 Application account services provide identity authority and session claims.
-`SmsDelivery` and `Proofs.EmailProofDelivery` own private delivery.
+`SmsDelivery` and `EmailDelivery.EmailDelivery` own private delivery. Auth renders
+email content before sending it; see the [transport recipes](../guide/email-delivery).
 
 `OAuth.make({ access: profile })` combines provider sign-in and retained API access
 with shared Auth sessions. `OAuth.make()` discards provider tokens after sign-in.

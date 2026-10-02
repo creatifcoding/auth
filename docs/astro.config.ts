@@ -36,6 +36,7 @@ export default defineConfig({
           items: [
             { label: "Passwords", slug: "guide/passwords" },
             { label: "Email codes & magic links", slug: "guide/codes" },
+            { label: "Email delivery", slug: "guide/email-delivery" },
             { label: "Phone codes", slug: "guide/phone" },
             { label: "Passkeys", slug: "guide/passkeys" },
             { label: "Two-factor authentication", slug: "guide/totp" },

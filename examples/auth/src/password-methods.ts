@@ -1,5 +1,5 @@
 import { BunRuntime } from "@effect/platform-bun";
-import { Auth, Hooks, Operations, Password, Proofs, WebCrypto } from "@yielded/auth";
+import { Auth, EmailDelivery, Hooks, Operations, Password, WebCrypto } from "@yielded/auth";
 import * as PasswordCrypto from "@yielded/auth-crypto/Password";
 import { DateTime, Effect, Layer, Redacted } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -30,7 +30,7 @@ const screening = Layer.succeed(Password.CompromisedPasswords, {
 
 const program = Effect.gen(function* () {
   const model = yield* makePasswordConsumer;
-  const deliveries: Proofs.ProofDeliveryMessage[] = [];
+  const deliveries: EmailDelivery.EmailMessage[] = [];
   const collector: Operations.AuthCredentialCommand[] = [];
 
   const call = {
@@ -57,15 +57,12 @@ const program = Effect.gen(function* () {
     .completionLayer()
     .pipe(Layer.provide(Layer.mergeAll(strategy, model.layer)), Layer.provide(base));
 
-  const delivery = Proofs.EmailProofDelivery.layer(
-    { vendorId: "local-fixture", idempotencyMillis: 0 },
-    (message) =>
+  const delivery = Layer.succeed(EmailDelivery.EmailDelivery, {
+    send: (message) =>
       Effect.sync(() => {
         deliveries.push(message);
-
-        return { _tag: "Accepted" as const };
       }),
-  );
+  });
 
   const sessionHandlers = sessions
     .handlersLayer({ maximumAgeMillis: 60_000 })
@@ -165,11 +162,16 @@ const program = Effect.gen(function* () {
 
     if (!delivered) return yield* Effect.die("reset delivery missing");
 
+    const resetUrl = Redacted.value(delivered.text).match(/https:\/\/\S+/)?.[0];
+
+    if (!resetUrl) return yield* Effect.die("reset link missing from email");
+    const extracted = yield* EmailDelivery.parseLinkFragment(Redacted.make(new URL(resetUrl).hash));
+
     const proof = yield* auth.verifyReset({
       flowId: "reset-flow",
       email,
       reference: request.reference,
-      secret: Redacted.value(delivered.secret),
+      secret: Redacted.value(extracted.secret),
     });
 
     const continuation = [...collector]

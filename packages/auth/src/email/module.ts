@@ -107,6 +107,7 @@ export interface EmailModule<Id extends string, Kind extends string, Claims> {
  * consumer-owned; this factory installs no storage or implicit mail sender.
  */
 export interface EmailProofOptions<Mode extends "code" | "link"> {
+  readonly url?: string;
   readonly secret: {
     readonly code: Extract<ProofSecretPolicy, { readonly _tag: "NumericCode" }>;
     readonly link: Extract<ProofSecretPolicy, { readonly _tag: "Token" }>;
@@ -607,7 +608,7 @@ export const makeEmailMethod = <
 >(
   moduleId: Id,
   options: Parameters<typeof makeEmailAccountModule<Id, SessionId, Claims>>[1] & {
-    readonly link: { readonly policy: ProofPolicy };
+    readonly link: { readonly policy: ProofPolicy; readonly url: string };
   },
 ) => {
   const accounts = makeEmailAccountModule<Id, SessionId, Claims>(moduleId, options);

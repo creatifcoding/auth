@@ -11,7 +11,7 @@ export const AppAuth = Auth.make(AuthApi, {
     account: AccountStrategy,
     password: Password.make({
       registration: Registration,
-      reset: { secret: { _tag: "NumericCode", digits: 6 }, policy: emailProofPolicy },
+      reset: Password.resetCode({ policy: emailProofPolicy }),
     }),
   },
   sessions: sessionConfiguration,
