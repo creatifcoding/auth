@@ -4,10 +4,11 @@ import { Effect, Schema } from "effect";
 const text = Schema.String.check(Schema.isMaxLength(256));
 const url = Schema.String.check(Schema.isMaxLength(2048));
 
-/** Standard OpenID Connect user claims returned in a verified ID token. This
- * does not request additional scopes or fetch UserInfo. Protocol claims and
- * credentials are excluded; values such as email_verified describe the provider's
- * assertion and never authorize local account linking by themselves. */
+/** Standard OpenID Connect user claims returned in a verified ID token, plus
+ * Google's `hd` (hosted domain) claim. This does not request additional scopes
+ * or fetch UserInfo. Protocol claims and credentials are excluded; values such
+ * as email_verified and hd describe the provider's assertion and never authorize
+ * local account linking by themselves. */
 export const OidcUserProfile = Schema.Struct({
   name: Schema.optionalKey(text),
   given_name: Schema.optionalKey(text),
@@ -39,6 +40,10 @@ export const OidcUserProfile = Schema.Struct({
   updated_at: Schema.optionalKey(
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
   ),
+  /** Google Workspace hosted domain. Present only for Workspace accounts and only
+   * in the signed ID token, so applications that admit one domain can check it on
+   * `profile.providerData.hd` instead of re-fetching UserInfo. */
+  hd: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(253))),
 });
 
 export type OidcUserProfile = typeof OidcUserProfile.Type;
